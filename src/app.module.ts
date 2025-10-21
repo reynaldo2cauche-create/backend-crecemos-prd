@@ -59,6 +59,8 @@ import { HermanoEntrevista } from './historia-clinica/entities/hermano-entrevist
 import { FamiliarEntrevista } from './historia-clinica/entities/familiar-entrevista.entity';
 import { HistorialCita } from './citas/historial-cita.entity';
 import { Comentario } from './postulaciones/comentario.entity';
+import { CargoPostulacion } from './postulaciones/cargo-postulacion.entity';
+import { EstadoPostulacion } from './postulaciones/estado-postulacion.entity';
   
 @Module({
   imports: [
@@ -74,8 +76,8 @@ import { Comentario } from './postulaciones/comentario.entity';
       host: 'localhost',
       port: 3306,
       username: 'root',  // Asegúrate de poner el nombre de usuario correcto
-      password: 'Reynaldo1994',  // Asegúrate de poner la contraseña correcta
-      database: 'centro_terapias',
+      password: 'admin',  // Asegúrate de poner la contraseña correcta
+      database: 'crecemos_website',
       entities: [
         Postulacion,
         Paciente,
@@ -122,7 +124,10 @@ import { Comentario } from './postulaciones/comentario.entity';
      FamiliarEntrevista,
         HistorialCita
         
-        ,Comentario
+        ,Comentario,
+        CargoPostulacion,
+        EstadoPostulacion
+       
       ],
         synchronize: false,   // true en desarrollo, false en producción
         
