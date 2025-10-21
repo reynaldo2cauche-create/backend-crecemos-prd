@@ -7,9 +7,10 @@ export class AuthController {
     private authService: AuthService,
   ) {}
 
-  @Post('login')
-  @HttpCode(HttpStatus.OK)
-  async login(@Body() body: { username: string; password: string }) {
-    return this.authService.login(body.username, body.password);
-  }
+ @Post('login')
+@HttpCode(HttpStatus.OK)
+async login(@Body() body: { username: string; password: string }) {
+  console.log('Body recibido:', body);
+  return this.authService.login(body.username, body.password);
+}
 } 

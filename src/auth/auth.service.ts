@@ -14,10 +14,13 @@ export class AuthService {
   ) {}
 
   async validateUser(username: string, password: string): Promise<any> {
+    
     const user = await this.trabajadorRepository.findOne({ 
       where: { username },
       relations: ['institucion']
     });
+     console.log('Usuario encontrado:', user);
+  console.log('Password recibido:', password);
     
     if (user && await bcrypt.compare(password, user.password)) {
       const { password, ...result } = user;
@@ -40,7 +43,7 @@ export class AuthService {
     const payload = { 
       username: user.username, 
       sub: user.id, 
-      rol: user.rol,
+      rol: user.rol.nombre,
       institucion_id: user.institucion?.id 
     };
     
