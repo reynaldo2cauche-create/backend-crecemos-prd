@@ -74,8 +74,8 @@ import { Comentario } from './postulaciones/comentario.entity';
       host: 'localhost',
       port: 3306,
       username: 'root',  // Asegúrate de poner el nombre de usuario correcto
-      password: 'admin',  // Asegúrate de poner la contraseña correcta
-      database: 'crecemos_website',
+      password: 'Reynaldo1994',  // Asegúrate de poner la contraseña correcta
+      database: 'centro_terapias',
       entities: [
         Postulacion,
         Paciente,
