@@ -1,31 +1,35 @@
-import { IsNotEmpty, IsEmail, IsString, IsOptional } from 'class-validator';
+import { IsString, IsEmail, IsOptional, IsNotEmpty } from 'class-validator';
 
 export class CreatePostulacionDto {
-  @IsNotEmpty()
   @IsString()
+  @IsNotEmpty()
   nombre: string;
 
-  @IsNotEmpty()
   @IsString()
+  @IsNotEmpty()
   apellido: string;
 
-  @IsNotEmpty()
   @IsEmail()
+  @IsNotEmpty()
   email: string;
 
-  @IsOptional()
   @IsString()
-  telefono?: string;
+  @IsNotEmpty()  // ✅ CAMBIO: Ya no es opcional
+  telefono: string;
 
-  @IsNotEmpty()
   @IsString()
+  @IsNotEmpty()
+  distrito: string;
+
+  @IsString()
+  @IsNotEmpty()
   cargo_postulado: string;
 
-  @IsOptional()
   @IsString()
-  experiencia?: string;
+  @IsOptional()  // ✅ Este se asigna por defecto en el service
+  estado_postulacion?: string;
 
-  @IsOptional()
   @IsString()
+  @IsOptional()  // ✅ Este se asigna automáticamente cuando subes el CV
   documentos_adjuntos?: string;
 }

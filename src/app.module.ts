@@ -58,6 +58,7 @@ import { Cita } from './citas/cita.entity';
 import { HermanoEntrevista } from './historia-clinica/entities/hermano-entrevista.entity';
 import { FamiliarEntrevista } from './historia-clinica/entities/familiar-entrevista.entity';
 import { HistorialCita } from './citas/historial-cita.entity';
+import { Comentario } from './postulaciones/comentario.entity';
   
 @Module({
   imports: [
@@ -73,8 +74,8 @@ import { HistorialCita } from './citas/historial-cita.entity';
       host: 'localhost',
       port: 3306,
       username: 'root',  // Asegúrate de poner el nombre de usuario correcto
-      password: 'Reynaldo1994',  // Asegúrate de poner la contraseña correcta
-      database: 'centro_terapias',
+      password: 'admin',  // Asegúrate de poner la contraseña correcta
+      database: 'crecemos_website',
       entities: [
         Postulacion,
         Paciente,
@@ -118,10 +119,13 @@ import { HistorialCita } from './citas/historial-cita.entity';
         EstadoCita,
         Cita,
         HermanoEntrevista,
-        FamiliarEntrevista,
+     FamiliarEntrevista,
         HistorialCita
+        
+        ,Comentario
       ],
-      synchronize: false,    // Desactivado para evitar problemas con datos existentes
+        synchronize: false,   // true en desarrollo, false en producción
+        
     }),
 
     // TypeOrmModule.forRoot({
@@ -143,8 +147,12 @@ import { HistorialCita } from './citas/historial-cita.entity';
     TrabajadorCentroModule,
     HistoriaClinicaModule,
     CitasModule,
+    Comentario
+   
+    
   ],
   controllers: [AppController],
   providers: [AppService],
 })
+
 export class AppModule {}
