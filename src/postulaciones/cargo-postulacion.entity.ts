@@ -6,8 +6,6 @@ import {
   Entity,
   PrimaryGeneratedColumn,
   Column,
-  CreateDateColumn,
-  UpdateDateColumn,
   OneToMany,
 } from 'typeorm';
 import { Postulacion } from './postulacion.entity';
@@ -23,7 +21,7 @@ export class CargoPostulacion {
   @Column({ type: 'tinyint', default: 1 })
   activo: number;
 
-  // Relación uno a muchos con postulaciones
-  @OneToMany(() => Postulacion, (postulacion) => postulacion.cargo_postulado)
+  // ✅ CORRECCIÓN: Apunta a la relación real, no al campo virtual
+  @OneToMany(() => Postulacion, (postulacion) => postulacion.cargoPostulacionRelacion)
   postulaciones: Postulacion[];
 }

@@ -6,7 +6,6 @@ import {
   Entity,
   PrimaryGeneratedColumn,
   Column,
-
   OneToMany,
 } from 'typeorm';
 import { Postulacion } from './postulacion.entity';
@@ -22,7 +21,7 @@ export class EstadoPostulacion {
   @Column({ type: 'tinyint', default: 1 })
   activo: number;
 
-  // Relación uno a muchos con postulaciones
-  @OneToMany(() => Postulacion, (postulacion) => postulacion.estado_postulacion)
+  // ✅ CORRECCIÓN: Apunta a la relación real, no al campo virtual
+  @OneToMany(() => Postulacion, (postulacion) => postulacion.estadoPostulacionRelacion)
   postulaciones: Postulacion[];
 }
