@@ -287,25 +287,46 @@ export class PostulacionesService {
     }
   }
 
-  async getEstadisticas() {
+
+
+  async getEstadisticasPorEstados() {
     try {
       const total = await this.postulacionRepository.count();
       
-      const porEstado = await this.postulacionRepository
+      // Obtener todos los estados disponibles
+      const todosLosEstados = await this.estadoRepository.find({
+        where: { activo: 1 },
+        order: { descripcion: 'ASC' }
+      });
+
+      // Obtener conteo por estado de las postulaciones existentes
+      const estadosConCantidad = await this.postulacionRepository
         .createQueryBuilder('postulacion')
         .leftJoin('postulacion.estadoPostulacionRelacion', 'estado')
-        .select('estado.descripcion', 'estado_postulacion')
-        .addSelect('COUNT(*)', 'count')
+        .select('estado.descripcion', 'nombre')
+        .addSelect('COUNT(postulacion.id_postulacion)', 'cantidad')
         .groupBy('estado.descripcion')
         .getRawMany();
 
+      // Crear un mapa para acceso rápido a las cantidades
+      const cantidadPorEstado = new Map();
+      estadosConCantidad.forEach(estado => {
+        cantidadPorEstado.set(estado.nombre, parseInt(estado.cantidad));
+      });
+
+      // Crear el array final con todos los estados, incluyendo los que tienen cantidad 0
+      const estados = todosLosEstados.map(estado => ({
+        nombre: estado.descripcion,
+        cantidad: cantidadPorEstado.get(estado.descripcion) || 0
+      }));
+
       return {
         total,
-        porEstado,
+        estados
       };
     } catch (error) {
-      console.error('Error en getEstadisticas:', error);
-      throw new BadRequestException('Error al obtener estadísticas');
+      console.error('Error en getEstadisticasPorEstados:', error);
+      throw new BadRequestException('Error al obtener estadísticas por estados');
     }
   }
 }
