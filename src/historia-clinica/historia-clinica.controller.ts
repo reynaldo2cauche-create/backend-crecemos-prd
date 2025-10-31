@@ -6,6 +6,9 @@ import { UpdateEntrevistaPadresDto } from './dto/update-entrevista-padres.dto';
 import { UpdateReporteEvolucionDto } from './dto/update-reporte-evolucion.dto';
 import { ReporteEvolucion } from './entities/reporte-evolucion.entity';
 import { EntrevistaPadres } from './entities/entrevista-padres.entity';
+import { CreateEvaluacionTerapiaDto } from './dto/create-evaluacion-terapia.dto';
+import { EvaluacionTerapiaOcupacional } from './entities/evaluacion-terapia-ocupacional.entity';
+import { UpdateEvaluacionTerapiaDto } from './dto/update-evaluacion-terapia.dto';
 
 @Controller('backend_api/historia-clinica')
 export class HistoriaClinicaController {
@@ -55,5 +58,29 @@ export class HistoriaClinicaController {
     @Body() updateReporteDto: UpdateReporteEvolucionDto
   ) {
     return this.historiaClinicaService.updateReporteEvolucion(id, updateReporteDto);
+  }
+
+    // ==================== EVALUACIONES DE TERAPIA OCUPACIONAL ====================
+  @Post('evaluacion-terapia')
+  createEvaluacionTerapia(@Body() createEvaluacionDto: CreateEvaluacionTerapiaDto): Promise<EvaluacionTerapiaOcupacional> {
+    return this.historiaClinicaService.createEvaluacionTerapia(createEvaluacionDto);
+  }
+
+  @Get('paciente/:id/evaluaciones-terapia')
+  getEvaluacionesTerapia(@Param('id', ParseIntPipe) pacienteId: number): Promise<EvaluacionTerapiaOcupacional[]> {
+    return this.historiaClinicaService.getEvaluacionesTerapia(pacienteId);
+  }
+
+  @Get('evaluacion-terapia/:id')
+  getEvaluacionTerapiaById(@Param('id', ParseIntPipe) id: number): Promise<EvaluacionTerapiaOcupacional> {
+    return this.historiaClinicaService.getEvaluacionTerapiaById(id);
+  }
+
+  @Put('evaluacion-terapia/:id')
+  updateEvaluacionTerapia(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() updateEvaluacionDto: UpdateEvaluacionTerapiaDto
+  ): Promise<EvaluacionTerapiaOcupacional> {
+    return this.historiaClinicaService.updateEvaluacionTerapia(id, updateEvaluacionDto);
   }
 }
