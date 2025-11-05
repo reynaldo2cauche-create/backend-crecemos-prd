@@ -8,8 +8,8 @@ export class CitaController {
   constructor(private readonly citaService: CitaService) {}
 
   @Post()
-  create(@Body() createCitaDto: CreateCitaDto) {
-    return this.citaService.create(createCitaDto, createCitaDto.user_id);
+  create(@Body() createCitaDto: CreateCitaDto | CreateCitaDto[]) {
+    return this.citaService.create(createCitaDto);
   }
 
   @Get()
