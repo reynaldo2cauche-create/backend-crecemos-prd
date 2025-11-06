@@ -4,6 +4,7 @@ import { CreatePacienteDto } from './dto/create-paciente.dto';
 import { UpdatePacienteDto } from './dto/update-paciente.dto';
 import { CreatePacienteCompletoDto } from './dto/create-paciente-completo.dto';
 import { UpdateEstadoPacienteDto } from './dto/update-estado-paciente.dto';
+import { ApiOperation, ApiQuery } from '@nestjs/swagger';
 
 @Controller('backend_api/pacientes')
 export class PacienteController {
@@ -40,6 +41,49 @@ export class PacienteController {
     return this.pacienteService.findAll(parsedFilters);
   }
 
+   @Get('all')
+@ApiOperation({ summary: 'Obtener todos los pacientes incluyendo activos e inactivos' })
+@ApiQuery({ name: 'terapeutaId', required: false, type: Number })
+@ApiQuery({ name: 'numeroDocumento', required: false, type: String })
+@ApiQuery({ name: 'nombre', required: false, type: String })
+@ApiQuery({ name: 'distritoId', required: false, type: Number })
+@ApiQuery({ name: 'estadoId', required: false, type: Number })
+@ApiQuery({ name: 'servicioId', required: false, type: Number })
+@ApiQuery({ name: 'activo', required: false, type: Boolean, description: 'Filtrar por estado activo/inactivo' })
+async findAllIncludingInactive(@Query() query: any) {
+  const filters: any = {};
+
+  // Validar que sean números válidos antes de convertir
+  if (query.terapeutaId && !isNaN(Number(query.terapeutaId))) {
+    filters.terapeutaId = Number(query.terapeutaId);
+  }
+  
+  if (query.numeroDocumento) {
+    filters.numeroDocumento = query.numeroDocumento;
+  }
+  
+  if (query.nombre) {
+    filters.nombre = query.nombre;
+  }
+  
+  if (query.distritoId && !isNaN(Number(query.distritoId))) {
+    filters.distritoId = Number(query.distritoId);
+  }
+  
+  if (query.estadoId && !isNaN(Number(query.estadoId))) {
+    filters.estadoId = Number(query.estadoId);
+  }
+  
+  if (query.servicioId && !isNaN(Number(query.servicioId))) {
+    filters.servicioId = Number(query.servicioId);
+  }
+  
+  if (query.activo !== undefined && query.activo !== '') {
+    filters.activo = query.activo === 'true' || query.activo === true;
+  }
+
+  return this.pacienteService.findAllIncludingInactive(filters);
+}
   @Get('buscar')
   buscarPacientes(@Query('q') query: string) {
     // Validar que el parámetro q esté presente y sea válido
@@ -76,4 +120,6 @@ export class PacienteController {
   ) {
     return this.pacienteService.controlarVisibilidad(+id, dto.mostrarEnListado, dto.userId);
   }
+
+ 
 }
