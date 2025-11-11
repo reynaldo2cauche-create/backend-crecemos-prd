@@ -63,10 +63,10 @@ export class PostulacionesController {
     return await this.postulacionesService.create(createPostulacionDto, cv);
   }
 
-  // ✅ RUTAS ESPECÍFICAS PRIMERO
-  @Get('estadisticas')
-  async getEstadisticas() {
-    return await this.postulacionesService.getEstadisticas();
+
+  @Get('estadisticas-por-estados')
+  async getEstadisticasPorEstados() {
+    return await this.postulacionesService.getEstadisticasPorEstados();
   }
 
   @Post('comentarios')

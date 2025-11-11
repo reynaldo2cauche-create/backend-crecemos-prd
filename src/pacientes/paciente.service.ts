@@ -218,6 +218,124 @@ export class PacienteService {
 
     return resultados;
   }
+
+  async findAllIncludingInactive(filters?: {
+    terapeutaId?: number;
+    numeroDocumento?: string;
+    nombre?: string;
+    distritoId?: number;
+    estadoId?: number;
+    servicioId?: number;
+    activo?: boolean; // Nuevo filtro opcional
+  }): Promise<Paciente[]> {
+    const queryBuilder = this.pacienteRepository
+      .createQueryBuilder('paciente')
+       .select([
+        'paciente',  // Esto selecciona TODOS los campos de paciente
+      ])
+      .leftJoinAndSelect('paciente.tipo_documento', 'tipo_documento')
+      .leftJoinAndSelect('paciente.sexo', 'sexo')
+      .leftJoinAndSelect('paciente.distrito', 'distrito')
+      .leftJoinAndSelect('paciente.responsable_relacion', 'responsable_relacion')
+      .leftJoinAndSelect('paciente.responsable_tipo_documento', 'responsable_tipo_documento')
+      .leftJoinAndSelect('paciente.estado', 'estado');
+
+    // SIN filtro de activo por defecto - muestra todos
+    // Solo filtrar si se especifica explícitamente
+    if (filters?.activo !== undefined) {
+      queryBuilder.where('paciente.activo = :activo', { activo: filters.activo });
+    }
+
+    // Hacer join con paciente_servicio activo solo para obtener el servicio actual
+    queryBuilder
+      .leftJoin('paciente.pacienteServicios', 'pacienteServicioGeneral', 'pacienteServicioGeneral.activo = :pacienteServicioActivo', { 
+        pacienteServicioActivo: true 
+      })
+      .leftJoinAndSelect('pacienteServicioGeneral.servicio', 'servicio')
+      .addSelect('paciente.id', 'paciente_id')
+      .addSelect('servicio.id', 'servicio_id')
+      .addSelect('servicio.nombre', 'servicio_nombre');
+
+    // Filtro por terapeuta
+    if (filters?.terapeutaId) {
+      queryBuilder
+        .leftJoin('paciente.pacienteServicios', 'pacienteServicioTerapeuta')
+        .leftJoin('pacienteServicioTerapeuta.asignaciones', 'asignacionTerapeuta')
+        .andWhere('asignacionTerapeuta.terapeuta.id = :terapeutaId', { terapeutaId: filters.terapeutaId })
+        .andWhere('asignacionTerapeuta.estado = :estadoAsignacion', { estadoAsignacion: 'ACTIVO' })
+        .andWhere('asignacionTerapeuta.activo = :activoAsignacion', { activoAsignacion: true });
+    }
+
+    // Filtro por número de documento
+    if (filters?.numeroDocumento) {
+      queryBuilder.andWhere('paciente.numero_documento LIKE :numeroDocumento', { 
+        numeroDocumento: `%${filters.numeroDocumento}%` 
+      });
+    }
+
+    // Filtro por nombre del paciente
+    if (filters?.nombre) {
+      console.log('Aplicando filtro por nombre:', filters.nombre);
+      queryBuilder.andWhere(
+        '(paciente.nombres LIKE :nombre OR paciente.apellido_paterno LIKE :nombre OR paciente.apellido_materno LIKE :nombre)',
+        { nombre: `%${filters.nombre}%` }
+      );
+     
+    }
+
+    // Filtro por distrito
+    if (filters?.distritoId) {
+      queryBuilder.andWhere('paciente.distrito.id = :distritoId', { 
+        distritoId: filters.distritoId 
+      });
+    }
+
+    // Filtro por estado
+    if (filters?.estadoId) {
+      queryBuilder.andWhere('paciente.estado.id = :estadoId', { 
+        estadoId: filters.estadoId 
+      });
+    }
+
+    // Filtro por servicio asignado
+    if (filters?.servicioId) {
+      console.log('Aplicando filtro por servicioId:', filters.servicioId);
+      queryBuilder.andWhere('pacienteServicioGeneral.servicio.id = :servicioId', { 
+        servicioId: filters.servicioId 
+      });
+     
+    }
+
+    queryBuilder.orderBy('paciente.created_at', 'DESC');
+
+    
+
+    const { entities, raw } = await queryBuilder.getRawAndEntities();
+
+    // Construir un índice por paciente_id a su primer servicio activo (si existe)
+    const pacienteIdToServicioRaw: Record<number, { servicio_id?: number; servicio_nombre?: string }> = {};
+    for (const r of raw) {
+      const pid = Number(r['paciente_id']);
+      if (!pacienteIdToServicioRaw[pid] && r['servicio_id']) {
+        pacienteIdToServicioRaw[pid] = {
+          servicio_id: Number(r['servicio_id']),
+          servicio_nombre: r['servicio_nombre'] as string,
+        };
+      }
+    }
+
+    
+    const resultados = entities.map((paciente) => {
+    
+      const srv = pacienteIdToServicioRaw[paciente.id];
+      (paciente as any).servicio = srv
+        ? { id: srv.servicio_id, nombre: srv.servicio_nombre }
+        : null;
+      return paciente;
+    });
+
+    return resultados;
+  }
   
 
   async update(id: number, dto: UpdatePacienteDto): Promise<Paciente> {
