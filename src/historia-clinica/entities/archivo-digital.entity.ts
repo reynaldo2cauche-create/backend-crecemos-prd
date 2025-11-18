@@ -7,6 +7,12 @@ import { TipoArchivo } from './tipo-archivo.entity';
 export class ArchivoDigital {
   @PrimaryGeneratedColumn()
   id: number;
+ 
+  @Column({ name: 'requiere_verificacion', type: 'enum', enum: ['TERAPIA', 'OFICIAL'], default: 'TERAPIA' })
+  requiereVerificacion: 'TERAPIA' | 'OFICIAL';
+  
+  @Column({ name: 'cod_verificacion', type: 'varchar', length: 9, unique: true, nullable: true })
+  codVerificacion: string;
 
   @Column({ name: 'nombre_archivo', type: 'varchar', length: 255, nullable: false })
   nombreArchivo: string;

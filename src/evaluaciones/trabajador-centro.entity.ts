@@ -3,6 +3,7 @@ import { Entity, Column, PrimaryGeneratedColumn, ManyToOne, OneToMany, JoinColum
 import { Institucion } from './institucion.entity';
 import { DatosEstudiante } from './datos-estudiante.entity';
 
+
 @Entity('trabajador_centro')
 export class TrabajadorCentro {
   @PrimaryGeneratedColumn()

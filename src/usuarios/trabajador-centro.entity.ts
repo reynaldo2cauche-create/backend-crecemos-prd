@@ -63,6 +63,8 @@ export class TrabajadorCentro {
   @JoinColumn({ name: 'rol_id' })
   rol: Rol;
 
+
+
   @ManyToOne(() => Especialidad, { eager: true, nullable: true })
   @JoinColumn({ name: 'especialidad_id' })
   especialidad: Especialidad;
@@ -82,4 +84,6 @@ export class TrabajadorCentro {
 
   @Column({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP', onUpdate: 'CURRENT_TIMESTAMP' })
   updated_at: Date;
+
+  
 } 

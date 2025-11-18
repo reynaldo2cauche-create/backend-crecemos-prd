@@ -31,4 +31,7 @@ export class CreateArchivoDigitalDto {
   @IsInt()
   @IsOptional()
   pacienteId?: number;
+
+  @IsOptional()
+  requiereVerificacion?: 'TERAPIA' | 'OFICIAL';
 }
