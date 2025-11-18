@@ -21,13 +21,16 @@ export class TrabajadorCentroController {
   @Get('perfil/me')
   @UseGuards(JwtAuthGuard)
   async getMyProfile(@Request() req) {
-    return this.service.findOneById(req.user.userId);
+    console.log('🔍 req.user:', req.user);
+    console.log('🆔 User ID:', req.user.id);
+    return this.service.findOneById(req.user.id);
   }
 
   @Patch('perfil/me')
   @UseGuards(JwtAuthGuard)
   async updateMyProfile(@Request() req, @Body() dto: UpdateTrabajadorCentroDto) {
-    return this.service.update(req.user.userId, dto);
+    console.log('🔍 Actualizando perfil de usuario ID:', req.user.id);
+    return this.service.update(req.user.id, dto);
   }
 
   @Get(':id')
