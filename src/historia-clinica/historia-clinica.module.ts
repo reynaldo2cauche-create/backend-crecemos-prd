@@ -15,6 +15,7 @@ import { TrabajadorCentro } from '../usuarios/trabajador-centro.entity';
 import { Servicios } from '../catalogos/servicios.entity';
 import { Sexo } from '../catalogos/sexo.entity';
 import { Ocupaciones } from '../catalogos/ocupaciones.entity';
+import { EvaluacionTerapiaOcupacional } from './entities/evaluacion-terapia-ocupacional.entity';
 import { ArchivoOficial } from './entities/archivo-oficial.entity';
 import { ArchivoTerapia } from './entities/archivo-terapia.entity';
 import { ArchivosOficialesService } from './archivos-oficiales.service';
@@ -30,6 +31,7 @@ import { TiposArchivoService } from './tipo-archivo.service';
     TypeOrmModule.forFeature([
       ReporteEvolucion, 
       EntrevistaPadres,
+      EvaluacionTerapiaOcupacional,
       HermanoEntrevista,
       FamiliarEntrevista,
       ArchivoOficial,

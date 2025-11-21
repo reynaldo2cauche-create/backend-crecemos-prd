@@ -735,6 +735,7 @@ tieneAccesoBeneficios(estadoPacienteId: number): boolean {
 
     const pacientes = await this.pacienteRepository
       .createQueryBuilder('paciente')
+      .leftJoinAndSelect('paciente.estado', 'estado')
       .select([
         'paciente.id',
         'paciente.nombres',
@@ -743,6 +744,7 @@ tieneAccesoBeneficios(estadoPacienteId: number): boolean {
       ])
       .where('paciente.activo = :activo', { activo: true })
       .andWhere('paciente.mostrar_en_listado = :mostrarEnListado', { mostrarEnListado: true })
+      .andWhere('estado.id IN (:...estados)', { estados: [1, 2, 3, 4] })
       .andWhere(
         '(paciente.nombres LIKE :query OR paciente.apellido_paterno LIKE :query OR paciente.apellido_materno LIKE :query)',
         { query: `%${query.trim()}%` }

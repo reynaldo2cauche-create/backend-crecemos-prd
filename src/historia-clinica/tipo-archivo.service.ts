@@ -13,7 +13,7 @@ export class TiposArchivoService {
   async findAll(): Promise<TipoArchivo[]> {
     return this.tipoArchivoRepository.find({
       where: { activo: 1 },
-      select: ['id', 'nombre', 'descripcion'],
+      select: ['id', 'nombre', 'descripcion','destinatario_tipo','vigencia_meses'],
     });
   }
 }

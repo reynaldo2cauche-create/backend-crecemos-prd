@@ -15,6 +15,15 @@ export class TipoArchivo {
   @Column({ type: 'tinyint', default: 1 })
   activo: number;
 
+ @Column({ type: 'text'})
+  destinatario_tipo: string;
+  
+   @Column({ type: 'tinyint', nullable: true })
+  vigencia_meses: number;
+
+
+
+
   @CreateDateColumn({ name: 'fecha_creacion' })
   fechaCreacion: Date;
 

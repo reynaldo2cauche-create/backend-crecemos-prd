@@ -1,19 +1,26 @@
-// ============================================
-// src/dto/crear-archivo-oficial.dto.ts
-// ============================================
-import { IsInt, IsNotEmpty, IsOptional, IsString, IsDateString } from 'class-validator';
+// src/archivos/dto/crear-archivo-oficial.dto.ts
+import { IsInt, IsNotEmpty, IsOptional, IsString, IsDateString, ValidateIf } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class CrearArchivoOficialDto {
   @IsInt()
   @Type(() => Number)
-  @IsNotEmpty({ message: 'El pacienteId es requerido' })
-  pacienteId: number;
+  @IsOptional()
+  @ValidateIf((o) => !o.trabajadorId)
+  @IsNotEmpty({ message: 'Debe seleccionar un paciente o un trabajador' })
+  pacienteId?: number;
 
   @IsInt()
   @Type(() => Number)
-  @IsNotEmpty({ message: 'El terapeutaId es requerido' })
-  terapeutaId: number;
+  @IsOptional()
+  @ValidateIf((o) => !o.pacienteId)
+  @IsNotEmpty({ message: 'Debe seleccionar un paciente o un trabajador' })
+  trabajadorId?: number;
+
+  @IsInt()
+  @Type(() => Number)
+  @IsOptional()
+  terapeutaId?: number;
 
   @IsInt()
   @Type(() => Number)

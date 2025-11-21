@@ -16,9 +16,22 @@ export class CitaService {
   ) {}
 
   /**
-   * Crear una nueva cita
+   * Crear una o múltiples citas
    */
-  async create(createCitaDto: CreateCitaDto, userId?: number): Promise<any> {
+  async create(createCitaDto: CreateCitaDto | CreateCitaDto[]): Promise<any> {
+    // Si es un array, crear múltiples citas
+    if (Array.isArray(createCitaDto)) {
+      return this.createMultiple(createCitaDto);
+    }
+
+    // Si es un solo objeto, crear una cita
+    return this.createSingle(createCitaDto);
+  }
+
+  /**
+   * Crear una sola cita
+   */
+  private async createSingle(createCitaDto: CreateCitaDto): Promise<any> {
     // Calcular hora_fin basada en hora_inicio + duracion_minutos
     const horaInicio = new Date(`2000-01-01T${createCitaDto.hora_inicio}`);
     const horaFin = new Date(horaInicio.getTime() + createCitaDto.duracion_minutos * 60000);
@@ -40,7 +53,7 @@ export class CitaService {
       motivo: { id: createCitaDto.motivo_id },
       estado: { id: createCitaDto.estado_id },
       hora_fin: horaFinString,
-      user_id_crea: userId
+      user_id_crea: createCitaDto.user_id
     });
 
     const savedCita = await this.citaRepository.save(cita);
@@ -52,7 +65,7 @@ export class CitaService {
     });
 
     // Registrar en el historial
-    await this.registrarHistorial(citaCompleta, 'CREATE', userId);
+    await this.registrarHistorial(citaCompleta, 'CREATE', createCitaDto.user_id);
 
     return {
       id: citaCompleta.id,
@@ -76,6 +89,101 @@ export class CitaService {
       fecha_actua: citaCompleta.fecha_actua,
       created_at: citaCompleta.created_at,
       updated_at: citaCompleta.updated_at
+    };
+  }
+
+  /**
+   * Crear múltiples citas
+   */
+  private async createMultiple(citasDto: CreateCitaDto[]): Promise<any> {
+    const citasCreadas = [];
+    const errores = [];
+
+    // Validar todas las citas primero
+    for (let i = 0; i < citasDto.length; i++) {
+      const citaDto = citasDto[i];
+      try {
+        const horaInicio = new Date(`2000-01-01T${citaDto.hora_inicio}`);
+        const horaFin = new Date(horaInicio.getTime() + citaDto.duracion_minutos * 60000);
+        const horaFinString = horaFin.toTimeString().slice(0, 8);
+
+        await this.validarDisponibilidadTerapeuta(
+          citaDto.doctor_id,
+          citaDto.fecha,
+          citaDto.hora_inicio,
+          horaFinString
+        );
+      } catch (error) {
+        errores.push({
+          index: i,
+          fecha: citaDto.fecha,
+          hora_inicio: citaDto.hora_inicio,
+          error: error.message
+        });
+      }
+    }
+
+    // Si hay errores de validación, devolver todos los errores
+    if (errores.length > 0) {
+      throw new ConflictException({
+        message: 'Hay conflictos de horarios en algunas citas',
+        errores
+      });
+    }
+
+    // Crear todas las citas
+    for (const citaDto of citasDto) {
+      const horaInicio = new Date(`2000-01-01T${citaDto.hora_inicio}`);
+      const horaFin = new Date(horaInicio.getTime() + citaDto.duracion_minutos * 60000);
+      const horaFinString = horaFin.toTimeString().slice(0, 8);
+
+      const cita = this.citaRepository.create({
+        ...citaDto,
+        paciente: { id: citaDto.paciente_id },
+        doctor: { id: citaDto.doctor_id },
+        servicio: { id: citaDto.servicio_id },
+        motivo: { id: citaDto.motivo_id },
+        estado: { id: citaDto.estado_id },
+        hora_fin: horaFinString,
+        user_id_crea: citaDto.user_id
+      });
+
+      const savedCita = await this.citaRepository.save(cita);
+
+      // Registrar en el historial
+      const citaCompleta = await this.citaRepository.findOne({
+        where: { id: savedCita.id },
+        relations: ['paciente', 'doctor', 'servicio', 'motivo', 'estado']
+      });
+
+      await this.registrarHistorial(citaCompleta, 'CREATE', citaDto.user_id);
+
+      citasCreadas.push({
+        id: citaCompleta.id,
+        paciente_id: citaCompleta.paciente.id,
+        paciente_nombre: `${citaCompleta.paciente.nombres} ${citaCompleta.paciente.apellido_paterno} ${citaCompleta.paciente.apellido_materno}`.trim(),
+        doctor_id: citaCompleta.doctor.id,
+        doctor_nombre: `${citaCompleta.doctor.nombres} ${citaCompleta.doctor.apellidos}`.trim(),
+        servicio_id: citaCompleta.servicio.id,
+        servicio_nombre: citaCompleta.servicio.nombre,
+        motivo_id: citaCompleta.motivo.id,
+        motivo_nombre: citaCompleta.motivo.nombre,
+        estado_id: citaCompleta.estado.id,
+        estado_nombre: citaCompleta.estado.nombre,
+        fecha: citaCompleta.fecha,
+        hora_inicio: citaCompleta.hora_inicio,
+        hora_fin: citaCompleta.hora_fin,
+        duracion_minutos: citaCompleta.duracion_minutos,
+        nota: citaCompleta.nota,
+        user_id_crea: citaCompleta.user_id_crea,
+        created_at: citaCompleta.created_at
+      });
+    }
+
+    return {
+      message: 'Citas creadas exitosamente',
+      total: citasCreadas.length,
+      citas: citasCreadas
     };
   }
 

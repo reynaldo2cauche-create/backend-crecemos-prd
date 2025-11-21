@@ -59,9 +59,12 @@ import { HermanoEntrevista } from './historia-clinica/entities/hermano-entrevist
 import { FamiliarEntrevista } from './historia-clinica/entities/familiar-entrevista.entity';
 import { HistorialCita } from './citas/historial-cita.entity';
 import { Comentario } from './postulaciones/comentario.entity';
+import { EvaluacionTerapiaOcupacional } from './historia-clinica/entities/evaluacion-terapia-ocupacional.entity';
 import { ArchivoOficial } from './historia-clinica/entities/archivo-oficial.entity';
 import { ArchivoTerapia } from './historia-clinica/entities/archivo-terapia.entity';
 import { Beneficio } from './beneficios/beneficios.entity';
+import { CargoPostulacion } from './postulaciones/cargo-postulacion.entity';
+import { EstadoPostulacion } from './postulaciones/estado-postulacion.entity';
   
 @Module({
   imports: [
@@ -126,9 +129,13 @@ import { Beneficio } from './beneficios/beneficios.entity';
         HistorialCita
         
         ,Comentario,
+        EvaluacionTerapiaOcupacional,
         ArchivoOficial,
         ArchivoTerapia,
         Beneficio
+        CargoPostulacion,
+        EstadoPostulacion
+       
       ],
         synchronize: false,   // true en desarrollo, false en producción
         

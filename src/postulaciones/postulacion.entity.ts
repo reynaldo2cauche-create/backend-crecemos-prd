@@ -1,5 +1,15 @@
-import { Entity, PrimaryGeneratedColumn, Column, OneToMany } from 'typeorm';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  CreateDateColumn,
+  OneToMany,
+  ManyToOne,
+  JoinColumn,
+} from 'typeorm';
 import { Comentario } from './comentario.entity';
+import { CargoPostulacion } from './cargo-postulacion.entity';
+import { EstadoPostulacion } from './estado-postulacion.entity';
 
 @Entity('postulaciones')
 export class Postulacion {
@@ -15,28 +25,33 @@ export class Postulacion {
   @Column({ type: 'varchar', length: 150 })
   email: string;
 
-  @Column({ type: 'varchar', length: 15, nullable: true })
+  @Column({ type: 'varchar', length: 15 })
   telefono: string;
 
   @Column({ type: 'varchar', length: 100 })
   distrito: string;
 
-  @Column({ type: 'varchar', length: 50 })
+  // ✅ RELACIÓN: Pero exponemos como string para mantener compatibilidad
+  @ManyToOne(() => CargoPostulacion, cargo => cargo.postulaciones, { eager: true })
+  @JoinColumn({ name: 'cargo_postulacion_id' })
+  cargoPostulacionRelacion: CargoPostulacion;
+
+  // ✅ VIRTUAL: Este campo NO existe en BD, es calculado
   cargo_postulado: string;
+
+  @ManyToOne(() => EstadoPostulacion, { eager: true })
+  @JoinColumn({ name: 'estado_postulacion_id' })
+  estadoPostulacionRelacion: EstadoPostulacion;
+
+  // ✅ VIRTUAL: Este campo NO existe en BD, es calculado
+  estado_postulacion: string;
 
   @Column({ type: 'varchar', length: 255, nullable: true })
   documentos_adjuntos: string;
 
-  @Column({ type: 'datetime', default: () => 'CURRENT_TIMESTAMP(6)' })
+  @CreateDateColumn({ type: 'datetime' })
   fecha_postulacion: Date;
 
-  @Column({
-    type: 'enum',
-    enum: ['Nuevo', 'En revisión', 'Contactado', 'Por entrevistar', 'Rechazado', 'Contratado'],
-    default: 'Nuevo'
-  })
-  estado_postulacion: string;
-
-  @OneToMany(() => Comentario, comentario => comentario.postulacion)
+  @OneToMany(() => Comentario, (comentario) => comentario.postulacion)
   comentarios: Comentario[];
 }

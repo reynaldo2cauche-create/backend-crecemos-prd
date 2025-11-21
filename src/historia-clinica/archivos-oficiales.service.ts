@@ -1,6 +1,4 @@
-// ============================================
 // src/archivos/archivos-oficiales.service.ts
-// ============================================
 import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -67,14 +65,12 @@ export class ArchivosOficialesService {
   // ✅ FUNCIÓN AUXILIAR: Convertir string YYYY-MM-DD a Date sin zona horaria
   // ============================================
   private parseLocalDate(dateString: string): Date {
-    // Recibe: '2025-10-21'
-    // Retorna: Date en medianoche LOCAL (no UTC)
     const [year, month, day] = dateString.split('-').map(Number);
-    return new Date(year, month - 1, day); // month - 1 porque en JS los meses van de 0-11
+    return new Date(year, month - 1, day);
   }
 
   // ============================================
-  // SUBIR ARCHIVO OFICIAL
+  // SUBIR ARCHIVO OFICIAL (ACTUALIZADO)
   // ============================================
   async subirArchivo(
     file: Express.Multer.File,
@@ -85,6 +81,15 @@ export class ArchivosOficialesService {
     // Validar que solo admin o admisión puedan subir
     if (!['admin', 'admision'].includes(rolTrabajador.toLowerCase())) {
       throw new ForbiddenException('Solo admin y admisión pueden subir archivos oficiales');
+    }
+
+    // ✅ VALIDAR QUE SOLO UNO ESTÉ PRESENTE
+    if (!dto.pacienteId && !dto.trabajadorId) {
+      throw new BadRequestException('Debe seleccionar un paciente o un trabajador');
+    }
+
+    if (dto.pacienteId && dto.trabajadorId) {
+      throw new BadRequestException('No puede seleccionar paciente y trabajador al mismo tiempo');
     }
 
     // Validar tipo de archivo
@@ -114,36 +119,30 @@ export class ArchivosOficialesService {
     let codigoValidacion: string;
     
     if (dto.codigoManual) {
-      // Si el admin proporcionó un código manual (generado previamente)
-      
-      // Validar formato CTC-XXXXXXXX
       if (!/^CTC-[0-9A-Z]{8}$/.test(dto.codigoManual)) {
-        await fs.unlink(rutaCompleta); // Eliminar archivo subido
+        await fs.unlink(rutaCompleta);
         throw new BadRequestException('El código debe tener el formato CTC-XXXXXXXX');
       }
       
-      // Validar que el código no exista ya en la BD
       const existe = await this.archivoOficialRepo.findOne({
         where: { codigoValidacion: dto.codigoManual }
       });
       
       if (existe) {
-        await fs.unlink(rutaCompleta); // Eliminar archivo subido
+        await fs.unlink(rutaCompleta);
         throw new BadRequestException('El código ingresado ya existe en el sistema');
       }
       
       codigoValidacion = dto.codigoManual;
     } else {
-      // Si NO hay código manual, generar uno automáticamente
       codigoValidacion = await this.generarCodigoUnico();
     }
 
-    // ============================================
-    // ✅ CONVERSIÓN CORRECTA DE FECHAS SIN ZONA HORARIA
-    // ============================================
+    // ✅ CREAR ARCHIVO CON PACIENTE O TRABAJADOR
     const archivo = this.archivoOficialRepo.create({
-      pacienteId: dto.pacienteId,
-      terapeutaId: dto.terapeutaId,
+      pacienteId: dto.pacienteId || null,
+      trabajadorId: dto.trabajadorId || null,
+      terapeutaId: dto.terapeutaId||null,
       trabajadorSubioId: trabajadorId,
       tipoArchivoId: dto.tipoArchivoId,
       nombreArchivo,
@@ -161,11 +160,12 @@ export class ArchivosOficialesService {
   }
 
   // ============================================
-  // LISTAR ARCHIVOS (Solo admin y admisión)
+  // LISTAR ARCHIVOS (ACTUALIZADO)
   // ============================================
   async listarArchivos(
     rolTrabajador: string,
     pacienteId?: number,
+    trabajadorId?: number,
   ): Promise<ArchivoOficial[]> {
     if (!['admin', 'admision'].includes(rolTrabajador.toLowerCase())) {
       throw new ForbiddenException('No tienes permisos para ver archivos oficiales');
@@ -174,6 +174,7 @@ export class ArchivosOficialesService {
     const query = this.archivoOficialRepo
       .createQueryBuilder('archivo')
       .leftJoinAndSelect('archivo.paciente', 'paciente')
+      .leftJoinAndSelect('archivo.trabajador', 'trabajador')
       .leftJoinAndSelect('archivo.terapeuta', 'terapeuta')
       .leftJoinAndSelect('archivo.trabajadorSubio', 'trabajadorSubio')
       .leftJoinAndSelect('archivo.tipoArchivo', 'tipoArchivo')
@@ -183,18 +184,21 @@ export class ArchivosOficialesService {
       query.andWhere('archivo.pacienteId = :pacienteId', { pacienteId });
     }
 
+    if (trabajadorId) {
+      query.andWhere('archivo.trabajadorId = :trabajadorId', { trabajadorId });
+    }
+
     return await query.orderBy('archivo.fechaCreacion', 'DESC').getMany();
   }
 
   // ============================================
-  // VISUALIZAR/DESCARGAR ARCHIVO
+  // OBTENER ARCHIVO (SIN CAMBIOS)
   // ============================================
   async obtenerArchivo(
     id: number,
     trabajadorId: number,
     rolTrabajador: string,
   ): Promise<{ buffer: Buffer; mimetype: string; filename: string }> {
-    // Solo admin y admisión pueden ver archivos oficiales
     if (!['admin', 'admision'].includes(rolTrabajador.toLowerCase())) {
       throw new ForbiddenException('No tienes permisos');
     }
@@ -207,7 +211,6 @@ export class ArchivosOficialesService {
       throw new NotFoundException('Archivo no encontrado');
     }
 
-    // Leer archivo del disco
     const buffer = await fs.readFile(archivo.rutaArchivo);
 
     return {
@@ -218,7 +221,7 @@ export class ArchivosOficialesService {
   }
 
   // ============================================
-  // ELIMINAR ARCHIVO (Soft delete)
+  // ELIMINAR ARCHIVO (SIN CAMBIOS)
   // ============================================
   async eliminarArchivo(
     id: number,
@@ -237,43 +240,42 @@ export class ArchivosOficialesService {
       throw new NotFoundException('Archivo no encontrado');
     }
 
-    // Soft delete
     archivo.activo = 0;
     await this.archivoOficialRepo.save(archivo);
-
-    // Opcional: eliminar archivo físico
-    // await fs.unlink(archivo.rutaArchivo);
+  }
+    /**
+   * Determina si el estado es activo o inactivo
+   */
+  private determinarEstadoActividad(nombreEstado: string): 'activo' | 'inactivo' {
+    if (!nombreEstado) return 'inactivo';
+    
+    // Si el estado es exactamente 'Inactivo', retorna inactivo
+    if (nombreEstado === 'Inactivo') {
+      return 'inactivo';
+    }
+    
+    // Cualquier otro estado (Nuevo, Entrevista, Evaluacion, Terapia) es activo
+    return 'activo';
   }
 
-  // ============================================
-  // VALIDAR DOCUMENTO (WEB PÚBLICA)
-  // ============================================
- // ============================================
-// ACTUALIZACIÓN EN archivos-oficiales.service.ts
 // ============================================
-
-// Reemplaza el método validarDocumento() con esta versión corregida:
-
-// En archivos-oficiales.service.ts
+// VALIDAR DOCUMENTO (VERSIÓN FINAL CORREGIDA)
+// ============================================
 async validarDocumento(codigoValidacion: string) {
   const archivo = await this.archivoOficialRepo.findOne({
     where: { codigoValidacion },
-    relations: ['paciente', 'paciente.estado', 'terapeuta', 'tipoArchivo'],
+    relations: ['paciente', 'paciente.estado', 'trabajador', 'terapeuta', 'tipoArchivo'],
   });
 
   if (!archivo) {
     throw new NotFoundException('Documento no encontrado');
   }
 
- 
-
-  // Función para ocultar DNI
   const ocultarDNI = (dni: string): string => {
     if (!dni || dni.length < 4) return '****';
     return '*'.repeat(dni.length - 4) + dni.slice(-4);
   };
 
-  // ✅ SOLUCIÓN CORREGIDA
   const formatearFechaSinZonaHoraria = (fecha: Date | string): string => {
     if (!fecha) return null;
     
@@ -281,10 +283,8 @@ async validarDocumento(codigoValidacion: string) {
     
     if (typeof fecha === 'string') {
       if (fecha.includes('T')) {
-        // Formato ISO: "2025-10-21T00:00:00.000Z"
         fechaObj = new Date(fecha);
       } else {
-        // Formato simple: "2025-10-21"
         const [year, month, day] = fecha.split('-').map(Number);
         fechaObj = new Date(year, month - 1, day);
       }
@@ -300,44 +300,32 @@ async validarDocumento(codigoValidacion: string) {
     const month = String(fechaObj.getMonth() + 1).padStart(2, '0');
     const day = String(fechaObj.getDate()).padStart(2, '0');
     
-    const resultado = `${year}-${month}-${day}`;
- 
-    
-    return resultado;
+    return `${year}-${month}-${day}`;
   };
 
-  // ✅ FUNCIÓN CORREGIDA PARA VALIDAR VIGENCIA
   const estaVigente = (fechaVigencia: Date | string): boolean => {
     if (!fechaVigencia) {
-  
-      return true; // Si no hay fecha de vigencia, siempre es válido
+      return true;
     }
     
     let fechaVigenciaObj: Date;
     
-    // Parsear fecha de vigencia
     if (typeof fechaVigencia === 'string') {
       if (fechaVigencia.includes('T')) {
         fechaVigenciaObj = new Date(fechaVigencia);
       } else {
         const [year, month, day] = fechaVigencia.split('-').map(Number);
-        // Configurar a las 23:59:59 del día de vigencia
         fechaVigenciaObj = new Date(year, month - 1, day, 23, 59, 59, 999);
       }
     } else if (fechaVigencia instanceof Date) {
-      // Si ya es Date, ajustar a fin del día
       fechaVigenciaObj = new Date(fechaVigencia);
       fechaVigenciaObj.setHours(23, 59, 59, 999);
     } else {
-      console.log('❌ Fecha de vigencia inválida');
       return false;
     }
     
     const ahora = new Date();
-    const vigente = fechaVigenciaObj > ahora;
-    
-
-    return vigente;
+    return fechaVigenciaObj > ahora;
   };
 
   const fechaEmisionFormateada = formatearFechaSinZonaHoraria(archivo.fechaEmision);
@@ -346,25 +334,58 @@ async validarDocumento(codigoValidacion: string) {
     : null;
   const vigente = estaVigente(archivo.fechaVigencia);
 
+  // ✅ DETERMINAR SI ES PACIENTE O TRABAJADOR
+  let destinatario: any;
+  let tipoDestinatario: 'paciente' | 'trabajador';
+
+  if (archivo.pacienteId && archivo.paciente) {
+    tipoDestinatario = 'paciente';
+    destinatario = {
+      nombres: archivo.paciente.nombres || 'Sin nombre',
+      apellidos: `${archivo.paciente.apellido_paterno || ''} ${archivo.paciente.apellido_materno || ''}`.trim() || 'Sin apellidos',
+      dni: ocultarDNI(archivo.paciente.numero_documento),
+
+      estado: archivo.paciente.estado || null,
+    };
+  } else if (archivo.trabajadorId && archivo.trabajador) {
+    tipoDestinatario = 'trabajador';
+    destinatario = {
+      nombres: archivo.trabajador.nombres || 'Sin nombre',
+      apellidos: archivo.trabajador.apellidos || 'Sin apellidos',
+      dni: ocultarDNI(archivo.trabajador.dni),
+      activo: archivo.trabajador.estado === true,
+      especialidad: archivo.trabajador.especialidad || null,
+    };
+  } else {
+    throw new NotFoundException('El documento no tiene paciente ni trabajador asignado');
+  }
+
+  // ✅ CRÍTICO: VALIDAR SI TERAPEUTA EXISTE ANTES DE ACCEDER A SUS PROPIEDADES
+  let terapeutaData = null;
+  if (archivo.terapeuta) {
+    terapeutaData = {
+      nombres: archivo.terapeuta.nombres || 'Sin nombre',
+      apellidos: archivo.terapeuta.apellidos || 'Sin apellidos',
+    };
+  }
+
   return {
     valido: true,
     codigo: archivo.codigoValidacion,
     tipoDocumento: archivo.tipoArchivo?.nombre || 'Sin especificar',
-    paciente: {
-      nombres: archivo.paciente.nombres,
-      apellidos: `${archivo.paciente.apellido_paterno} ${archivo.paciente.apellido_materno}`,
-      dni: ocultarDNI(archivo.paciente.numero_documento),
-      activo: archivo.paciente.activo,
-      estado: archivo.paciente.estado?.nombre || null,
-    },
-    terapeuta: {
-      nombres: archivo.terapeuta.nombres,
-      apellidos: archivo.terapeuta.apellidos,
-    },
+    tipoDestinatario, // 'paciente' o 'trabajador'
+    destinatario, // datos del paciente o trabajador (DNI cifrado)
+    
+    // MANTENER COMPATIBILIDAD CON CÓDIGO ANTERIOR
+    paciente: tipoDestinatario === 'paciente' ? destinatario : null,
+    trabajador: tipoDestinatario === 'trabajador' ? destinatario : null,
+    
+    terapeuta: terapeutaData, // ✅ PUEDE SER NULL - el frontend lo maneja
+    
     fechaEmision: fechaEmisionFormateada,
     fechaVigencia: fechaVigenciaFormateada,
     vigente: vigente,
-    urlVerificacion: `${process.env.FRONTEND_URL || 'https://www.crecemos.com.pe'}/validar?code=${archivo.codigoValidacion}`,
+    urlVerificacion: `${process.env.FRONTEND_URL || 'https://www.crecemos.com.pe'}/verificar-documento`,
   };
 }
 }
