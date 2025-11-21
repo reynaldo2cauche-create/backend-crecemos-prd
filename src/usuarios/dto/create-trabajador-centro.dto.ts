@@ -23,6 +23,9 @@ export class CreateTrabajadorCentroDto {
   @IsNumber()
   rol_id: number;
 
+  @IsString()
+  rol: string;
+
   @IsOptional()
   @IsString()
   cargo?: string;

@@ -23,8 +23,7 @@ export class TrabajadorCentroService {
    */
   async findAllForSelect(): Promise<{ id: number; nombre_completo: string; cargo: string }[]> {
     const trabajadores = await this.trabajadorCentroRepository.find({
-      select: ['id', 'nombres', 'apellidos', 'rol'],
-      relations: ['rol'],
+      select: ['id', 'nombres', 'apellidos', 'cargo'],
       where: { estado: true },
       order: { apellidos: 'ASC', nombres: 'ASC' }
     });
@@ -45,37 +44,47 @@ export class TrabajadorCentroService {
     }
 
     const hashedPassword = await bcrypt.hash(dto.password, 10);
-    const trabajador = this.trabajadorCentroRepository.create({
-      ...dto,
-      password: hashedPassword,
-      estado: true,
-      rol: dto.rol_id ? { id: dto.rol_id } : undefined,
-      especialidad: dto.especialidad_id ? { id: dto.especialidad_id } : undefined,
-      institucion: dto.institucion_id ? { id: dto.institucion_id } : undefined
-    });
-    
-    const savedTrabajador = await this.trabajadorCentroRepository.save(trabajador);
-    
-    // Obtener el trabajador con todas las relaciones para la respuesta
+
+    // Insertar directamente con query builder
+    const result = await this.trabajadorCentroRepository
+      .createQueryBuilder()
+      .insert()
+      .into('trabajador_centro')
+      .values({
+        nombres: dto.nombres,
+        apellidos: dto.apellidos,
+        dni: dto.dni,
+        username: dto.username,
+        password: hashedPassword,
+        email: dto.email,
+        rol: dto.rol,
+        rol_id: dto.rol_id,
+        especialidad_id: dto.especialidad_id || null,
+        institucion_id: dto.institucion_id || null,
+        cargo: dto.cargo || null,
+        estado: true
+      })
+      .execute();
+
+    const trabajadorId = result.identifiers[0].id;
+
     const trabajadorCompleto = await this.trabajadorCentroRepository.findOne({
-      where: { id: savedTrabajador.id },
-      relations: ['rol', 'especialidad']
+      where: { id: trabajadorId }
     });
-    
-    // Devolver sin la contraseña y con los datos del rol y especialidad
+
     const { password, ...trabajadorSinPassword } = trabajadorCompleto;
     return {
       ...trabajadorSinPassword,
-      rol: trabajadorCompleto.rol ? { 
-        id: trabajadorCompleto.rol.id, 
-        nombre: trabajadorCompleto.rol.nombre, 
-        descripcion: trabajadorCompleto.rol.descripcion 
+      rol_objeto: trabajadorCompleto.rol ? {
+        id: trabajadorCompleto.rol.id,
+        nombre: trabajadorCompleto.rol.nombre,
+        descripcion: trabajadorCompleto.rol.descripcion
       } : null,
-      especialidad: trabajadorCompleto.especialidad ? { 
-        id: trabajadorCompleto.especialidad.id, 
-        nombre: trabajadorCompleto.especialidad.nombre, 
-        descripcion: trabajadorCompleto.especialidad.descripcion, 
-        activo: trabajadorCompleto.especialidad.activo 
+      especialidad: trabajadorCompleto.especialidad ? {
+        id: trabajadorCompleto.especialidad.id,
+        nombre: trabajadorCompleto.especialidad.nombre,
+        descripcion: trabajadorCompleto.especialidad.descripcion,
+        activo: trabajadorCompleto.especialidad.activo
       } : null
     };
   }
@@ -86,7 +95,7 @@ export class TrabajadorCentroService {
 
     const trabajador = await this.trabajadorCentroRepository.findOne({
       where: { id },
-      relations: ['rol', 'especialidad', 'institucion']
+      relations: ['institucion']
     });
 
     if (!trabajador) throw new NotFoundException('Trabajador no encontrado');
@@ -137,7 +146,7 @@ export class TrabajadorCentroService {
     // Recargar con todas las relaciones
     const trabajadorActualizado = await this.trabajadorCentroRepository.findOne({
       where: { id },
-      relations: ['rol', 'especialidad', 'institucion']
+      relations: ['institucion']
     });
 
     console.log('Update Trabajador - Resultado:', trabajadorActualizado);
@@ -146,7 +155,7 @@ export class TrabajadorCentroService {
     const { password, ...trabajadorSinPassword } = trabajadorActualizado;
     return {
       ...trabajadorSinPassword,
-      rol: trabajadorActualizado.rol ? {
+      rol_objeto: trabajadorActualizado.rol ? {
         id: trabajadorActualizado.rol.id,
         nombre: trabajadorActualizado.rol.nombre,
         descripcion: trabajadorActualizado.rol.descripcion
@@ -168,12 +177,14 @@ export class TrabajadorCentroService {
   }
 
   async findOneById(id: number) {
-    const user = await this.trabajadorCentroRepository.findOne({ where: { id } });
+    const user = await this.trabajadorCentroRepository.findOne({
+      where: { id }
+    });
     if (!user) return null;
     const { password, rol, especialidad, ...userWithoutPassword } = user;
     return {
       ...userWithoutPassword,
-      rol: rol ? { id: rol.id, nombre: rol.nombre, descripcion: rol.descripcion } : null,
+      rol_objeto: rol ? { id: rol.id, nombre: rol.nombre, descripcion: rol.descripcion } : null,
       especialidad: especialidad ? { id: especialidad.id, nombre: especialidad.nombre, descripcion: especialidad.descripcion, activo: especialidad.activo } : null
     };
   }

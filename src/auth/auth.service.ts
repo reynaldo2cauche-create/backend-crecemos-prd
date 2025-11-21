@@ -17,7 +17,7 @@ export class AuthService {
 
     const user = await this.trabajadorRepository.findOne({
       where: { username },
-      relations: ['institucion', 'rol', 'especialidad']
+      relations: ['institucion']
     });
      console.log('Usuario encontrado:', user);
   console.log('Password recibido:', password);
@@ -40,11 +40,11 @@ export class AuthService {
       throw new UnauthorizedException('Usuario inactivo');
     }
 
-    const payload = { 
-      username: user.username, 
-      sub: user.id, 
-      rol: user.rol,
-      institucion_id: user.institucion?.id 
+    const payload = {
+      username: user.username,
+      sub: user.id,
+      rol: user.rol.nombre,
+      institucion_id: user.institucion?.id
     };
     
     // Actualizar último acceso

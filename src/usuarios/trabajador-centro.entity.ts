@@ -63,8 +63,6 @@ export class TrabajadorCentro {
   @JoinColumn({ name: 'rol_id' })
   rol: Rol;
 
-
-
   @ManyToOne(() => Especialidad, { eager: true, nullable: true })
   @JoinColumn({ name: 'especialidad_id' })
   especialidad: Especialidad;
