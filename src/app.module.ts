@@ -64,7 +64,9 @@ import { ArchivoOficial } from './historia-clinica/entities/archivo-oficial.enti
 import { ArchivoTerapia } from './historia-clinica/entities/archivo-terapia.entity';
 import { CargoPostulacion } from './postulaciones/cargo-postulacion.entity';
 import { EstadoPostulacion } from './postulaciones/estado-postulacion.entity';
-  
+import { PopupModule } from './popup/popup.module';
+import { PopupConfiguracion } from './popup/popup-configuracion.entity';
+
 @Module({
   imports: [
     ConfigModule.forRoot({
@@ -132,8 +134,8 @@ import { EstadoPostulacion } from './postulaciones/estado-postulacion.entity';
         ArchivoOficial,
         ArchivoTerapia,
         CargoPostulacion,
-        EstadoPostulacion
-       
+        EstadoPostulacion,
+        PopupConfiguracion
       ],
         synchronize: false,   // true en desarrollo, false en producción
         
@@ -158,9 +160,8 @@ import { EstadoPostulacion } from './postulaciones/estado-postulacion.entity';
     TrabajadorCentroModule,
     HistoriaClinicaModule,
     CitasModule,
+    PopupModule,
     Comentario
-   
-    
   ],
   controllers: [AppController],
   providers: [AppService],
