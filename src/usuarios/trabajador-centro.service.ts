@@ -62,7 +62,11 @@ export class TrabajadorCentroService {
         especialidad_id: dto.especialidad_id || null,
         institucion_id: dto.institucion_id || null,
         cargo: dto.cargo || null,
-        estado: true
+        estado: true,
+        sueldo_base: dto.sueldo_base || null,
+        fecha_ingreso: dto.fecha_ingreso || null,
+        numero_cuenta: dto.numero_cuenta || null,
+        banco: dto.banco || null
       })
       .execute();
 
@@ -121,6 +125,12 @@ export class TrabajadorCentroService {
     if (dto.talla_polo !== undefined) trabajador.talla_polo = dto.talla_polo;
     if (dto.talla_pantalon !== undefined) trabajador.talla_pantalon = dto.talla_pantalon;
     if (dto.talla_zapatos !== undefined) trabajador.talla_zapatos = dto.talla_zapatos;
+
+    // Campos de RRHH
+    if (dto.sueldo_base !== undefined) trabajador.sueldo_base = dto.sueldo_base;
+    if (dto.fecha_ingreso !== undefined) trabajador.fecha_ingreso = dto.fecha_ingreso as any;
+    if (dto.numero_cuenta !== undefined) trabajador.numero_cuenta = dto.numero_cuenta;
+    if (dto.banco !== undefined) trabajador.banco = dto.banco;
 
     // Password - SOLO actualizar si viene en el DTO y no está vacío
     if (dto.password !== undefined && dto.password !== null && dto.password.trim() !== '') {
@@ -189,5 +199,40 @@ export class TrabajadorCentroService {
     };
   }
 
-  
+  // ============== MÉTODOS PARA RRHH ==============
+
+  async findAllForRRHH(estado?: string) {
+    const query = this.trabajadorCentroRepository.createQueryBuilder('trabajador')
+      .orderBy('trabajador.created_at', 'DESC');
+
+    if (estado === 'activo') {
+      query.where('trabajador.estado = :estado', { estado: true });
+    } else if (estado === 'inactivo') {
+      query.where('trabajador.estado = :estado', { estado: false });
+    }
+
+    const trabajadores = await query.getMany();
+
+    // Devolver sin password
+    return trabajadores.map(({ password, ...trabajador }) => ({
+      ...trabajador,
+      // Convertir estado booleano a string para el frontend
+      estado: trabajador.estado ? 'activo' : 'inactivo',
+      // Renombrar campos para compatibilidad con frontend
+      sueldoBase: trabajador.sueldo_base,
+      fechaIngreso: trabajador.fecha_ingreso,
+      numeroCuenta: trabajador.numero_cuenta,
+      tipoDocumento: 'DNI',
+      numeroDocumento: trabajador.dni
+    }));
+  }
+
+  async remove(id: number): Promise<void> {
+    const trabajador = await this.trabajadorCentroRepository.findOne({ where: { id } });
+    if (!trabajador) {
+      throw new NotFoundException(`Trabajador con ID ${id} no encontrado`);
+    }
+    await this.trabajadorCentroRepository.remove(trabajador);
+  }
+
 } 

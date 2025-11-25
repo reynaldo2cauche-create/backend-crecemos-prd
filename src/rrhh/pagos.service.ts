@@ -1,0 +1,236 @@
+// src/pagos/pagos.service.ts
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { Pago } from './pago.entity';
+import { TrabajadorCentro } from '../usuarios/trabajador-centro.entity';
+import { CreatePagoDto } from './dto/create-pago.dto';
+import { CalcularGratificacionesDto } from './dto/calcular-gratificaciones.dto';
+import { RegistrarGratificacionDto } from './dto/registrar-gratificacion.dto';
+import { RegistrarPagoMensualDto } from './dto/registrar-pago-mensual.dto';
+
+@Injectable()
+export class PagosService {
+  constructor(
+    @InjectRepository(Pago)
+    private pagosRepository: Repository<Pago>,
+    @InjectRepository(TrabajadorCentro)
+    private trabajadorRepository: Repository<TrabajadorCentro>,
+  ) {}
+
+  private calcularMesesTrabajados(
+    fechaIngreso: Date | string,
+    periodoActual: 'julio' | 'diciembre',
+    anioActual: number,
+  ): number {
+    const fechaInicio = new Date(fechaIngreso);
+    const mesInicioPeriodo = new Date(anioActual, periodoActual === 'julio' ? 0 : 6, 1);
+    const mesFinPeriodo = new Date(anioActual, periodoActual === 'julio' ? 6 : 12, 0);
+
+    if (fechaInicio > mesFinPeriodo) return 0;
+    if (fechaInicio <= mesInicioPeriodo) return 6;
+
+    const meses = Math.floor(
+      (mesFinPeriodo.getTime() - fechaInicio.getTime()) / (1000 * 60 * 60 * 24 * 30),
+    ) + 1;
+
+    return Math.min(meses, 6);
+  }
+
+  private calcularGratificacion(sueldoBase: number, meses: number) {
+    const completa = sueldoBase * 0.25;
+    return {
+      completa,
+      proporcional: (completa * meses) / 6,
+    };
+  }
+
+  async calcularGratificaciones(dto: CalcularGratificacionesDto) {
+    const empleados = await this.trabajadorRepository.find({
+      where: { estado: true },
+    });
+
+    const gratificaciones = empleados
+      .filter((emp) => emp.sueldo_base && emp.fecha_ingreso)
+      .map((emp) => {
+        const mesesTrabajados = this.calcularMesesTrabajados(
+          emp.fecha_ingreso,
+          dto.periodo,
+          dto.anio,
+        );
+        const sueldoBase = Number(emp.sueldo_base);
+        const { completa, proporcional } = this.calcularGratificacion(sueldoBase, mesesTrabajados);
+        
+        // Calcular el sueldo total (base + gratificación proporcional)
+        const sueldoTotal = sueldoBase + proporcional;
+
+        // Formatear fecha correctamente (puede venir como Date o string)
+        let fechaFormateada: string;
+        if (emp.fecha_ingreso instanceof Date) {
+          fechaFormateada = emp.fecha_ingreso.toISOString().split('T')[0];
+        } else if (typeof emp.fecha_ingreso === 'string') {
+          fechaFormateada = (emp.fecha_ingreso as string).split('T')[0];
+        } else {
+          fechaFormateada = new Date(emp.fecha_ingreso as any).toISOString().split('T')[0];
+        }
+
+        return {
+          id: emp.id,
+          nombres: emp.nombres,
+          apellidos: emp.apellidos,
+          cargo: emp.cargo,
+          sueldoBase,
+          fecha_ingreso: fechaFormateada,
+          mesesTrabajados,
+          gratificacionCompleta: completa,
+          gratificacionProporcional: proporcional,
+          sueldoTotal, // Sueldo base + gratificación
+          numero_cuenta: emp.numero_cuenta,
+          banco: emp.banco,
+        };
+      })
+      .filter((g) => g.mesesTrabajados > 0);
+
+    return {
+      gratificaciones,
+      totalGratificaciones: gratificaciones.reduce((sum, g) => sum + g.gratificacionProporcional, 0),
+      totalSueldos: gratificaciones.reduce((sum, g) => sum + g.sueldoTotal, 0), // Total de todos los sueldos completos
+      empleadosConDerecho: gratificaciones.length,
+      periodo: dto.periodo,
+      anio: dto.anio,
+    };
+  }
+
+  async registrarGratificacion(dto: RegistrarGratificacionDto): Promise<Pago> {
+    const empleado = await this.trabajadorRepository.findOne({
+      where: { id: dto.empleadoId },
+    });
+
+    if (!empleado) {
+      throw new NotFoundException(`Trabajador ${dto.empleadoId} no encontrado`);
+    }
+
+    if (!empleado.numero_cuenta || !empleado.banco) {
+      throw new BadRequestException('El empleado no tiene datos bancarios');
+    }
+
+    if (dto.monto <= 0) {
+      throw new BadRequestException('El monto debe ser mayor a 0');
+    }
+
+    // Extraer mes y año del periodo (ej: "julio-2025" o "diciembre-2025")
+    const [mes, anioStr] = dto.periodo.split('-');
+    const anio = parseInt(anioStr);
+
+    const fechaPago = new Date().toISOString().split('T')[0];
+
+    // Calcular monto total: Sueldo Base + Gratificación
+    const sueldoBase = Number(empleado.sueldo_base);
+    const gratificacion = Number(dto.monto);
+    const montoTotal = sueldoBase + gratificacion;
+
+    // Registrar UN SOLO PAGO con el desglose
+    const pago = this.pagosRepository.create({
+      empleado,
+      tipo: 'sueldo_con_gratificacion',
+      monto: montoTotal, // Monto total
+      montoSueldo: sueldoBase, // Desglose: sueldo base
+      montoGratificacion: gratificacion, // Desglose: gratificación
+      periodo: dto.periodo,
+      mes: mes,
+      anio: anio,
+      fechaPago: fechaPago,
+    });
+
+    return await this.pagosRepository.save(pago);
+  }
+
+  async registrarPagoMensual(dto: RegistrarPagoMensualDto): Promise<Pago> {
+    const empleado = await this.trabajadorRepository.findOne({
+      where: { id: dto.empleadoId },
+    });
+
+    if (!empleado) {
+      throw new NotFoundException(`Trabajador ${dto.empleadoId} no encontrado`);
+    }
+
+    if (dto.monto <= 0) {
+      throw new BadRequestException('El monto debe ser mayor a 0');
+    }
+
+    // Verificar si ya existe un pago para este mes y año
+    const pagoExistente = await this.pagosRepository.findOne({
+      where: {
+        empleado: { id: dto.empleadoId },
+        tipo: 'sueldo',
+        mes: dto.mes,
+        anio: dto.anio,
+      },
+    });
+
+    if (pagoExistente) {
+      throw new BadRequestException(
+        `Ya existe un pago registrado para ${dto.mes} ${dto.anio}`,
+      );
+    }
+
+    const pago = this.pagosRepository.create({
+      empleado,
+      tipo: 'sueldo',
+      monto: dto.monto,
+      mes: dto.mes,
+      anio: dto.anio,
+      periodo: `${dto.mes}-${dto.anio}`,
+      fechaPago: dto.fechaPago,
+    });
+
+    return await this.pagosRepository.save(pago);
+  }
+
+  async create(createPagoDto: CreatePagoDto): Promise<Pago> {
+    const empleado = await this.trabajadorRepository.findOne({
+      where: { id: createPagoDto.empleadoId },
+    });
+
+    if (!empleado) {
+      throw new NotFoundException(`Trabajador ${createPagoDto.empleadoId} no encontrado`);
+    }
+
+    const pago = this.pagosRepository.create({
+      ...createPagoDto,
+      empleado,
+    });
+
+    return await this.pagosRepository.save(pago);
+  }
+
+  async findAll(tipo?: string, periodo?: string, anio?: number): Promise<Pago[]> {
+    const query = this.pagosRepository.createQueryBuilder('pago')
+      .leftJoinAndSelect('pago.empleado', 'empleado')
+      .orderBy('pago.fechaPago', 'DESC');
+
+  if (tipo) query.andWhere('pago.tipo = :tipo', { tipo });
+  if (periodo && periodo !== 'todos') {
+   
+    query.andWhere('pago.mes = :periodo', { periodo });
+  }
+  if (anio) query.andWhere('YEAR(pago.fechaPago) = :anio', { anio });
+
+    return await query.getMany();
+  }
+
+  async findOne(id: number): Promise<Pago> {
+    const pago = await this.pagosRepository.findOne({
+      where: { id },
+      relations: ['empleado'],
+    });
+
+    if (!pago) throw new NotFoundException(`Pago ${id} no encontrado`);
+    return pago;
+  }
+
+  async remove(id: number): Promise<void> {
+    const pago = await this.findOne(id);
+    await this.pagosRepository.remove(pago);
+  }
+}

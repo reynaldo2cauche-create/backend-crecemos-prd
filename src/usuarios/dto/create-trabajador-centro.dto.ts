@@ -77,4 +77,21 @@ export class CreateTrabajadorCentroDto {
   @IsOptional()
   @IsString()
   talla_zapatos?: string;
+
+  // Campos de RRHH
+  @IsOptional()
+  @IsNumber()
+  sueldo_base?: number;
+
+  @IsOptional()
+  @IsString()
+  fecha_ingreso?: string;
+
+  @IsOptional()
+  @IsString()
+  numero_cuenta?: string;
+
+  @IsOptional()
+  @IsString()
+  banco?: string;
 } 

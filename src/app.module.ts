@@ -66,6 +66,8 @@ import { CargoPostulacion } from './postulaciones/cargo-postulacion.entity';
 import { EstadoPostulacion } from './postulaciones/estado-postulacion.entity';
 import { PopupModule } from './popup/popup.module';
 import { PopupConfiguracion } from './popup/popup-configuracion.entity';
+import { RrhhModule } from './rrhh/rrhh.module';
+import { Pago } from './rrhh/pago.entity';
 
 @Module({
   imports: [
@@ -135,10 +137,11 @@ import { PopupConfiguracion } from './popup/popup-configuracion.entity';
         ArchivoTerapia,
         CargoPostulacion,
         EstadoPostulacion,
-        PopupConfiguracion
+        PopupConfiguracion,
+        Pago
       ],
         synchronize: false,   // true en desarrollo, false en producción
-        
+
     }),
 
     // TypeOrmModule.forRoot({
@@ -161,6 +164,7 @@ import { PopupConfiguracion } from './popup/popup-configuracion.entity';
     HistoriaClinicaModule,
     CitasModule,
     PopupModule,
+    RrhhModule,
     Comentario
   ],
   controllers: [AppController],

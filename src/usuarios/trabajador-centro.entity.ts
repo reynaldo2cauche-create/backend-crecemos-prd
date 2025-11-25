@@ -1,7 +1,8 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, OneToMany } from 'typeorm';
 import { Institucion } from '../evaluaciones/institucion.entity';
 import { Rol } from './rol.entity';
 import { Especialidad } from './especialidad.entity';
+import { Pago } from '../rrhh/pago.entity';
 
 @Entity('trabajador_centro')
 export class TrabajadorCentro {
@@ -83,5 +84,20 @@ export class TrabajadorCentro {
   @Column({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP', onUpdate: 'CURRENT_TIMESTAMP' })
   updated_at: Date;
 
-  
+  // Campos de RR.HH.
+  @Column('decimal', { precision: 10, scale: 2, nullable: true })
+  sueldo_base: number;
+
+  @Column({ type: 'date', nullable: true })
+  fecha_ingreso: Date;
+
+  @Column({ nullable: true })
+  numero_cuenta: string;
+
+  @Column({ nullable: true })
+  banco: string;
+
+  @OneToMany(() => Pago, pago => pago.empleado)
+  pagos: Pago[];
+
 } 
