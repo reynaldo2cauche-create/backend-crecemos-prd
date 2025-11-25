@@ -18,23 +18,52 @@ export class PagosService {
     private trabajadorRepository: Repository<TrabajadorCentro>,
   ) {}
 
-  private calcularMesesTrabajados(
+ private calcularMesesTrabajados(
     fechaIngreso: Date | string,
     periodoActual: 'julio' | 'diciembre',
     anioActual: number,
   ): number {
     const fechaInicio = new Date(fechaIngreso);
-    const mesInicioPeriodo = new Date(anioActual, periodoActual === 'julio' ? 0 : 6, 1);
-    const mesFinPeriodo = new Date(anioActual, periodoActual === 'julio' ? 6 : 12, 0);
-
-    if (fechaInicio > mesFinPeriodo) return 0;
-    if (fechaInicio <= mesInicioPeriodo) return 6;
-
-    const meses = Math.floor(
-      (mesFinPeriodo.getTime() - fechaInicio.getTime()) / (1000 * 60 * 60 * 24 * 30),
-    ) + 1;
-
-    return Math.min(meses, 6);
+    const diaIngreso = fechaInicio.getDate();
+    
+    // Determinar el rango del periodo (enero-junio o julio-diciembre)
+    const mesInicioPeriodo = periodoActual === 'julio' ? 0 : 6; // enero=0, julio=6
+    const mesFinPeriodo = periodoActual === 'julio' ? 5 : 11; // junio=5, diciembre=11
+    
+    const inicioPeriodo = new Date(anioActual, mesInicioPeriodo, 1);
+    const finPeriodo = new Date(anioActual, mesFinPeriodo, 31); // Último día del mes
+    
+    // Si ingresó después del periodo, no tiene derecho
+    if (fechaInicio > finPeriodo) return 0;
+    
+    // Si ingresó antes del periodo, tiene los 6 meses completos
+    if (fechaInicio < inicioPeriodo) return 6;
+    
+    // Calcular meses trabajados dentro del periodo
+    let mesesContados = 0;
+    const mesIngresoEmpleado = fechaInicio.getMonth();
+    const anioIngresoEmpleado = fechaInicio.getFullYear();
+    
+    // Recorrer cada mes del periodo
+    for (let mes = mesInicioPeriodo; mes <= mesFinPeriodo; mes++) {
+      const fechaMes = new Date(anioActual, mes, 1);
+      
+      // Si el empleado ya trabajaba en este mes
+      if (anioIngresoEmpleado < anioActual || 
+          (anioIngresoEmpleado === anioActual && mesIngresoEmpleado < mes)) {
+        mesesContados++;
+      }
+      // Si ingresó en este mes
+      else if (anioIngresoEmpleado === anioActual && mesIngresoEmpleado === mes) {
+        // Del 1 al 15: cuenta el mes completo
+        if (diaIngreso <= 15) {
+          mesesContados++;
+        }
+        // Del 16 en adelante: no cuenta este mes
+      }
+    }
+    
+    return mesesContados;
   }
 
   private calcularGratificacion(sueldoBase: number, meses: number) {
