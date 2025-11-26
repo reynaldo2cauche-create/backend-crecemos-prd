@@ -32,12 +32,10 @@ export class PagosService {
     const mesInicioPeriodo = periodoActual === 'julio' ? 0 : 6; // enero=0, julio=6
     const mesFinPeriodo = periodoActual === 'julio' ? 5 : 11; // junio=5, diciembre=11
 
-    // Gratificación se paga en la quincena (día 15) del mes de pago
-    // Por ejemplo: gratificación de julio se paga el 15/julio
-    // Entonces solo contamos hasta el MES ANTERIOR al de pago
-    // - Julio: cuenta enero-junio (hasta mes 5, no cuenta julio/mes 6)
-    // - Diciembre: cuenta julio-noviembre (hasta mes 10, no cuenta diciembre/mes 11)
-    const mesLimiteParaContar = periodoActual === 'julio' ? 5 : 10; // junio=5, noviembre=10
+    // Gratificación cubre 6 meses completos:
+    // - Gratificación de julio: cubre enero-junio (meses 0-5) = 6 meses
+    // - Gratificación de diciembre: cubre julio-diciembre (meses 6-11) = 6 meses
+    const mesLimiteParaContar = periodoActual === 'julio' ? 5 : 11; // junio=5, diciembre=11
 
     const inicioPeriodo = new Date(anioActual, mesInicioPeriodo, 1);
     const finPeriodo = new Date(anioActual, mesLimiteParaContar + 1, 0); // Último día del mes límite
