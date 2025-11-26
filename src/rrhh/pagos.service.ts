@@ -18,65 +18,93 @@ export class PagosService {
     private trabajadorRepository: Repository<TrabajadorCentro>,
   ) {}
 
- private calcularMesesTrabajados(
-    fechaIngreso: Date | string,
-    periodoActual: 'julio' | 'diciembre',
-    anioActual: number,
-  ): number {
-    const fechaInicio = new Date(fechaIngreso);
-    const diaIngreso = fechaInicio.getDate();
-    const mesIngresoEmpleado = fechaInicio.getMonth();
-    const anioIngresoEmpleado = fechaInicio.getFullYear();
+  /**
+   * Calcula los meses trabajados para gratificación según la ley peruana.
+   * 
+   * REGLA SEGÚN LEY 27735 Y SUNAFIL:
+   * - Se consideran SOLO los MESES CALENDARIO COMPLETOS trabajados
+   * - Un mes es "completo" cuando el trabajador laboró TODO el mes calendario
+   * - Si ingresó durante el mes (cualquier día del 2 al último día), ese mes NO cuenta
+   * - Solo cuenta si ingresó el DÍA 1 del mes
+   * 
+   * EJEMPLOS:
+   * - Ingresó 01/01/2023 → Enero CUENTA ✅
+   * - Ingresó 13/01/2023 → Enero NO CUENTA ❌ (no trabajó del 1-12)
+   * - Ingresó 15/02/2023 → Febrero NO CUENTA ❌ (no trabajó del 1-14)
+   * 
+   * PERIODOS:
+   * - JULIO 2025: Evalúa Enero-Junio 2025 (6 meses posibles)
+   * - DICIEMBRE 2025: Evalúa Julio-Noviembre 2025 (5 meses, Junio ya contó en Julio)
+   */
+private calcularMesesTrabajados(
+  fechaIngreso: Date | string,
+  periodoActual: 'julio' | 'diciembre',
+  anioActual: number,
+): number {
+  const fechaInicio = new Date(fechaIngreso);
+  
+  // ✅ USAR UTC PARA EVITAR PROBLEMAS DE TIMEZONE
+  const diaIngreso = fechaInicio.getUTCDate();
+  const mesIngresoEmpleado = fechaInicio.getUTCMonth(); // 0 = enero, 11 = diciembre
+  const anioIngresoEmpleado = fechaInicio.getUTCFullYear();
 
-    // Determinar el rango del periodo (enero-junio o julio-diciembre)
-    const mesInicioPeriodo = periodoActual === 'julio' ? 0 : 6; // enero=0, julio=6
-    const mesFinPeriodo = periodoActual === 'julio' ? 5 : 11; // junio=5, diciembre=11
-
-    // Gratificación cubre 6 meses completos:
-    // - Gratificación de julio: cubre enero-junio (meses 0-5) = 6 meses
-    // - Gratificación de diciembre: cubre julio-diciembre (meses 6-11) = 6 meses
-    const mesLimiteParaContar = periodoActual === 'julio' ? 5 : 11; // junio=5, diciembre=11
-
-    const inicioPeriodo = new Date(anioActual, mesInicioPeriodo, 1);
-    const finPeriodo = new Date(anioActual, mesLimiteParaContar + 1, 0); // Último día del mes límite
-
-    // Si ingresó después del periodo que se cuenta, no tiene derecho
-    if (fechaInicio > finPeriodo) return 0;
-
-    // Calcular meses trabajados dentro del periodo
-    let mesesContados = 0;
-
-    // Recorrer cada mes del periodo (solo hasta el mes límite, no el mes de pago)
-    for (let mes = mesInicioPeriodo; mes <= mesLimiteParaContar; mes++) {
-      // Si el empleado ingresó antes del inicio del periodo
-      if (anioIngresoEmpleado < anioActual ||
-          (anioIngresoEmpleado === anioActual && mesIngresoEmpleado < mesInicioPeriodo)) {
-        // Tiene derecho a todos los meses del periodo
-        mesesContados++;
-        continue;
-      }
-
-      // Si el empleado ya trabajaba en este mes (ingresó en meses anteriores del periodo)
-      if (anioIngresoEmpleado === anioActual && mesIngresoEmpleado < mes) {
-        mesesContados++;
-      }
-      // Si ingresó en este mismo mes
-      else if (anioIngresoEmpleado === anioActual && mesIngresoEmpleado === mes) {
-        // Del 1 al 15: cuenta el mes completo
-        if (diaIngreso <= 15) {
-          mesesContados++;
-        }
-        // Del 16 en adelante: no cuenta este mes
-      }
-    }
-
-    return mesesContados;
+  // Determinar qué meses evaluar según el periodo
+  let mesesAEvaluar: number[] = [];
+  
+  if (periodoActual === 'julio') {
+    // JULIO evalúa: Enero (0) a Junio (5) = 6 meses
+    mesesAEvaluar = [0, 1, 2, 3, 4, 5];
+  } else {
+    // DICIEMBRE evalúa: Julio (6) a Noviembre (10) = 5 meses
+    mesesAEvaluar = [6, 7, 8, 9, 10];
   }
 
+  let mesesContados = 0;
+
+  // Evaluar cada mes del periodo
+  for (const mes of mesesAEvaluar) {
+    // CASO 1: El empleado ingresó ANTES del año actual
+    if (anioIngresoEmpleado < anioActual) {
+      mesesContados++;
+      continue;
+    }
+
+    // CASO 2: El empleado ingresó en el año actual
+    if (anioIngresoEmpleado === anioActual) {
+      
+      // Si ingresó ANTES de este mes → el mes CUENTA
+      if (mesIngresoEmpleado < mes) {
+        mesesContados++;
+      }
+      // Si ingresó en ESTE MISMO MES → verificar el día
+      else if (mesIngresoEmpleado === mes) {
+        // Solo cuenta si ingresó el DÍA 1 del mes
+        if (diaIngreso === 1) {
+          mesesContados++;
+        }
+      }
+    }
+  }
+
+  return mesesContados;
+}
+
+  /**
+   * Calcula la gratificación según la ley peruana.
+   * 
+   * FÓRMULA:
+   * - Gratificación Completa = 25% del sueldo base
+   * - Gratificación Proporcional = (Gratificación Completa × Meses Trabajados) / 6
+   * 
+   * NOTAS:
+   * - Siempre se divide entre 6, incluso en diciembre (5 meses)
+   * - SUNAFIL lo interpreta así: se "completa" el cálculo sobre 6 meses
+   */
   private calcularGratificacion(sueldoBase: number, meses: number) {
     // Redondear a exactamente 2 decimales usando toFixed
     const completa = parseFloat((sueldoBase * 0.25).toFixed(2));
     const proporcional = parseFloat(((completa * meses) / 6).toFixed(2));
+    
     return {
       completa,
       proporcional,
@@ -172,7 +200,7 @@ export class PagosService {
     return {
       gratificaciones,
       totalGratificaciones: gratificaciones.reduce((sum, g) => sum + g.gratificacionProporcional, 0),
-      totalSueldos: gratificaciones.reduce((sum, g) => sum + g.sueldoTotal, 0), // Total de todos los sueldos completos
+      totalSueldos: gratificaciones.reduce((sum, g) => sum + g.sueldoTotal, 0),
       empleadosConDerecho: gratificaciones.length,
       empleadosPagados: gratificaciones.filter(g => g.yaPagado).length,
       empleadosPendientes: gratificaciones.filter(g => !g.yaPagado).length,
@@ -326,12 +354,11 @@ export class PagosService {
       .leftJoinAndSelect('pago.empleado', 'empleado')
       .orderBy('pago.fechaPago', 'DESC');
 
-  if (tipo) query.andWhere('pago.tipo = :tipo', { tipo });
-  if (periodo && periodo !== 'todos') {
-   
-    query.andWhere('pago.mes = :periodo', { periodo });
-  }
-  if (anio) query.andWhere('YEAR(pago.fechaPago) = :anio', { anio });
+    if (tipo) query.andWhere('pago.tipo = :tipo', { tipo });
+    if (periodo && periodo !== 'todos') {
+      query.andWhere('pago.mes = :periodo', { periodo });
+    }
+    if (anio) query.andWhere('YEAR(pago.fechaPago) = :anio', { anio });
 
     return await query.getMany();
   }
