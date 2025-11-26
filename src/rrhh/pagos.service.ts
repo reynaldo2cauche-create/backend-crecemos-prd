@@ -25,35 +25,44 @@ export class PagosService {
   ): number {
     const fechaInicio = new Date(fechaIngreso);
     const diaIngreso = fechaInicio.getDate();
-    
+    const mesIngresoEmpleado = fechaInicio.getMonth();
+    const anioIngresoEmpleado = fechaInicio.getFullYear();
+
     // Determinar el rango del periodo (enero-junio o julio-diciembre)
     const mesInicioPeriodo = periodoActual === 'julio' ? 0 : 6; // enero=0, julio=6
     const mesFinPeriodo = periodoActual === 'julio' ? 5 : 11; // junio=5, diciembre=11
-    
+
+    // Gratificación se paga en la quincena (día 15) del mes de pago
+    // Por ejemplo: gratificación de julio se paga el 15/julio
+    // Entonces solo contamos hasta el MES ANTERIOR al de pago
+    // - Julio: cuenta enero-junio (hasta mes 5, no cuenta julio/mes 6)
+    // - Diciembre: cuenta julio-noviembre (hasta mes 10, no cuenta diciembre/mes 11)
+    const mesLimiteParaContar = periodoActual === 'julio' ? 5 : 10; // junio=5, noviembre=10
+
     const inicioPeriodo = new Date(anioActual, mesInicioPeriodo, 1);
-    const finPeriodo = new Date(anioActual, mesFinPeriodo, 31); // Último día del mes
-    
-    // Si ingresó después del periodo, no tiene derecho
+    const finPeriodo = new Date(anioActual, mesLimiteParaContar + 1, 0); // Último día del mes límite
+
+    // Si ingresó después del periodo que se cuenta, no tiene derecho
     if (fechaInicio > finPeriodo) return 0;
-    
-    // Si ingresó antes del periodo, tiene los 6 meses completos
-    if (fechaInicio < inicioPeriodo) return 6;
-    
+
     // Calcular meses trabajados dentro del periodo
     let mesesContados = 0;
-    const mesIngresoEmpleado = fechaInicio.getMonth();
-    const anioIngresoEmpleado = fechaInicio.getFullYear();
-    
-    // Recorrer cada mes del periodo
-    for (let mes = mesInicioPeriodo; mes <= mesFinPeriodo; mes++) {
-      const fechaMes = new Date(anioActual, mes, 1);
-      
-      // Si el empleado ya trabajaba en este mes
-      if (anioIngresoEmpleado < anioActual || 
-          (anioIngresoEmpleado === anioActual && mesIngresoEmpleado < mes)) {
+
+    // Recorrer cada mes del periodo (solo hasta el mes límite, no el mes de pago)
+    for (let mes = mesInicioPeriodo; mes <= mesLimiteParaContar; mes++) {
+      // Si el empleado ingresó antes del inicio del periodo
+      if (anioIngresoEmpleado < anioActual ||
+          (anioIngresoEmpleado === anioActual && mesIngresoEmpleado < mesInicioPeriodo)) {
+        // Tiene derecho a todos los meses del periodo
+        mesesContados++;
+        continue;
+      }
+
+      // Si el empleado ya trabajaba en este mes (ingresó en meses anteriores del periodo)
+      if (anioIngresoEmpleado === anioActual && mesIngresoEmpleado < mes) {
         mesesContados++;
       }
-      // Si ingresó en este mes
+      // Si ingresó en este mismo mes
       else if (anioIngresoEmpleado === anioActual && mesIngresoEmpleado === mes) {
         // Del 1 al 15: cuenta el mes completo
         if (diaIngreso <= 15) {
@@ -62,15 +71,17 @@ export class PagosService {
         // Del 16 en adelante: no cuenta este mes
       }
     }
-    
+
     return mesesContados;
   }
 
   private calcularGratificacion(sueldoBase: number, meses: number) {
-    const completa = sueldoBase * 0.25;
+    // Redondear a exactamente 2 decimales usando toFixed
+    const completa = parseFloat((sueldoBase * 0.25).toFixed(2));
+    const proporcional = parseFloat(((completa * meses) / 6).toFixed(2));
     return {
       completa,
-      proporcional: (completa * meses) / 6,
+      proporcional,
     };
   }
 
@@ -78,6 +89,21 @@ export class PagosService {
     const empleados = await this.trabajadorRepository.find({
       where: { estado: true },
     });
+
+    // Verificar pagos ya realizados para este periodo
+    const periodoCompleto = `${dto.periodo}-${dto.anio}`;
+    const pagosExistentes = await this.pagosRepository.find({
+      where: {
+        tipo: 'sueldo_con_gratificacion',
+        periodo: periodoCompleto,
+      },
+      relations: ['empleado'],
+    });
+
+    // Crear un mapa de empleados que ya tienen pago
+    const empleadosPagados = new Map(
+      pagosExistentes.map(pago => [pago.empleado.id, pago])
+    );
 
     const gratificaciones = empleados
       .filter((emp) => emp.sueldo_base && emp.fecha_ingreso)
@@ -89,18 +115,41 @@ export class PagosService {
         );
         const sueldoBase = Number(emp.sueldo_base);
         const { completa, proporcional } = this.calcularGratificacion(sueldoBase, mesesTrabajados);
-        
+
         // Calcular el sueldo total (base + gratificación proporcional)
         const sueldoTotal = sueldoBase + proporcional;
 
-        // Formatear fecha correctamente (puede venir como Date o string)
+        // Formatear fecha correctamente sin problemas de timezone
         let fechaFormateada: string;
+
         if (emp.fecha_ingreso instanceof Date) {
-          fechaFormateada = emp.fecha_ingreso.toISOString().split('T')[0];
-        } else if (typeof emp.fecha_ingreso === 'string') {
-          fechaFormateada = (emp.fecha_ingreso as string).split('T')[0];
+          // Si es un objeto Date, extraer componentes en hora local
+          const anio = emp.fecha_ingreso.getFullYear();
+          const mes = String(emp.fecha_ingreso.getMonth() + 1).padStart(2, '0');
+          const dia = String(emp.fecha_ingreso.getDate()).padStart(2, '0');
+          fechaFormateada = `${anio}-${mes}-${dia}`;
         } else {
-          fechaFormateada = new Date(emp.fecha_ingreso as any).toISOString().split('T')[0];
+          // Si es string o cualquier otro tipo, convertir a string y extraer
+          fechaFormateada = String(emp.fecha_ingreso).split('T')[0];
+        }
+
+        // Verificar si ya fue pagado
+        const pagoExistente = empleadosPagados.get(emp.id);
+        const yaPagado = !!pagoExistente;
+
+        // Formatear fecha de pago si existe
+        let fechaPagoFormateada = null;
+        if (pagoExistente && pagoExistente.fechaPago) {
+          if (pagoExistente.fechaPago instanceof Date) {
+            // Si es un objeto Date, extraer componentes en hora local
+            const anioPago = pagoExistente.fechaPago.getFullYear();
+            const mesPago = String(pagoExistente.fechaPago.getMonth() + 1).padStart(2, '0');
+            const diaPago = String(pagoExistente.fechaPago.getDate()).padStart(2, '0');
+            fechaPagoFormateada = `${anioPago}-${mesPago}-${diaPago}`;
+          } else {
+            // Si es string o cualquier otro tipo
+            fechaPagoFormateada = String(pagoExistente.fechaPago).split('T')[0];
+          }
         }
 
         return {
@@ -116,6 +165,8 @@ export class PagosService {
           sueldoTotal, // Sueldo base + gratificación
           numero_cuenta: emp.numero_cuenta,
           banco: emp.banco,
+          yaPagado,
+          fechaPago: fechaPagoFormateada,
         };
       })
       .filter((g) => g.mesesTrabajados > 0);
@@ -125,6 +176,8 @@ export class PagosService {
       totalGratificaciones: gratificaciones.reduce((sum, g) => sum + g.gratificacionProporcional, 0),
       totalSueldos: gratificaciones.reduce((sum, g) => sum + g.sueldoTotal, 0), // Total de todos los sueldos completos
       empleadosConDerecho: gratificaciones.length,
+      empleadosPagados: gratificaciones.filter(g => g.yaPagado).length,
+      empleadosPendientes: gratificaciones.filter(g => !g.yaPagado).length,
       periodo: dto.periodo,
       anio: dto.anio,
     };
@@ -151,7 +204,34 @@ export class PagosService {
     const [mes, anioStr] = dto.periodo.split('-');
     const anio = parseInt(anioStr);
 
-    const fechaPago = new Date().toISOString().split('T')[0];
+    // Verificar si ya existe un pago de gratificación para este empleado en este periodo
+    const pagoExistente = await this.pagosRepository.findOne({
+      where: {
+        empleado: { id: dto.empleadoId },
+        tipo: 'sueldo_con_gratificacion',
+        periodo: dto.periodo,
+      },
+    });
+
+    if (pagoExistente) {
+      // Formatear fecha del pago existente sin problemas de timezone
+      let fechaFormateada: string;
+
+      if (pagoExistente.fechaPago instanceof Date) {
+        fechaFormateada = `${pagoExistente.fechaPago.getDate()}/${pagoExistente.fechaPago.getMonth() + 1}/${pagoExistente.fechaPago.getFullYear()}`;
+      } else {
+        const partes = String(pagoExistente.fechaPago).split('T')[0].split('-');
+        fechaFormateada = `${partes[2]}/${partes[1]}/${partes[0]}`;
+      }
+
+      throw new BadRequestException(
+        `Ya existe un pago de gratificación registrado para ${empleado.nombres} ${empleado.apellidos} en el periodo ${mes} ${anio}. Fecha de pago: ${fechaFormateada}`
+      );
+    }
+
+    // Formatear fecha actual sin problemas de timezone
+    const hoy = new Date();
+    const fechaPago = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-${String(hoy.getDate()).padStart(2, '0')}`;
 
     // Calcular monto total: Sueldo Base + Gratificación
     const sueldoBase = Number(empleado.sueldo_base);
@@ -198,8 +278,18 @@ export class PagosService {
     });
 
     if (pagoExistente) {
+      // Formatear fecha del pago existente sin problemas de timezone
+      let fechaFormateada: string;
+
+      if (pagoExistente.fechaPago instanceof Date) {
+        fechaFormateada = `${pagoExistente.fechaPago.getDate()}/${pagoExistente.fechaPago.getMonth() + 1}/${pagoExistente.fechaPago.getFullYear()}`;
+      } else {
+        const partes = String(pagoExistente.fechaPago).split('T')[0].split('-');
+        fechaFormateada = `${partes[2]}/${partes[1]}/${partes[0]}`;
+      }
+
       throw new BadRequestException(
-        `Ya existe un pago registrado para ${dto.mes} ${dto.anio}`,
+        `Ya existe un pago de sueldo registrado para ${empleado.nombres} ${empleado.apellidos} en ${dto.mes} ${dto.anio}. Fecha de pago: ${fechaFormateada}`
       );
     }
 
