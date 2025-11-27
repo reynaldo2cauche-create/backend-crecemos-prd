@@ -68,6 +68,8 @@ import { PopupModule } from './popup/popup.module';
 import { PopupConfiguracion } from './popup/popup-configuracion.entity';
 import { RrhhModule } from './rrhh/rrhh.module';
 import { Pago } from './rrhh/pago.entity';
+import { Vacacion } from './rrhh/vacacion.entity';
+import { CuentaBancaria } from './rrhh/cuenta-bancaria.entity';
 
 @Module({
   imports: [
@@ -138,7 +140,9 @@ import { Pago } from './rrhh/pago.entity';
         CargoPostulacion,
         EstadoPostulacion,
         PopupConfiguracion,
-        Pago
+        Pago,
+        Vacacion,
+        CuentaBancaria
       ],
         synchronize: false,   // true en desarrollo, false en producción
 

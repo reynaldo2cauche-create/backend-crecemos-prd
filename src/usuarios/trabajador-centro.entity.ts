@@ -3,6 +3,8 @@ import { Institucion } from '../evaluaciones/institucion.entity';
 import { Rol } from './rol.entity';
 import { Especialidad } from './especialidad.entity';
 import { Pago } from '../rrhh/pago.entity';
+import { Vacacion } from '../rrhh/vacacion.entity';
+import { CuentaBancaria } from '../rrhh/cuenta-bancaria.entity';
 
 @Entity('trabajador_centro')
 export class TrabajadorCentro {
@@ -99,5 +101,11 @@ export class TrabajadorCentro {
 
   @OneToMany(() => Pago, pago => pago.empleado)
   pagos: Pago[];
+
+  @OneToMany(() => Vacacion, vacacion => vacacion.empleado)
+  vacaciones: Vacacion[];
+
+  @OneToMany(() => CuentaBancaria, cuenta => cuenta.trabajador)
+  cuentas_bancarias: CuentaBancaria[];
 
 } 

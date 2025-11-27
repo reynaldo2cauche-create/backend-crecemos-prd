@@ -4,53 +4,53 @@ import { CreateTrabajadorCentroDto } from './dto/create-trabajador-centro.dto';
 import { UpdateTrabajadorCentroDto } from './dto/update-trabajador-centro.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
-@Controller()
+@Controller('backend_api/trabajadores')
 export class TrabajadorCentroController {
   constructor(private readonly service: TrabajadorCentroService) {}
 
   // ============== ENDPOINTS ORIGINALES ==============
-  @Get('backend_api/trabajadores')
+  @Get()
   findAll() {
     return this.service.findAll();
   }
 
-  @Get('backend_api/trabajadores/select')
+  @Get('select')
   findAllForSelect() {
     return this.service.findAllForSelect();
   }
 
   // ============== ENDPOINTS RRHH ==============
-  @Get('api/empleados')
+  @Get('empleados')
   @UseGuards(JwtAuthGuard)
   findAllEmpleados(@Query('estado') estado?: string) {
     return this.service.findAllForRRHH(estado);
   }
 
-  @Get('api/empleados/:id')
+  @Get('empleados/:id')
   @UseGuards(JwtAuthGuard)
   findOneEmpleado(@Param('id') id: string) {
     return this.service.findOneById(+id);
   }
 
-  @Post('api/empleados')
+  @Post('empleados')
   @UseGuards(JwtAuthGuard)
   createEmpleado(@Body() dto: CreateTrabajadorCentroDto) {
     return this.service.create(dto);
   }
 
-  @Put('api/empleados/:id')
+  @Put('empleados/:id')
   @UseGuards(JwtAuthGuard)
   updateEmpleado(@Param('id') id: string, @Body() dto: UpdateTrabajadorCentroDto) {
     return this.service.update(+id, dto);
   }
 
-  @Delete('api/empleados/:id')
+  @Delete('empleados/:id')
   @UseGuards(JwtAuthGuard)
   deleteEmpleado(@Param('id') id: string) {
     return this.service.remove(+id);
   }
 
-  @Get('backend_api/trabajadores/perfil/me')
+  @Get('perfil/me')
   @UseGuards(JwtAuthGuard)
   async getMyProfile(@Request() req) {
     console.log('🔍 req.user:', req.user);
@@ -58,25 +58,25 @@ export class TrabajadorCentroController {
     return this.service.findOneById(req.user.id);
   }
 
-  @Patch('backend_api/trabajadores/perfil/me')
+  @Patch('perfil/me')
   @UseGuards(JwtAuthGuard)
   async updateMyProfile(@Request() req, @Body() dto: UpdateTrabajadorCentroDto) {
     console.log('🔍 Actualizando perfil de usuario ID:', req.user.id);
     return this.service.update(req.user.id, dto);
   }
 
-  @Get('backend_api/trabajadores/:id')
+  @Get(':id')
   findOne(@Param('id') id: string) {
     return this.service.findOneById(+id);
   }
 
-  @Post('backend_api/trabajadores')
+  @Post('trabajadores')
   create(@Body() dto: CreateTrabajadorCentroDto) {
     console.log('Body recibido en controller:', dto);
     return this.service.create(dto);
   }
 
-  @Patch('backend_api/trabajadores/:id')
+  @Patch(':id')
   update(@Param('id') id: string, @Body() dto: UpdateTrabajadorCentroDto) {
     console.log('============ CONTROLLER PATCH ============');
     console.log('ID recibido:', id);
@@ -85,12 +85,12 @@ export class TrabajadorCentroController {
     return this.service.update(+id, dto);
   }
 
-  @Put('backend_api/trabajadores/:id/activar')
+  @Put(':id/activar')
   activar(@Param('id') id: string) {
     return this.service.setEstado(+id, true);
   }
 
-  @Put('backend_api/trabajadores/:id/desactivar')
+  @Put(':id/desactivar')
   desactivar(@Param('id') id: string) {
     return this.service.setEstado(+id, false);
   }
