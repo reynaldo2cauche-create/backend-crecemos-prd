@@ -18,13 +18,46 @@ export class TrabajadorCentro {
   dni: string;
 
   @Column({ unique: true })
-  username: string;
+  username?: string;
 
   @Column()
-  password: string;
+  password?: string;
 
   @Column({ unique: true })
-  email: string;
+  email?: string;
+
+  @Column({ nullable: true })
+  telefono?: string;
+
+  @Column({ nullable: true })
+  telefono_emergencia?: string;
+
+  @Column({ nullable: true })
+  contacto_emergencia?: string;
+
+  @Column({ nullable: true })
+  direccion?: string;
+
+  @Column({ nullable: true })
+  distrito?: string;
+
+  @Column({ nullable: true })
+  provincia?: string;
+
+  @Column({ nullable: true })
+  departamento?: string;
+
+  @Column({ nullable: true })
+  talla_polo?: string;
+
+  @Column({ nullable: true })
+  talla_pantalon?: string;
+
+  @Column({ nullable: true })
+  talla_zapatos?: string;
+
+  @Column()
+  cargo: string;
 
   @ManyToOne(() => Rol, { eager: true })
   @JoinColumn({ name: 'rol_id' })

@@ -54,7 +54,7 @@ export class HistoriaClinicaService {
     const entrevistaPadres = this.entrevistaPadresRepository.create({
       pacienteId: createEntrevistaDto.paciente_id,
       usuarioId: createEntrevistaDto.usuario_id,
-      fecha: createEntrevistaDto.fecha ? new Date(createEntrevistaDto.fecha) : null,
+      fecha: createEntrevistaDto.fecha || null,
       escolaridad: createEntrevistaDto.escolaridad,
       motivoConsulta: createEntrevistaDto.motivo_consulta,
       otrasAtenciones: createEntrevistaDto.otras_atenciones,
@@ -164,7 +164,7 @@ export class HistoriaClinicaService {
       usuarioId: createReporteDto.usuario_id,
       servicioId: createReporteDto.servicio_id,
       edad: createReporteDto.edad,
-      fechaEvaluacion: createReporteDto.fecha_evaluacion ? new Date(createReporteDto.fecha_evaluacion) : null,
+      fechaEvaluacion: createReporteDto.fecha_evaluacion || null,
       periodoIntervencion: createReporteDto.periodo_intervencion,
       frecuenciaAtencion: createReporteDto.frecuencia_atencion,
       especialista: createReporteDto.especialista,
@@ -248,7 +248,7 @@ export class HistoriaClinicaService {
     if (updateReporteDto.servicio_id !== undefined) updateData.servicioId = updateReporteDto.servicio_id;
     if (updateReporteDto.edad !== undefined) updateData.edad = updateReporteDto.edad;
     if (updateReporteDto.fecha_evaluacion !== undefined) {
-      updateData.fechaEvaluacion = new Date(updateReporteDto.fecha_evaluacion);
+      updateData.fechaEvaluacion = updateReporteDto.fecha_evaluacion;
     }
     if (updateReporteDto.periodo_intervencion !== undefined) updateData.periodoIntervencion = updateReporteDto.periodo_intervencion;
     if (updateReporteDto.frecuencia_atencion !== undefined) updateData.frecuenciaAtencion = updateReporteDto.frecuencia_atencion;
@@ -346,7 +346,7 @@ export class HistoriaClinicaService {
     const updateData: any = {};
 
     if (updateEntrevistaDto.fecha !== undefined) {
-      updateData.fecha = new Date(updateEntrevistaDto.fecha);
+      updateData.fecha = updateEntrevistaDto.fecha;
     }
     if (updateEntrevistaDto.escolaridad !== undefined) updateData.escolaridad = updateEntrevistaDto.escolaridad;
     if (updateEntrevistaDto.motivo_consulta !== undefined) updateData.motivoConsulta = updateEntrevistaDto.motivo_consulta;
