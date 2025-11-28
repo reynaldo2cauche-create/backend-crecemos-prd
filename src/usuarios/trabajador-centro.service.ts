@@ -35,67 +35,91 @@ export class TrabajadorCentroService {
     }));
   }
 
-  async create(dto: CreateTrabajadorCentroDto) {
-    console.log('DTO recibido:', dto);
-    console.log('Password:', dto.password);
+async create(dto: CreateTrabajadorCentroDto) {
+  console.log('============ SERVICE CREATE ============');
+  console.log('DTO recibido:', dto);
 
-    if (!dto.password || dto.password.trim() === '') {
-      throw new Error('Password es requerido para crear un usuario');
-    }
-
-    const hashedPassword = await bcrypt.hash(dto.password, 10);
-
-    // Insertar directamente con query builder
-    const result = await this.trabajadorCentroRepository
-      .createQueryBuilder()
-      .insert()
-      .into('trabajador_centro')
-      .values({
-        nombres: dto.nombres,
-        apellidos: dto.apellidos,
-        dni: dto.dni,
-        username: dto.username,
-        password: hashedPassword,
-        email: dto.email,
-        rol: dto.rol,
-        rol_id: dto.rol_id,
-        especialidad_id: dto.especialidad_id || null,
-        institucion_id: dto.institucion_id || null,
-        cargo: dto.cargo || null,
-        estado: true,
-        sueldo_base: dto.sueldo_base || null,
-        fecha_ingreso: dto.fecha_ingreso || null,
-        numero_cuenta: dto.numero_cuenta || null,
-        banco: dto.banco || null
-      })
-      .execute();
-
-    const trabajadorId = result.identifiers[0].id;
-
-    const trabajadorCompleto = await this.trabajadorCentroRepository.findOne({
-      where: { id: trabajadorId }
-    });
-
-    const { password, ...trabajadorSinPassword } = trabajadorCompleto;
-    return {
-      ...trabajadorSinPassword,
-      rol_objeto: trabajadorCompleto.rol ? {
-        id: trabajadorCompleto.rol.id,
-        nombre: trabajadorCompleto.rol.nombre,
-        descripcion: trabajadorCompleto.rol.descripcion
-      } : null,
-      especialidad: trabajadorCompleto.especialidad ? {
-        id: trabajadorCompleto.especialidad.id,
-        nombre: trabajadorCompleto.especialidad.nombre,
-        descripcion: trabajadorCompleto.especialidad.descripcion,
-        activo: trabajadorCompleto.especialidad.activo
-      } : null
-    };
+  if (!dto.password || dto.password.trim() === '') {
+    throw new Error('Password es requerido para crear un usuario');
   }
 
+  const hashedPassword = await bcrypt.hash(dto.password, 10);
+
+  console.log('📧 ANTES DE CREAR - correo_corporativo:', dto.correo_corporativo);
+
+  // ✅ CAMBIO IMPORTANTE: Incluir las relaciones directamente en create()
+  const nuevoTrabajador = this.trabajadorCentroRepository.create({
+    nombres: dto.nombres,
+    apellidos: dto.apellidos,
+    dni: dto.dni,
+    username: dto.username,
+    password: hashedPassword,
+    email: dto.email,
+    correo_corporativo: dto.correo_corporativo || null,
+    cargo: dto.cargo || null,
+    estado: true,
+    telefono: dto.telefono || null,
+    telefono_emergencia: dto.telefono_emergencia || null,
+    contacto_emergencia: dto.contacto_emergencia || null,
+    direccion: dto.direccion || null,
+    distrito: dto.distrito || null,
+    provincia: dto.provincia || null,
+    departamento: dto.departamento || null,
+    talla_polo: dto.talla_polo || null,
+    talla_pantalon: dto.talla_pantalon || null,
+    talla_zapatos: dto.talla_zapatos || null,
+    sueldo_base: dto.sueldo_base || null,
+    fecha_ingreso: dto.fecha_ingreso as any,
+    numero_cuenta: dto.numero_cuenta || null,
+    banco: dto.banco || null,
+    // ✅ RELACIONES - Incluidas aquí, no después
+    rol: dto.rol_id ? { id: dto.rol_id } : null,
+    especialidad: dto.especialidad_id ? { id: dto.especialidad_id } : null,
+    institucion: dto.institucion_id ? { id: dto.institucion_id } : null,
+  });
+
+  console.log('📦 Objeto a guardar:', nuevoTrabajador);
+  console.log('📧 correo_corporativo en objeto:', nuevoTrabajador.correo_corporativo);
+
+  // Guardar usando save()
+  const trabajadorGuardado = await this.trabajadorCentroRepository.save(nuevoTrabajador);
+
+  console.log('✅ Trabajador guardado:', trabajadorGuardado);
+  console.log('📧 correo_corporativo guardado:', trabajadorGuardado.correo_corporativo);
+
+  const trabajadorId = trabajadorGuardado.id;
+
+  console.log('🔍 Buscando trabajador con ID:', trabajadorId);
+
+  const trabajadorCompleto = await this.trabajadorCentroRepository.findOne({
+    where: { id: trabajadorId }
+  });
+
+  console.log('📄 Trabajador completo encontrado:', trabajadorCompleto);
+  console.log('📧 correo_corporativo en BD:', trabajadorCompleto?.correo_corporativo);
+
+  const { password, ...trabajadorSinPassword } = trabajadorCompleto;
+  return {
+    ...trabajadorSinPassword,
+    rol_objeto: trabajadorCompleto.rol ? {
+      id: trabajadorCompleto.rol.id,
+      nombre: trabajadorCompleto.rol.nombre,
+      descripcion: trabajadorCompleto.rol.descripcion
+    } : null,
+    especialidad: trabajadorCompleto.especialidad ? {
+      id: trabajadorCompleto.especialidad.id,
+      nombre: trabajadorCompleto.especialidad.nombre,
+      descripcion: trabajadorCompleto.especialidad.descripcion,
+      activo: trabajadorCompleto.especialidad.activo
+    } : null
+  };
+}
   async update(id: number, dto: UpdateTrabajadorCentroDto) {
+    console.log('============ SERVICE UPDATE ============');
     console.log('Update Trabajador - ID:', id);
     console.log('Update Trabajador - DTO:', dto);
+    console.log('correo_corporativo en DTO:', dto.correo_corporativo);
+    console.log('========================================');
 
     const trabajador = await this.trabajadorCentroRepository.findOne({
       where: { id },
@@ -110,6 +134,11 @@ export class TrabajadorCentroService {
     if (dto.dni !== undefined) trabajador.dni = dto.dni;
     if (dto.username !== undefined) trabajador.username = dto.username;
     if (dto.email !== undefined) trabajador.email = dto.email;
+    if (dto.correo_corporativo !== undefined) {
+      console.log('🔄 Actualizando correo_corporativo:', dto.correo_corporativo);
+      trabajador.correo_corporativo = dto.correo_corporativo;
+      console.log('✅ correo_corporativo actualizado en objeto:', trabajador.correo_corporativo);
+    }
     if (dto.cargo !== undefined) trabajador.cargo = dto.cargo;
 
     // Campos de contacto y ubicación

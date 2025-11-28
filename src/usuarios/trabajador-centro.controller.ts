@@ -70,17 +70,22 @@ export class TrabajadorCentroController {
     return this.service.findOneById(+id);
   }
 
-  @Post('trabajadores')
+  @Post()
   create(@Body() dto: CreateTrabajadorCentroDto) {
+    console.log('============ CONTROLLER POST ============');
     console.log('Body recibido en controller:', dto);
+    console.log('correo_corporativo recibido:', dto.correo_corporativo);
+    console.log('========================================');
     return this.service.create(dto);
   }
 
   @Patch(':id')
+  @UseGuards(JwtAuthGuard)
   update(@Param('id') id: string, @Body() dto: UpdateTrabajadorCentroDto) {
     console.log('============ CONTROLLER PATCH ============');
     console.log('ID recibido:', id);
     console.log('DTO recibido:', JSON.stringify(dto, null, 2));
+    console.log('correo_corporativo recibido:', dto.correo_corporativo);
     console.log('==========================================');
     return this.service.update(+id, dto);
   }

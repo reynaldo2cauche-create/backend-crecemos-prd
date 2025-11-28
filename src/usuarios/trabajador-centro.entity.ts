@@ -30,6 +30,9 @@ export class TrabajadorCentro {
   email?: string;
 
   @Column({ nullable: true })
+  correo_corporativo?: string;
+
+  @Column({ nullable: true })
   telefono?: string;
 
   @Column({ nullable: true })
@@ -59,10 +62,10 @@ export class TrabajadorCentro {
   @Column({ nullable: true })
   talla_zapatos?: string;
 
-  @Column()
+  @Column({ nullable: true })
   cargo: string;
 
-  @ManyToOne(() => Rol, { eager: true })
+  @ManyToOne(() => Rol, { eager: true, nullable: true })
   @JoinColumn({ name: 'rol_id' })
   rol: Rol;
 
@@ -70,7 +73,7 @@ export class TrabajadorCentro {
   @JoinColumn({ name: 'especialidad_id' })
   especialidad: Especialidad;
 
-  @ManyToOne(() => Institucion, { eager: true })
+  @ManyToOne(() => Institucion, { eager: true, nullable: true })
   @JoinColumn({ name: 'institucion_id' })
   institucion: Institucion;
 

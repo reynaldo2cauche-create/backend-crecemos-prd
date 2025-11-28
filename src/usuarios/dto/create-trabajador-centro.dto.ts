@@ -20,11 +20,13 @@ export class CreateTrabajadorCentroDto {
   @IsEmail()
   email: string;
 
+  @IsOptional()
+  @IsEmail()
+  correo_corporativo?: string;
+  
+  @IsOptional()
   @IsNumber()
-  rol_id: number;
-
-  @IsString()
-  rol: string;
+  rol_id?: number;
 
   @IsOptional()
   @IsString()

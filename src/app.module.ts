@@ -36,6 +36,7 @@ import { Institucion } from './evaluaciones/institucion.entity';
 import { Seccion } from './evaluaciones/seccion.entity';
 import { TrabajadorCentro } from './evaluaciones/trabajador-centro.entity';
 import { TrabajadorCentro as TrabajadorCentroUsuario } from './usuarios/trabajador-centro.entity';
+import { TrabajadorServicio } from './usuarios/trabajador-servicio.entity';
 import { AuthModule } from './auth/auth.module';
 import { TrabajadorCentroModule } from './usuarios/trabajador-centro.module';
 import { NotaEvolucion } from './pacientes/entities/nota-evolucion.entity';
@@ -142,9 +143,11 @@ import { CuentaBancaria } from './rrhh/cuenta-bancaria.entity';
         PopupConfiguracion,
         Pago,
         Vacacion,
-        CuentaBancaria
+        CuentaBancaria,
+        TrabajadorServicio
       ],
         synchronize: false,   // true en desarrollo, false en producción
+        logging: true,  // Activar logs de SQL para debug
 
     }),
 
