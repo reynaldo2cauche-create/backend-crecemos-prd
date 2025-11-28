@@ -13,8 +13,9 @@ export class CreateTrabajadorCentroDto {
   @IsString()
   username: string;
 
+  @IsOptional()
   @IsString()
-  password: string;
+  password?: string;
 
   @IsEmail()
   email: string;
@@ -33,4 +34,44 @@ export class CreateTrabajadorCentroDto {
   @IsOptional()
   @IsNumber()
   especialidad_id?: number;
+
+  @IsOptional()
+  @IsString()
+  telefono?: string;
+
+  @IsOptional()
+  @IsString()
+  telefono_emergencia?: string;
+
+  @IsOptional()
+  @IsString()
+  contacto_emergencia?: string;
+
+  @IsOptional()
+  @IsString()
+  direccion?: string;
+
+  @IsOptional()
+  @IsString()
+  distrito?: string;
+
+  @IsOptional()
+  @IsString()
+  provincia?: string;
+
+  @IsOptional()
+  @IsString()
+  departamento?: string;
+
+  @IsOptional()
+  @IsString()
+  talla_polo?: string;
+
+  @IsOptional()
+  @IsString()
+  talla_pantalon?: string;
+
+  @IsOptional()
+  @IsString()
+  talla_zapatos?: string;
 } 

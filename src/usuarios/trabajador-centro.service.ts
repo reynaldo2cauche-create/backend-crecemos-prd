@@ -39,18 +39,19 @@ export class TrabajadorCentroService {
   async create(dto: CreateTrabajadorCentroDto) {
     console.log('DTO recibido:', dto);
     console.log('Password:', dto.password);
-    
-    if (!dto.password) {
-      throw new Error('Password es requerido');
+
+    if (!dto.password || dto.password.trim() === '') {
+      throw new Error('Password es requerido para crear un usuario');
     }
-    
+
     const hashedPassword = await bcrypt.hash(dto.password, 10);
     const trabajador = this.trabajadorCentroRepository.create({
       ...dto,
       password: hashedPassword,
       estado: true,
       rol: dto.rol_id ? { id: dto.rol_id } : undefined,
-      especialidad: dto.especialidad_id ? { id: dto.especialidad_id } : undefined
+      especialidad: dto.especialidad_id ? { id: dto.especialidad_id } : undefined,
+      institucion: dto.institucion_id ? { id: dto.institucion_id } : undefined
     });
     
     const savedTrabajador = await this.trabajadorCentroRepository.save(trabajador);
@@ -82,62 +83,79 @@ export class TrabajadorCentroService {
   async update(id: number, dto: UpdateTrabajadorCentroDto) {
     console.log('Update Trabajador - ID:', id);
     console.log('Update Trabajador - DTO:', dto);
-    
-    const trabajador = await this.trabajadorCentroRepository.findOne({ 
+
+    const trabajador = await this.trabajadorCentroRepository.findOne({
       where: { id },
       relations: ['rol', 'especialidad', 'institucion']
     });
-    
+
     if (!trabajador) throw new NotFoundException('Trabajador no encontrado');
-    
-    // Crear objeto de actualización
-    const updateData: any = {};
-    
-    // Campos básicos
-    if (dto.nombres !== undefined) updateData.nombres = dto.nombres;
-    if (dto.apellidos !== undefined) updateData.apellidos = dto.apellidos;
-    if (dto.dni !== undefined) updateData.dni = dto.dni;
-    if (dto.username !== undefined) updateData.username = dto.username;
-    if (dto.email !== undefined) updateData.email = dto.email;
-    if (dto.cargo !== undefined) updateData.cargo = dto.cargo;
-    
-    // Password
-    if (dto.password) {
-      updateData.password = await bcrypt.hash(dto.password, 10);
+
+    // Actualizar campos básicos
+    if (dto.nombres !== undefined) trabajador.nombres = dto.nombres;
+    if (dto.apellidos !== undefined) trabajador.apellidos = dto.apellidos;
+    if (dto.dni !== undefined) trabajador.dni = dto.dni;
+    if (dto.username !== undefined) trabajador.username = dto.username;
+    if (dto.email !== undefined) trabajador.email = dto.email;
+    if (dto.cargo !== undefined) trabajador.cargo = dto.cargo;
+
+    // Campos de contacto y ubicación
+    if (dto.telefono !== undefined) trabajador.telefono = dto.telefono;
+    if (dto.telefono_emergencia !== undefined) trabajador.telefono_emergencia = dto.telefono_emergencia;
+    if (dto.contacto_emergencia !== undefined) trabajador.contacto_emergencia = dto.contacto_emergencia;
+    if (dto.direccion !== undefined) trabajador.direccion = dto.direccion;
+    if (dto.distrito !== undefined) trabajador.distrito = dto.distrito;
+    if (dto.provincia !== undefined) trabajador.provincia = dto.provincia;
+    if (dto.departamento !== undefined) trabajador.departamento = dto.departamento;
+
+    // Campos de tallas
+    if (dto.talla_polo !== undefined) trabajador.talla_polo = dto.talla_polo;
+    if (dto.talla_pantalon !== undefined) trabajador.talla_pantalon = dto.talla_pantalon;
+    if (dto.talla_zapatos !== undefined) trabajador.talla_zapatos = dto.talla_zapatos;
+
+    // Password - SOLO actualizar si viene en el DTO y no está vacío
+    if (dto.password !== undefined && dto.password !== null && dto.password.trim() !== '') {
+      trabajador.password = await bcrypt.hash(dto.password, 10);
     }
-    
+
     // Relaciones
-    if (dto.rol_id !== undefined) updateData.rol = { id: dto.rol_id };
-    if (dto.especialidad_id !== undefined) updateData.especialidad = { id: dto.especialidad_id };
-    if (dto.institucion_id !== undefined) updateData.institucion = { id: dto.institucion_id };
-    
-    console.log('Update Trabajador - Data a actualizar:', updateData);
-    
-    // Actualizar usando update
-    await this.trabajadorCentroRepository.update(id, updateData);
-    
-    // Obtener el trabajador actualizado con sus relaciones
-    const resultado = await this.trabajadorCentroRepository.findOne({
+    if (dto.rol_id !== undefined) {
+      trabajador.rol = { id: dto.rol_id } as any;
+    }
+    if (dto.especialidad_id !== undefined) {
+      trabajador.especialidad = dto.especialidad_id ? { id: dto.especialidad_id } as any : null;
+    }
+    if (dto.institucion_id !== undefined) {
+      trabajador.institucion = dto.institucion_id ? { id: dto.institucion_id } as any : null;
+    }
+
+    console.log('Update Trabajador - Data a actualizar:', trabajador);
+
+    // Guardar usando save (maneja mejor las relaciones y campos opcionales)
+    const resultado = await this.trabajadorCentroRepository.save(trabajador);
+
+    // Recargar con todas las relaciones
+    const trabajadorActualizado = await this.trabajadorCentroRepository.findOne({
       where: { id },
       relations: ['rol', 'especialidad', 'institucion']
     });
-    
-    console.log('Update Trabajador - Resultado:', resultado);
-    
+
+    console.log('Update Trabajador - Resultado:', trabajadorActualizado);
+
     // Devolver sin la contraseña y con los datos del rol y especialidad
-    const { password, ...trabajadorSinPassword } = resultado;
+    const { password, ...trabajadorSinPassword } = trabajadorActualizado;
     return {
       ...trabajadorSinPassword,
-      rol: resultado.rol ? { 
-        id: resultado.rol.id, 
-        nombre: resultado.rol.nombre, 
-        descripcion: resultado.rol.descripcion 
+      rol: trabajadorActualizado.rol ? {
+        id: trabajadorActualizado.rol.id,
+        nombre: trabajadorActualizado.rol.nombre,
+        descripcion: trabajadorActualizado.rol.descripcion
       } : null,
-      especialidad: resultado.especialidad ? { 
-        id: resultado.especialidad.id, 
-        nombre: resultado.especialidad.nombre, 
-        descripcion: resultado.especialidad.descripcion, 
-        activo: resultado.especialidad.activo 
+      especialidad: trabajadorActualizado.especialidad ? {
+        id: trabajadorActualizado.especialidad.id,
+        nombre: trabajadorActualizado.especialidad.nombre,
+        descripcion: trabajadorActualizado.especialidad.descripcion,
+        activo: trabajadorActualizado.especialidad.activo
       } : null
     };
   }
