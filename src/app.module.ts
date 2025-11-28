@@ -132,7 +132,7 @@ import { EstadoPostulacion } from './postulaciones/estado-postulacion.entity';
         EvaluacionTerapiaOcupacional,
         ArchivoOficial,
         ArchivoTerapia,
-        Beneficio
+        Beneficio,
         CargoPostulacion,
         EstadoPostulacion
        
