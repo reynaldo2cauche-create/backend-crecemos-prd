@@ -1,4 +1,4 @@
-import { IsString, IsNumber, IsOptional, IsEmail } from 'class-validator';
+import { IsString, IsNumber, IsOptional, IsEmail, IsBoolean } from 'class-validator';
 
 export class CreateTrabajadorCentroDto {
   @IsString()
@@ -96,4 +96,8 @@ export class CreateTrabajadorCentroDto {
   @IsOptional()
   @IsString()
   banco?: string;
+  // ✅ NUEVO: Campo para marcar perfil completo
+  @IsOptional()
+  @IsBoolean()
+  perfil_completo?: boolean;
 } 

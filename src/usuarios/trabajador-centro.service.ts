@@ -36,16 +36,13 @@ export class TrabajadorCentroService {
   }
 
 async create(dto: CreateTrabajadorCentroDto) {
-  console.log('============ SERVICE CREATE ============');
-  console.log('DTO recibido:', dto);
-
+ 
   if (!dto.password || dto.password.trim() === '') {
     throw new Error('Password es requerido para crear un usuario');
   }
 
   const hashedPassword = await bcrypt.hash(dto.password, 10);
 
-  console.log('📧 ANTES DE CREAR - correo_corporativo:', dto.correo_corporativo);
 
   // ✅ CAMBIO IMPORTANTE: Incluir las relaciones directamente en create()
   const nuevoTrabajador = this.trabajadorCentroRepository.create({
@@ -56,7 +53,7 @@ async create(dto: CreateTrabajadorCentroDto) {
     password: hashedPassword,
     email: dto.email,
     correo_corporativo: dto.correo_corporativo || null,
-    cargo: dto.cargo || null,
+    
     estado: true,
     telefono: dto.telefono || null,
     telefono_emergencia: dto.telefono_emergencia || null,
@@ -78,25 +75,19 @@ async create(dto: CreateTrabajadorCentroDto) {
     institucion: dto.institucion_id ? { id: dto.institucion_id } : null,
   });
 
-  console.log('📦 Objeto a guardar:', nuevoTrabajador);
-  console.log('📧 correo_corporativo en objeto:', nuevoTrabajador.correo_corporativo);
-
+ 
   // Guardar usando save()
   const trabajadorGuardado = await this.trabajadorCentroRepository.save(nuevoTrabajador);
 
-  console.log('✅ Trabajador guardado:', trabajadorGuardado);
-  console.log('📧 correo_corporativo guardado:', trabajadorGuardado.correo_corporativo);
+
 
   const trabajadorId = trabajadorGuardado.id;
 
-  console.log('🔍 Buscando trabajador con ID:', trabajadorId);
 
   const trabajadorCompleto = await this.trabajadorCentroRepository.findOne({
     where: { id: trabajadorId }
   });
 
-  console.log('📄 Trabajador completo encontrado:', trabajadorCompleto);
-  console.log('📧 correo_corporativo en BD:', trabajadorCompleto?.correo_corporativo);
 
   const { password, ...trabajadorSinPassword } = trabajadorCompleto;
   return {
@@ -115,11 +106,7 @@ async create(dto: CreateTrabajadorCentroDto) {
   };
 }
   async update(id: number, dto: UpdateTrabajadorCentroDto) {
-    console.log('============ SERVICE UPDATE ============');
-    console.log('Update Trabajador - ID:', id);
-    console.log('Update Trabajador - DTO:', dto);
-    console.log('correo_corporativo en DTO:', dto.correo_corporativo);
-    console.log('========================================');
+  
 
     const trabajador = await this.trabajadorCentroRepository.findOne({
       where: { id },
@@ -135,9 +122,9 @@ async create(dto: CreateTrabajadorCentroDto) {
     if (dto.username !== undefined) trabajador.username = dto.username;
     if (dto.email !== undefined) trabajador.email = dto.email;
     if (dto.correo_corporativo !== undefined) {
-      console.log('🔄 Actualizando correo_corporativo:', dto.correo_corporativo);
+      
       trabajador.correo_corporativo = dto.correo_corporativo;
-      console.log('✅ correo_corporativo actualizado en objeto:', trabajador.correo_corporativo);
+      
     }
     if (dto.cargo !== undefined) trabajador.cargo = dto.cargo;
 
@@ -154,6 +141,15 @@ async create(dto: CreateTrabajadorCentroDto) {
     if (dto.talla_polo !== undefined) trabajador.talla_polo = dto.talla_polo;
     if (dto.talla_pantalon !== undefined) trabajador.talla_pantalon = dto.talla_pantalon;
     if (dto.talla_zapatos !== undefined) trabajador.talla_zapatos = dto.talla_zapatos;
+    // ✅ NUEVO: Manejar perfil_completo
+    if (dto.perfil_completo !== undefined) {
+      trabajador.perfil_completo = dto.perfil_completo;
+      if (dto.perfil_completo) {
+        trabajador.fecha_completado_perfil = new Date();
+      } else {
+        trabajador.fecha_completado_perfil = null;
+      }
+    }
 
     // Campos de RRHH
     if (dto.sueldo_base !== undefined) trabajador.sueldo_base = dto.sueldo_base;

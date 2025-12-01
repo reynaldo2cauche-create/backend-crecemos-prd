@@ -101,6 +101,12 @@ export class TrabajadorCentro {
 
   @Column({ nullable: true })
   banco: string;
+   @Column({ name: 'perfil_completo', default: false })
+  perfil_completo: boolean;
+
+  @Column({ name: 'fecha_completado_perfil', type: 'timestamp', nullable: true })
+  fecha_completado_perfil: Date;
+
 
   @OneToMany(() => Pago, pago => pago.empleado)
   pagos: Pago[];
