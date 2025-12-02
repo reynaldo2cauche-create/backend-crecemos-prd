@@ -52,7 +52,8 @@ import { EstadoPacienteController } from './estado-paciente.controller';
     ComentarioTerapiaService,
     NotaEvolucionService,
     ParejaPacienteService,
-    EstadoPacienteService
+    EstadoPacienteService,
+    
   ],
   controllers: [
     PacienteController,

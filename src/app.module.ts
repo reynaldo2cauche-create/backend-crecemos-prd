@@ -71,6 +71,12 @@ import { RrhhModule } from './rrhh/rrhh.module';
 import { Pago } from './rrhh/pago.entity';
 import { Vacacion } from './rrhh/vacacion.entity';
 import { CuentaBancaria } from './rrhh/cuenta-bancaria.entity';
+import { AuditoriaModule } from './auditoria/auditoria.module';
+import { AuditoriaAccion } from './auditoria/auditoria-accion.entity';
+import { AlertaSistema } from './auditoria/alerta-sistema.entity';
+import { ConfiguracionAlerta } from './auditoria/configuracion-alerta.entity';
+import { APP_INTERCEPTOR } from '@nestjs/core';
+import { AuditoriaInterceptor } from './auditoria/auditoria.interceptor';
 
 @Module({
   imports: [
@@ -144,10 +150,13 @@ import { CuentaBancaria } from './rrhh/cuenta-bancaria.entity';
         Pago,
         Vacacion,
         CuentaBancaria,
-        TrabajadorServicio
+        TrabajadorServicio,
+        AuditoriaAccion,
+        AlertaSistema,
+        ConfiguracionAlerta
       ],
         synchronize: false,   // true en desarrollo, false en producción
-        logging: true,  // Activar logs de SQL para debug
+          // Activar logs de SQL para debug
 
     }),
 
@@ -172,10 +181,18 @@ import { CuentaBancaria } from './rrhh/cuenta-bancaria.entity';
     CitasModule,
     PopupModule,
     RrhhModule,
+    AuditoriaModule,
+    AuthModule,
     Comentario
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [
+    AppService,
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: AuditoriaInterceptor,
+    },
+  ],
 })
 
 export class AppModule {}

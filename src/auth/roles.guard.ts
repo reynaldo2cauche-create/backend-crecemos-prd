@@ -12,14 +12,24 @@ export class RolesGuard implements CanActivate {
     const { user } = context.switchToHttp().getRequest();
 
     // Si no hay usuario o rol, bloquear
-    if (!user || !user.rol || !user.rol.nombre) {
+    if (!user || !user.rol) {
+      throw new ForbiddenException('Usuario no tiene rol asignado');
+    }
+
+    // 👇 CAMBIO: Soportar tanto string como objeto
+    const userRole = typeof user.rol === 'string' 
+      ? user.rol 
+      : user.rol.nombre;
+
+    if (!userRole) {
       throw new ForbiddenException('Usuario no tiene rol asignado');
     }
 
     // Verifica si el rol del usuario está dentro de los requeridos
-    const hasRole = requiredRoles.includes(user.rol.nombre);
+    const hasRole = requiredRoles.includes(userRole);
+    
     if (!hasRole) {
-      throw new ForbiddenException('No tienes permiso para acceder a esta ruta');
+      throw new ForbiddenException(`No tienes permiso para acceder a esta ruta. Tu rol: ${userRole}`);
     }
 
     return true;

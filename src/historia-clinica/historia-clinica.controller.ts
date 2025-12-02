@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Delete, Body, Param, ParseIntPipe } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Body, Param, ParseIntPipe, UseGuards } from '@nestjs/common';
 import { HistoriaClinicaService } from './historia-clinica.service';
 import { CreateReporteEvolucionDto } from './dto/create-reporte-evolucion.dto';
 import { CreateEntrevistaPadresDto } from './dto/create-entrevista-padres.dto';
@@ -9,8 +9,11 @@ import { EntrevistaPadres } from './entities/entrevista-padres.entity';
 import { CreateEvaluacionTerapiaDto } from './dto/create-evaluacion-terapia.dto';
 import { EvaluacionTerapiaOcupacional } from './entities/evaluacion-terapia-ocupacional.entity';
 import { UpdateEvaluacionTerapiaDto } from './dto/update-evaluacion-terapia.dto';
+import { Auditable } from 'src/auditoria/decorators/auditable.decorator';
+import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
 
 @Controller('backend_api/historia-clinica')
+@UseGuards(JwtAuthGuard)
 export class HistoriaClinicaController {
   constructor(private readonly historiaClinicaService: HistoriaClinicaService) {}
 
@@ -19,6 +22,10 @@ export class HistoriaClinicaController {
     return this.historiaClinicaService.getHistoriaClinica(pacienteId);
   }
 
+  @Auditable({
+      modulo: 'HISTORIA_CLINICA',
+      accion: 'CREAR_REPORTE_EVOLUCION',
+    })
   @Post('reporte-evolucion')
   createReporteEvolucion(@Body() createReporteDto: CreateReporteEvolucionDto): Promise<ReporteEvolucion> {
     return this.historiaClinicaService.createReporteEvolucion(createReporteDto);

@@ -1,12 +1,15 @@
-import { Controller, Post, Body, Get, Patch, Param, Query } from '@nestjs/common';
+import { Controller, Post, Body, Get, Patch, Param, Query, UseGuards } from '@nestjs/common';
 import { PacienteService } from './paciente.service';
 import { CreatePacienteDto } from './dto/create-paciente.dto';
 import { UpdatePacienteDto } from './dto/update-paciente.dto';
 import { CreatePacienteCompletoDto } from './dto/create-paciente-completo.dto';
 import { UpdateEstadoPacienteDto } from './dto/update-estado-paciente.dto';
 import { ApiOperation, ApiQuery } from '@nestjs/swagger';
+import { Auditable } from 'src/auditoria/decorators/auditable.decorator';
+import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
 
 @Controller('backend_api/pacientes')
+@UseGuards(JwtAuthGuard) 
 export class PacienteController {
   constructor(private readonly pacienteService: PacienteService) {}
 
@@ -15,7 +18,12 @@ export class PacienteController {
     return this.pacienteService.create(dto);
   }
 
+
   @Post('completo')
+      @Auditable({
+      modulo: 'PACIENTES',
+      accion: 'CREAR_PACIENTE',
+  })
   createCompleto(@Body() dto: CreatePacienteCompletoDto) {
     return this.pacienteService.createCompleto(dto);
   }
@@ -99,11 +107,20 @@ async findAllIncludingInactive(@Query() query: any) {
   }
 
   @Patch(':id')
+  @Auditable({
+    modulo: 'PACIENTES',
+    accion: 'EDITAR_PACIENTE',
+  })
   update(@Param('id') id: string, @Body() dto: UpdatePacienteDto) {
     return this.pacienteService.update(+id, dto);
   }
 
+
   @Get(':id')
+    @Auditable({
+      modulo: 'PACIENTES',
+      accion: 'VER_PACIENTE',
+  })
   findOne(@Param('id') id: string) {
     return this.pacienteService.findOneById(+id);
   }
