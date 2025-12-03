@@ -134,7 +134,11 @@ export class HistoriaClinicaService {
       }
     }
 
-    return entrevistaGuardada;
+    // Retornar la entrevista con la relación del paciente para auditoría
+    return await this.entrevistaPadresRepository.findOne({
+      where: { id: entrevistaGuardada.id },
+      relations: ['paciente']
+    });
   }
 
   async createReporteEvolucion(createReporteDto: CreateReporteEvolucionDto): Promise<ReporteEvolucion> {
@@ -176,7 +180,13 @@ export class HistoriaClinicaService {
       userIdActua: createReporteDto.usuario_id,
     });
 
-    return await this.reporteEvolucionRepository.save(reporteEvolucion);
+    const reporteGuardado = await this.reporteEvolucionRepository.save(reporteEvolucion);
+
+    // Retornar el reporte con la relación del paciente para auditoría
+    return await this.reporteEvolucionRepository.findOne({
+      where: { id: reporteGuardado.id },
+      relations: ['paciente']
+    });
   }
 
   async getHistoriaClinica(pacienteId: number): Promise<ReporteEvolucion[]> {
@@ -509,11 +519,17 @@ async createEvaluacionTerapia(createDto: CreateEvaluacionTerapiaDto): Promise<Ev
     conclusiones: createDto.conclusiones,
     sugerencias: createDto.sugerencias,
     objetivosIniciales: createDto.objetivos_iniciales,
-    
+
     creadoPor: createDto.usuario_id,
   });
 
-  return await this.evaluacionTerapiaRepository.save(evaluacion);
+  const evaluacionGuardada = await this.evaluacionTerapiaRepository.save(evaluacion);
+
+  // Retornar la evaluación con la relación del paciente para auditoría
+  return await this.evaluacionTerapiaRepository.findOne({
+    where: { id: evaluacionGuardada.id },
+    relations: ['paciente']
+  });
 }
 
 async getEvaluacionesTerapia(pacienteId: number): Promise<EvaluacionTerapiaOcupacional[]> {
@@ -693,7 +709,13 @@ async updateEvaluacionTerapia(
   if (updateDto.objetivos_iniciales !== undefined) evaluacion.objetivosIniciales = updateDto.objetivos_iniciales;
 
   // Guardar los cambios
-  return await this.evaluacionTerapiaRepository.save(evaluacion);
+  const evaluacionGuardada = await this.evaluacionTerapiaRepository.save(evaluacion);
+
+  // Cargar la evaluación con los datos del paciente para auditoría
+  return await this.evaluacionTerapiaRepository.findOne({
+    where: { id: evaluacionGuardada.id },
+    relations: ['paciente']
+  });
 }
 
 }

@@ -24,28 +24,33 @@ import { ArchivosOficialesController } from './archivos-oficiales.controller';
 import { ArchivosTerapiaController } from './archivos-terapia.controller';
 import { TiposArchivoController } from './tipo-archivo.controller';
 import { TiposArchivoService } from './tipo-archivo.service';
+import { ArchivosDigitalesController } from './archivos-digitales.controller';
+import { ArchivosDigitalesService } from './archivos-digitales.service';
+import { AuditoriaModule } from '../auditoria/auditoria.module';
 
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([
-      ReporteEvolucion, 
+      ReporteEvolucion,
       EntrevistaPadres,
       EvaluacionTerapiaOcupacional,
       HermanoEntrevista,
       FamiliarEntrevista,
       ArchivoOficial,
       ArchivoTerapia,
-      TipoArchivo, 
-      Paciente, 
+      ArchivoDigital,
+      TipoArchivo,
+      Paciente,
       TrabajadorCentro,
       Servicios,
       Sexo,
       Ocupaciones
     ]),
+    AuditoriaModule,
   ],
-  controllers: [HistoriaClinicaController,ArchivosOficialesController,ArchivosTerapiaController,TiposArchivoController],
-  providers: [HistoriaClinicaService, ArchivosTerapiaService, ArchivosOficialesService, TiposArchivoService],
-  exports: [HistoriaClinicaService, ArchivosTerapiaService, ArchivosOficialesService, TiposArchivoService],
+  controllers: [HistoriaClinicaController,ArchivosOficialesController,ArchivosTerapiaController,TiposArchivoController,ArchivosDigitalesController],
+  providers: [HistoriaClinicaService, ArchivosTerapiaService, ArchivosOficialesService, TiposArchivoService,ArchivosDigitalesService],
+  exports: [HistoriaClinicaService, ArchivosTerapiaService, ArchivosOficialesService, TiposArchivoService,ArchivosDigitalesService],
 })
 export class HistoriaClinicaModule {}

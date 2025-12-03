@@ -1,7 +1,9 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, Query } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, Query, UseGuards } from '@nestjs/common';
 import { PacienteServicioService } from './paciente-servicio.service';
 import { CreatePacienteServicioDto } from './dto/create-paciente-servicio.dto';
 import { AsignarServicioTerapeutaDto } from './dto/asignar-servicio-terapeuta.dto';
+import { Auditable } from 'src/auditoria/decorators/auditable.decorator';
+import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
 
 @Controller('backend_api/paciente-servicio')
 export class PacienteServicioController {
@@ -48,11 +50,25 @@ export class PacienteServicioController {
   }
 
   @Post('asignar')
+  @UseGuards(JwtAuthGuard)
+  @Auditable({
+    modulo: 'PACIENTES',
+    accion: 'ASIGNAR_SERVICIO',
+    entidadTipo: 'Paciente',
+    entidadIdBody: 'paciente_id',
+  })
   asignarServicioYTerapeuta(@Body() dto: AsignarServicioTerapeutaDto) {
     return this.pacienteServicioService.asignarServicioYTerapeuta(dto);
   }
 
   @Delete('paciente/:pacienteId/servicio/:servicioId')
+  @UseGuards(JwtAuthGuard)
+  @Auditable({
+    modulo: 'PACIENTES',
+    accion: 'DESASIGNAR_SERVICIO',
+    entidadTipo: 'Paciente',
+    entidadIdResponse: 'paciente.id',
+  })
   desasignarServicio(
     @Param('pacienteId') pacienteId: string,
     @Param('servicioId') servicioId: string
@@ -61,7 +77,29 @@ export class PacienteServicioController {
   }
 
   @Delete('desasignar/:id')
+  @UseGuards(JwtAuthGuard)
+  @Auditable({
+    modulo: 'PACIENTES',
+    accion: 'DESASIGNAR_SERVICIO',
+    entidadTipo: 'Paciente',
+    entidadIdResponse: 'paciente.id',
+  })
   desasignarServicioPorId(@Param('id') id: string) {
     return this.pacienteServicioService.desasignarServicioPorId(+id);
+  }
+
+  @Patch('asignacion/:id')
+  @UseGuards(JwtAuthGuard)
+  @Auditable({
+    modulo: 'PACIENTES',
+    accion: 'EDITAR_TERAPEUTA',
+    entidadTipo: 'Paciente',
+    entidadIdResponse: 'paciente.id',
+  })
+  actualizarAsignacionTerapeuta(
+    @Param('id') id: string,
+    @Body() dto: { terapeuta_id: number; user_id_actua: number }
+  ) {
+    return this.pacienteServicioService.actualizarAsignacionTerapeuta(+id, dto);
   }
 } 

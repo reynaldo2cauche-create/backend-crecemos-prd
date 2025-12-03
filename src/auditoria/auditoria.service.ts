@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Between, Like } from 'typeorm';
 import { AuditoriaAccion } from './auditoria-accion.entity';
+import { TrabajadorCentro } from '../usuarios/trabajador-centro.entity';
 import { RegistrarAuditoriaDto } from './dto/registrar-auditoria.dto';
 import { FiltrarAuditoriaDto } from './dto/filtrar-auditoria.dto';
 
@@ -12,6 +13,8 @@ export class AuditoriaService {
   constructor(
     @InjectRepository(AuditoriaAccion)
     private auditoriaRepository: Repository<AuditoriaAccion>,
+    @InjectRepository(TrabajadorCentro)
+    private trabajadorRepository: Repository<TrabajadorCentro>,
   ) {}
 
   /**
@@ -26,6 +29,52 @@ export class AuditoriaService {
     } catch (error) {
       this.logger.error('Error al registrar auditoría:', error);
       // No lanzamos el error para no afectar la operación principal
+    }
+  }
+
+  /**
+   * Completa los datos del usuario si no vienen en el token (para tokens antiguos)
+   * Si el token ya tiene nombres, apellidos y rol, los devuelve sin hacer query
+   */
+  async completarDatosUsuario(user: any): Promise<any> {
+    // Si ya tiene todos los datos, retornarlos directamente
+    if (user.nombres && user.apellidos && user.rol) {
+      this.logger.debug('✅ Usuario completo desde token');
+      return user;
+    }
+
+    // Si faltan datos, buscarlos en la base de datos
+    this.logger.warn('⚠️ Token antiguo detectado, buscando datos del usuario en BD...');
+
+    try {
+      const trabajador = await this.trabajadorRepository.findOne({
+        where: { id: user.id },
+        relations: ['rol'],
+      });
+
+      if (!trabajador) {
+        this.logger.error(`❌ No se encontró el trabajador con ID ${user.id}`);
+        return user; // Devolver user original aunque incompleto
+      }
+
+      const userCompleto = {
+        ...user,
+        nombres: trabajador.nombres,
+        apellidos: trabajador.apellidos,
+        rol: trabajador.rol,
+      };
+
+      this.logger.debug('✅ Datos de usuario completados desde BD:', JSON.stringify({
+        id: userCompleto.id,
+        nombres: userCompleto.nombres,
+        apellidos: userCompleto.apellidos,
+        rol: userCompleto.rol?.nombre,
+      }, null, 2));
+
+      return userCompleto;
+    } catch (error) {
+      this.logger.error('❌ Error al completar datos del usuario:', error);
+      return user; // En caso de error, devolver user original
     }
   }
 

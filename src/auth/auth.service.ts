@@ -17,7 +17,7 @@ export class AuthService {
 
     const user = await this.trabajadorRepository.findOne({
       where: { username },
-      relations: ['institucion']
+      relations: ['institucion', 'rol']  // ✅ Agregada relación 'rol' para auditoría
     });
      console.log('Usuario encontrado:', user);
   console.log('Password recibido:', password);
@@ -43,7 +43,9 @@ export class AuthService {
     const payload = {
       username: user.username,
       sub: user.id,
-      rol: user.rol.nombre,
+      nombres: user.nombres,        // ✅ Agregado para auditoría
+      apellidos: user.apellidos,    // ✅ Agregado para auditoría
+      rol: user.rol,                // ✅ Cambió de solo nombre a objeto completo
       institucion_id: user.institucion?.id
     };
     

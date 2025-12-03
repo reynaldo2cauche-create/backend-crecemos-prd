@@ -24,7 +24,9 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     const user = {
       id: payload.sub,
       username: payload.username,
-      rol: payload.rol, // Esto ya viene como objeto: { id: 1, nombre: "Administrador", ... }
+      nombres: payload.nombres,           // ✅ Para auditoría
+      apellidos: payload.apellidos,       // ✅ Para auditoría
+      rol: payload.rol,                   // Objeto completo con { id, nombre, ... }
       institucion_id: payload.institucion_id,
     };
 

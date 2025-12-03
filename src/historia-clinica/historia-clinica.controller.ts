@@ -25,12 +25,20 @@ export class HistoriaClinicaController {
   @Auditable({
       modulo: 'HISTORIA_CLINICA',
       accion: 'CREAR_REPORTE_EVOLUCION',
+      entidadTipo: 'Paciente',
+      entidadIdBody: 'paciente_id',  // 🎯 Toma el ID del paciente, no del reporte creado
     })
   @Post('reporte-evolucion')
   createReporteEvolucion(@Body() createReporteDto: CreateReporteEvolucionDto): Promise<ReporteEvolucion> {
     return this.historiaClinicaService.createReporteEvolucion(createReporteDto);
   }
 
+  @Auditable({
+    modulo: 'HISTORIA_CLINICA',
+    accion: 'CREAR_ENTREVISTA_PADRES',
+    entidadTipo: 'Paciente',
+    entidadIdBody: 'paciente_id',  // 🎯 Toma el ID del paciente del body
+  })
   @Post('entrevista-padres')
   createEntrevistaPadres(@Body() createEntrevistaDto: CreateEntrevistaPadresDto): Promise<EntrevistaPadres> {
     return this.historiaClinicaService.createEntrevistaPadres(createEntrevistaDto);
@@ -46,6 +54,12 @@ export class HistoriaClinicaController {
     return this.historiaClinicaService.getEntrevistaPadresById(id);
   }
 
+  @Auditable({
+    modulo: 'HISTORIA_CLINICA',
+    accion: 'EDITAR_ENTREVISTA_PADRES',
+    entidadTipo: 'Paciente',
+    entidadIdResponse: 'pacienteId',  // 🎯 Toma el ID del paciente de la respuesta
+  })
   @Put('entrevista-padres/:id')
   updateEntrevistaPadres(
     @Param('id', ParseIntPipe) id: number,
@@ -59,6 +73,12 @@ export class HistoriaClinicaController {
     return this.historiaClinicaService.getReporteEvolucionById(id);
   }
 
+  @Auditable({
+    modulo: 'HISTORIA_CLINICA',
+    accion: 'EDITAR_REPORTE_EVOLUCION',
+    entidadTipo: 'Paciente',
+    entidadIdResponse: 'pacienteId',  // 🎯 Toma el ID del paciente de la respuesta
+  })
   @Put('reporte-evolucion/:id')
   updateReporteEvolucion(
     @Param('id', ParseIntPipe) id: number,
@@ -68,6 +88,12 @@ export class HistoriaClinicaController {
   }
 
     // ==================== EVALUACIONES DE TERAPIA OCUPACIONAL ====================
+  @Auditable({
+    modulo: 'HISTORIA_CLINICA',
+    accion: 'CREAR_EVALUACION_TERAPIA',
+    entidadTipo: 'Paciente',
+    entidadIdBody: 'paciente_id',  // 🎯 Toma el ID del paciente del body
+  })
   @Post('evaluacion-terapia')
   createEvaluacionTerapia(@Body() createEvaluacionDto: CreateEvaluacionTerapiaDto): Promise<EvaluacionTerapiaOcupacional> {
     return this.historiaClinicaService.createEvaluacionTerapia(createEvaluacionDto);
@@ -83,6 +109,12 @@ export class HistoriaClinicaController {
     return this.historiaClinicaService.getEvaluacionTerapiaById(id);
   }
 
+  @Auditable({
+    modulo: 'HISTORIA_CLINICA',
+    accion: 'EDITAR_EVALUACION_TERAPIA',
+    entidadTipo: 'Paciente',
+    entidadIdResponse: 'pacienteId',  // 🎯 Toma el ID del paciente de la respuesta
+  })
   @Put('evaluacion-terapia/:id')
   updateEvaluacionTerapia(
     @Param('id', ParseIntPipe) id: number,

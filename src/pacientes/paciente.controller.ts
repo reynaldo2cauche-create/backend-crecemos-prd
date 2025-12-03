@@ -20,9 +20,10 @@ export class PacienteController {
 
 
   @Post('completo')
-      @Auditable({
-      modulo: 'PACIENTES',
-      accion: 'CREAR_PACIENTE',
+  @Auditable({
+    modulo: 'PACIENTES',
+    accion: 'CREAR_PACIENTE',
+    entidadTipo: 'Paciente',
   })
   createCompleto(@Body() dto: CreatePacienteCompletoDto) {
     return this.pacienteService.createCompleto(dto);
@@ -110,6 +111,8 @@ async findAllIncludingInactive(@Query() query: any) {
   @Auditable({
     modulo: 'PACIENTES',
     accion: 'EDITAR_PACIENTE',
+    entidadTipo: 'Paciente',
+    entidadIdResponse: 'id',
   })
   update(@Param('id') id: string, @Body() dto: UpdatePacienteDto) {
     return this.pacienteService.update(+id, dto);
@@ -120,19 +123,33 @@ async findAllIncludingInactive(@Query() query: any) {
     @Auditable({
       modulo: 'PACIENTES',
       accion: 'VER_PACIENTE',
+      entidadTipo: 'Paciente',
+      entidadIdParam: 'id',
   })
   findOne(@Param('id') id: string) {
     return this.pacienteService.findOneById(+id);
   }
 
   @Patch(':id/estado')
+  @Auditable({
+    modulo: 'PACIENTES',
+    accion: 'CAMBIAR_ESTADO_PACIENTE',
+    entidadTipo: 'Paciente',
+    entidadIdParam: 'id',
+  })
   updateEstado(@Param('id') id: string, @Body() dto: UpdateEstadoPacienteDto) {
     return this.pacienteService.updateEstado(+id, dto);
   }
 
   @Patch(':id/visibilidad')
+  @Auditable({
+    modulo: 'PACIENTES',
+    accion: 'CAMBIAR_VISIBILIDAD_PACIENTE',
+    entidadTipo: 'Paciente',
+    entidadIdParam: 'id',
+  })
   controlarVisibilidad(
-    @Param('id') id: string, 
+    @Param('id') id: string,
     @Body() dto: { mostrarEnListado: boolean; userId: number }
   ) {
     return this.pacienteService.controlarVisibilidad(+id, dto.mostrarEnListado, dto.userId);
