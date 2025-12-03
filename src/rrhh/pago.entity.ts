@@ -37,6 +37,13 @@ export class Pago {
   @Column({ nullable: true })
   registradoPor: string;
 
+  // ✅ NUEVOS CAMPOS: Usuario que crea/actualiza el pago
+  @Column({ nullable: true, name: 'user_id_crea' })
+  userIdCrea: number;
+
+  @Column({ nullable: true, name: 'user_id_actua' })
+  userIdActua: number;
+
   @Column({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' })
   created_at: Date;
 

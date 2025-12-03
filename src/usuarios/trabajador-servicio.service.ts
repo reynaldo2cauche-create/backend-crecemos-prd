@@ -59,12 +59,14 @@ export class TrabajadorServicioService {
   /**
    * Asignar un servicio a un trabajador
    */
-  async asignarServicio(trabajadorId: number, servicioId: number, observaciones?: string) {
+  async asignarServicio(trabajadorId: number, servicioId: number, observaciones?: string, userId?: number) {
     const nuevaAsignacion = this.trabajadorServicioRepository.create({
       trabajador: { id: trabajadorId } as any,
       servicio: { id: servicioId } as any,
       observaciones,
       activo: true,
+      userIdCrea: userId, // ✅ Guardamos quién creó la asignación
+      userIdActua: userId, // ✅ Guardamos quién actualizó la asignación
     });
 
     return await this.trabajadorServicioRepository.save(nuevaAsignacion);
@@ -73,7 +75,7 @@ export class TrabajadorServicioService {
   /**
    * Desactivar un servicio de un trabajador
    */
-  async desactivarServicio(trabajadorId: number, servicioId: number) {
+  async desactivarServicio(trabajadorId: number, servicioId: number, userId?: number) {
     const asignacion = await this.trabajadorServicioRepository.findOne({
       where: {
         trabajador: { id: trabajadorId },
@@ -83,6 +85,7 @@ export class TrabajadorServicioService {
 
     if (asignacion) {
       asignacion.activo = false;
+      asignacion.userIdActua = userId; // ✅ Guardamos quién desactivó la asignación
       return await this.trabajadorServicioRepository.save(asignacion);
     }
 

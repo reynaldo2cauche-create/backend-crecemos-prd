@@ -174,6 +174,8 @@ export class VacacionesService {
       diasTomados: diasSolicitados,
       periodoAnio: dto.periodoAnio,
       observaciones: dto.observaciones,
+      userIdCrea: dto.userId, // ✅ Guardamos quién creó el registro
+      userIdActua: dto.userId, // ✅ Guardamos quién actualizó el registro
     });
 
     return await this.vacacionesRepository.save(vacacion);

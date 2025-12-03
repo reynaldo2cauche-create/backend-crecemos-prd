@@ -114,6 +114,7 @@ private calcularMesesTrabajados(
   async calcularGratificaciones(dto: CalcularGratificacionesDto) {
     const empleados = await this.trabajadorRepository.find({
       where: { estado: true },
+      relations: ['cuentas_bancarias'], // ✅ Cargar cuentas bancarias
     });
 
     // Verificar pagos ya realizados para este periodo
@@ -178,6 +179,9 @@ private calcularMesesTrabajados(
           }
         }
 
+        // Buscar cuenta bancaria principal
+        const cuentaPrincipal = emp.cuentas_bancarias?.find(c => c.es_principal) || emp.cuentas_bancarias?.[0];
+
         return {
           id: emp.id,
           nombres: emp.nombres,
@@ -189,8 +193,8 @@ private calcularMesesTrabajados(
           gratificacionCompleta: completa,
           gratificacionProporcional: proporcional,
           sueldoTotal, // Sueldo base + gratificación
-          numero_cuenta: emp.numero_cuenta,
-          banco: emp.banco,
+          numero_cuenta: cuentaPrincipal?.numero_cuenta || emp.numero_cuenta || null, // ✅ Usar cuenta bancaria separada
+          banco: cuentaPrincipal?.banco || emp.banco || null, // ✅ Usar cuenta bancaria separada
           yaPagado,
           fechaPago: fechaPagoFormateada,
         };
@@ -212,13 +216,19 @@ private calcularMesesTrabajados(
   async registrarGratificacion(dto: RegistrarGratificacionDto): Promise<Pago> {
     const empleado = await this.trabajadorRepository.findOne({
       where: { id: dto.empleadoId },
+      relations: ['cuentas_bancarias'], // ✅ Cargar cuentas bancarias
     });
 
     if (!empleado) {
       throw new NotFoundException(`Trabajador ${dto.empleadoId} no encontrado`);
     }
 
-    if (!empleado.numero_cuenta || !empleado.banco) {
+    // ✅ Verificar datos bancarios en tabla separada o campos antiguos
+    const cuentaPrincipal = empleado.cuentas_bancarias?.find(c => c.es_principal) || empleado.cuentas_bancarias?.[0];
+    const tieneDatosBancarios = (cuentaPrincipal?.numero_cuenta && cuentaPrincipal?.banco) ||
+                                (empleado.numero_cuenta && empleado.banco);
+
+    if (!tieneDatosBancarios) {
       throw new BadRequestException('El empleado no tiene datos bancarios');
     }
 
@@ -275,6 +285,8 @@ private calcularMesesTrabajados(
       mes: mes,
       anio: anio,
       fechaPago: fechaPago,
+      userIdCrea: dto.userId, // ✅ Guardamos quién creó el pago
+      userIdActua: dto.userId, // ✅ Guardamos quién actualizó el pago
     });
 
     return await this.pagosRepository.save(pago);
@@ -327,6 +339,8 @@ private calcularMesesTrabajados(
       anio: dto.anio,
       periodo: `${dto.mes}-${dto.anio}`,
       fechaPago: dto.fechaPago,
+      userIdCrea: dto.userId, // ✅ Guardamos quién creó el pago
+      userIdActua: dto.userId, // ✅ Guardamos quién actualizó el pago
     });
 
     return await this.pagosRepository.save(pago);

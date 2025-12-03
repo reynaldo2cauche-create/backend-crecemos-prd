@@ -64,26 +64,35 @@ export class PopupController {
   }
 
   /**
-   * PUT /api/popup/configuracion - Actualizar configuración (activo/desactivado)
+   * GET /api/popup/imagen/:filename - Servir imagen del popup
    */
-  @Put('configuracion')
-  async actualizarConfiguracion(
-    @Body() body: { activo?: boolean; imagenUrl?: string },
-  ): Promise<PopupConfiguracion> {
-    if (body.activo !== undefined) {
-      return await this.popupService.actualizarConfiguracion(body.activo);
-    }
-    if (body.imagenUrl !== undefined) {
-      return await this.popupService.actualizarImagenUrl(body.imagenUrl);
-    }
-    throw new BadRequestException('Se requiere activo o imagenUrl');
-  }
+  @Get('imagen/:filename')
+  async verImagen(@Param('filename') filename: string, @Res() res: Response) {
+    const rutaArchivo = path.join(process.cwd(), 'uploads', 'popup', filename);
 
-  /**
-   * POST /api/popup/imagen - Subir imagen del popup
-   * Campo esperado: "imagen"
-   */
-  @Post('imagen')
+    if (!fs.existsSync(rutaArchivo)) {
+      throw new BadRequestException('Imagen no encontrada');
+    }
+
+    // Determinar el tipo MIME basado en la extensión
+    const ext = extname(filename).toLowerCase();
+    const mimeTypes = {
+      '.jpg': 'image/jpeg',
+      '.jpeg': 'image/jpeg',
+      '.png': 'image/png',
+      '.gif': 'image/gif',
+      '.webp': 'image/webp',
+    };
+
+    const mimeType = mimeTypes[ext] || 'application/octet-stream';
+
+    res.setHeader('Content-Type', mimeType);
+    res.setHeader('Cache-Control', 'public, max-age=31536000');
+
+    const fileStream = fs.createReadStream(rutaArchivo);
+    fileStream.pipe(res);
+  }
+@Post('imagen')
 @HttpCode(HttpStatus.OK)
 @UseInterceptors(
   FileInterceptor('imagen', {
@@ -94,27 +103,38 @@ export class PopupController {
 )
 async subirImagen(
   @UploadedFile() file: Express.Multer.File,
+  @Body('userId') userId: number, // ✅ Recibimos userId
 ): Promise<any> {
   if (!file) {
     throw new BadRequestException('No se proporcionó archivo');
   }
 
-  console.log('🔥 ANTES DE LLAMAR AL SERVICE');
-  console.log('Archivo recibido en controller:', file.filename);
-  
-  try {
-    const config = await this.popupService.subirImagen(file);
-    return {
-      success: true,
-      message: 'Imagen subida correctamente',
-      data: config,
-    };
-  } catch (error) {
-    console.error('❌ ERROR EN CONTROLLER:', error);
-    throw error;
+  if (!userId) {
+    throw new BadRequestException('Se requiere userId');
   }
+
+  const config = await this.popupService.subirImagen(file, userId);
+  return {
+    success: true,
+    message: 'Imagen subida correctamente',
+    data: config,
+  };
 }
 
+@Put('configuracion')
+async actualizarConfiguracion(
+  @Body() body: { activo?: boolean; imagenUrl?: string; userId: number }, // ✅ Agregamos userId
+): Promise<PopupConfiguracion> {
+  if (!body.userId) {
+    throw new BadRequestException('Se requiere userId');
+  }
+
+  if (body.activo !== undefined) {
+    return await this.popupService.actualizarConfiguracion(body.activo, body.userId);
+  }
+  
+  throw new BadRequestException('Se requiere activo');
+}
   /**
    * DELETE /api/popup/imagen - Eliminar imagen del popup
    */

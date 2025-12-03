@@ -29,55 +29,63 @@ export class PopupService {
     return config;
   }
 
-  /**
-   * Actualizar configuración (activar/desactivar)
-   */
-  async actualizarConfiguracion(activo: boolean): Promise<PopupConfiguracion> {
-    let config = await this.popupRepository.findOne({ where: { id: 1 } });
-
-    if (!config) {
-      config = this.popupRepository.create({ activo });
-    } else {
-      config.activo = activo;
-    }
-
-    return await this.popupRepository.save(config);
-  }
+  
 
   /**
    * Subir imagen del popup - CORRECTO
    */
-  async subirImagen(file: Express.Multer.File): Promise<PopupConfiguracion> {
-    if (!file) {
-      throw new BadRequestException('No se proporcionó archivo');
-    }
-
-    let config = await this.popupRepository.findOne({ where: { id: 1 } });
-
-    // Eliminar imagen anterior si existe
-    if (config && config.imagenUrl) {
-      this.eliminarArchivoFisico(config.imagenUrl);
-    }
-
-    // Guardar el nombre exacto que multer generó
-    const imagenUrl = file.filename;
-
-    console.log('💾 Guardando en BD:', imagenUrl);
-
-    if (!config) {
-      config = this.popupRepository.create({
-        activo: true,
-        imagenUrl,
-      });
-    } else {
-      config.imagenUrl = imagenUrl;
-      config.activo = true;
-    }
-
-    const resultado = await this.popupRepository.save(config);
-    console.log('✓ Guardado correctamente:', resultado.imagenUrl);
-    return resultado;
+ async subirImagen(file: Express.Multer.File, userId: number): Promise<PopupConfiguracion> {
+  if (!file) {
+    throw new BadRequestException('No se proporcionó archivo');
   }
+
+  let config = await this.popupRepository.findOne({ where: { id: 1 } });
+
+  // Eliminar imagen anterior si existe
+  if (config && config.imagenUrl) {
+    this.eliminarArchivoFisico(config.imagenUrl);
+  }
+
+  const imagenUrl = file.filename;
+
+  if (!config) {
+    // ✅ CREAR: guardamos user_id_crea
+    config = this.popupRepository.create({
+      activo: true,
+      imagenUrl,
+      userIdCrea: userId,
+      userIdActua: userId
+    });
+  } else {
+    // ✅ ACTUALIZAR: guardamos user_id_actua
+    config.imagenUrl = imagenUrl;
+    config.activo = true;
+    config.userIdActua = userId;
+  }
+
+  return await this.popupRepository.save(config);
+}
+
+/**
+   * Actualizar configuración (activar/desactivar)
+   */
+
+async actualizarConfiguracion(activo: boolean, userId: number): Promise<PopupConfiguracion> {
+  let config = await this.popupRepository.findOne({ where: { id: 1 } });
+
+  if (!config) {
+    config = this.popupRepository.create({ 
+      activo,
+      userIdCrea: userId,
+      userIdActua: userId
+    });
+  } else {
+    config.activo = activo;
+    config.userIdActua = userId; // ✅ Actualizamos quién modificó
+  }
+
+  return await this.popupRepository.save(config);
+}
 
   /**
    * Actualizar URL de imagen

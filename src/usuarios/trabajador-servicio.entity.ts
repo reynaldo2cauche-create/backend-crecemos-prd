@@ -24,6 +24,13 @@ export class TrabajadorServicio {
   @Column({ type: 'text', nullable: true })
   observaciones: string;
 
+  // ✅ NUEVOS CAMPOS: Usuario que crea/actualiza la asignación
+  @Column({ nullable: true, name: 'user_id_crea' })
+  userIdCrea: number;
+
+  @Column({ nullable: true, name: 'user_id_actua' })
+  userIdActua: number;
+
   @CreateDateColumn()
   created_at: Date;
 

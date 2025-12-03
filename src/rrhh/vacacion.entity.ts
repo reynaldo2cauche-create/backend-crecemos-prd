@@ -34,6 +34,13 @@ export class Vacacion {
   @Column({ type: 'date', nullable: true })
   fechaAprobacion: Date;
 
+  // ✅ NUEVOS CAMPOS: Usuario que crea/actualiza el registro de vacaciones
+  @Column({ nullable: true, name: 'user_id_crea' })
+  userIdCrea: number;
+
+  @Column({ nullable: true, name: 'user_id_actua' })
+  userIdActua: number;
+
   @Column({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' })
   created_at: Date;
 

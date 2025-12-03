@@ -1,4 +1,4 @@
-import { IsNotEmpty, IsNumber, IsDateString, IsOptional, IsString } from 'class-validator';
+import { IsNotEmpty, IsNumber, IsDateString, IsOptional, IsString, IsInt } from 'class-validator';
 
 export class RegistrarVacacionDto {
   @IsNotEmpty()
@@ -20,4 +20,8 @@ export class RegistrarVacacionDto {
   @IsOptional()
   @IsString()
   observaciones?: string;
+
+  @IsOptional()
+  @IsInt()
+  userId?: number; // ✅ Usuario que registra las vacaciones
 }

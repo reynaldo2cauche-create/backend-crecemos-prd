@@ -29,9 +29,9 @@ export class TrabajadorServicioController {
    */
   @Post()
   asignarServicio(
-    @Body() data: { trabajadorId: number; servicioId: number; observaciones?: string }
+    @Body() data: { trabajadorId: number; servicioId: number; observaciones?: string; userId: number }
   ) {
-    return this.service.asignarServicio(data.trabajadorId, data.servicioId, data.observaciones);
+    return this.service.asignarServicio(data.trabajadorId, data.servicioId, data.observaciones, data.userId);
   }
 
   /**
@@ -41,8 +41,9 @@ export class TrabajadorServicioController {
   @Delete(':trabajadorId/:servicioId')
   desactivarServicio(
     @Param('trabajadorId') trabajadorId: string,
-    @Param('servicioId') servicioId: string
+    @Param('servicioId') servicioId: string,
+    @Body() data: { userId: number }
   ) {
-    return this.service.desactivarServicio(+trabajadorId, +servicioId);
+    return this.service.desactivarServicio(+trabajadorId, +servicioId, data.userId);
   }
 }
