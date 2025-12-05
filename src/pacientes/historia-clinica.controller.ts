@@ -13,8 +13,6 @@ export class HistoriaClinicaController {
   @Auditable({
     modulo: 'PACIENTES',
     accion: 'CREAR_HISTORIA_CLINICA',
-    entidadTipo: 'Paciente',
-    entidadIdResponse: 'pacienteServicio.paciente.id',
   })
   create(@Body() createHistoriaClinicaDto: CreateHistoriaClinicaDto) {
     return this.historiaClinicaService.create(createHistoriaClinicaDto);
@@ -49,8 +47,6 @@ export class HistoriaClinicaController {
   @Auditable({
     modulo: 'PACIENTES',
     accion: 'EDITAR_HISTORIA_CLINICA',
-    entidadTipo: 'Paciente',
-    entidadIdResponse: 'pacienteServicio.paciente.id',
   })
   update(@Param('id') id: string, @Body() updateHistoriaClinicaDto: Partial<CreateHistoriaClinicaDto>) {
     return this.historiaClinicaService.update(+id, updateHistoriaClinicaDto);

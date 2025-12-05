@@ -61,13 +61,13 @@ export class VacacionesController {
 
   /**
    * DELETE /vacaciones/:id
-   * Elimina una vacación
+   * DESHABILITADO: No se permite eliminar vacaciones registradas
    */
-  @Delete(':id')
-  async remove(@Param('id', ParseIntPipe) id: number) {
-    await this.vacacionesService.remove(id);
-    return { message: 'Vacación eliminada correctamente' };
-  }
+  // @Delete(':id')
+  // async remove(@Param('id', ParseIntPipe) id: number) {
+  //   await this.vacacionesService.remove(id);
+  //   return { message: 'Vacación eliminada correctamente' };
+  // }
 
   // En vacaciones.controller.ts - agregar esta ruta
 @Get('alertas/primer-anio')

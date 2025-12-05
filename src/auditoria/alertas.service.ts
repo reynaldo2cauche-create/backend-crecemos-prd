@@ -15,6 +15,8 @@ export class AlertasService {
     private alertaRepository: Repository<AlertaSistema>,
     @InjectRepository(ConfiguracionAlerta)
     private configRepository: Repository<ConfiguracionAlerta>,
+    @InjectRepository(AuditoriaAccion)
+    private auditoriaRepository: Repository<AuditoriaAccion>,
     private auditoriaService: AuditoriaService,
   ) {}
 
@@ -67,7 +69,7 @@ export class AlertasService {
    * Evalúa si se superó un umbral de cantidad de acciones
    */
   private async evaluarUmbralCantidad(condicion: any, auditoria: AuditoriaAccion): Promise<boolean> {
-    const { limite, ventana_minutos, accion, metodo_http } = condicion;
+    const { limite, ventana_minutos, accion } = condicion;
 
     let contador = 0;
 
@@ -78,13 +80,12 @@ export class AlertasService {
         accion,
         ventana_minutos,
       );
-    } else if (metodo_http) {
-      // Contar por método HTTP (ej: DELETE)
+    } else {
+      // Contar todas las acciones en la ventana de tiempo
       const fechaInicio = new Date(Date.now() - ventana_minutos * 60 * 1000);
-      contador = await this.auditoriaService['auditoriaRepository']
+      contador = await this.auditoriaRepository
         .createQueryBuilder('auditoria')
         .where('auditoria.trabajadorId = :trabajadorId', { trabajadorId: auditoria.trabajadorId })
-        .andWhere('auditoria.metodoHttp = :metodo_http', { metodo_http })
         .andWhere('auditoria.fechaHora >= :fechaInicio', { fechaInicio })
         .getCount();
     }
@@ -99,14 +100,16 @@ export class AlertasService {
     const { hora_inicio, hora_fin } = condicion;
     const hora = auditoria.fechaHora.getHours();
     const minutos = auditoria.fechaHora.getMinutes();
-    const horaActual = `${hora.toString().padStart(2, '0')}:${minutos.toString().padStart(2, '0')}:00`;
 
     // Convertir a números para comparación
     const horaActualNum = hora * 100 + minutos;
     const horaInicioNum = parseInt(hora_inicio.split(':')[0]) * 100 + parseInt(hora_inicio.split(':')[1]);
     const horaFinNum = parseInt(hora_fin.split(':')[0]) * 100 + parseInt(hora_fin.split(':')[1]);
 
-    return Promise.resolve(horaActualNum >= horaInicioNum && horaActualNum <= horaFinNum);
+    // Está FUERA del horario permitido si es menor al inicio O mayor al fin
+    const estaFueraHorario = horaActualNum < horaInicioNum || horaActualNum > horaFinNum;
+
+    return Promise.resolve(estaFueraHorario);
   }
 
   /**
@@ -118,9 +121,9 @@ export class AlertasService {
     if (auditoria.modulo !== modulo) return Promise.resolve(false);
     if (accion && auditoria.accion !== accion) return Promise.resolve(false);
 
-    // Verificar si el campo fue modificado
-    if (campo && auditoria.datosAnteriores && auditoria.datosNuevos) {
-      const campoModificado = auditoria.datosAnteriores[campo] !== auditoria.datosNuevos[campo];
+    // Verificar si el campo existe en datosNuevos (ya no tenemos datosAnteriores)
+    if (campo && auditoria.datosNuevos) {
+      const campoModificado = auditoria.datosNuevos[campo] !== undefined;
       return Promise.resolve(campoModificado);
     }
 
@@ -129,10 +132,12 @@ export class AlertasService {
 
   /**
    * Evalúa si el código de respuesta coincide (ej: 403 - Acceso denegado)
+   * NOTA: Esta funcionalidad ya no está disponible porque eliminamos la columna codigoRespuesta
    */
   private evaluarCodigoRespuesta(condicion: any, auditoria: AuditoriaAccion): Promise<boolean> {
-    const { codigo } = condicion;
-    return Promise.resolve(auditoria.codigoRespuesta === codigo);
+    // Ya no existe la columna codigoRespuesta, esta evaluación siempre retorna false
+    this.logger.warn('⚠️ Evaluación de código de respuesta deshabilitada (columna eliminada)');
+    return Promise.resolve(false);
   }
 
   /**
@@ -141,11 +146,16 @@ export class AlertasService {
   private async crearAlerta(config: ConfiguracionAlerta, auditoria: AuditoriaAccion): Promise<void> {
     const mensaje = this.generarMensajeAlerta(config, auditoria);
 
+    // Obtener nombre del trabajador desde la relación
+    const nombreTrabajador = auditoria.trabajador 
+      ? `${auditoria.trabajador.nombres} ${auditoria.trabajador.apellidos}` 
+      : 'Usuario desconocido';
+
     const alerta = this.alertaRepository.create({
       tipo: config.tipoAlerta,
       severidad: config.severidad,
       trabajadorId: auditoria.trabajadorId,
-      trabajadorNombre: auditoria.trabajadorNombre,
+      trabajadorNombre: nombreTrabajador,
       titulo: config.nombre,
       mensaje,
       contexto: {
@@ -168,18 +178,24 @@ export class AlertasService {
   private generarMensajeAlerta(config: ConfiguracionAlerta, auditoria: AuditoriaAccion): string {
     const { condicionTipo, condicionValor } = config;
 
+    // Obtener nombre del trabajador desde la relación
+    const nombreTrabajador = auditoria.trabajador 
+      ? `${auditoria.trabajador.nombres} ${auditoria.trabajador.apellidos}` 
+      : 'Usuario desconocido';
+
     switch (condicionTipo) {
       case 'UMBRAL_CANTIDAD':
-        return `${auditoria.trabajadorNombre} realizó ${condicionValor.limite} acciones de tipo "${condicionValor.accion || condicionValor.metodo_http}" en ${condicionValor.ventana_minutos} minutos. Última acción: ${auditoria.descripcion}`;
+        const tipoAccion = condicionValor.accion || 'cualquier acción';
+        return `${nombreTrabajador} realizó ${condicionValor.limite} acciones de tipo "${tipoAccion}" en ${condicionValor.ventana_minutos} minutos. Última acción: ${auditoria.descripcion}`;
 
       case 'HORARIO':
-        return `${auditoria.trabajadorNombre} accedió al sistema fuera del horario permitido (${condicionValor.hora_inicio} - ${condicionValor.hora_fin}). Acción: ${auditoria.descripcion}`;
+        return `${nombreTrabajador} accedió al sistema fuera del horario permitido (${condicionValor.hora_inicio} - ${condicionValor.hora_fin}). Acción: ${auditoria.descripcion}`;
 
       case 'CAMPO_CRITICO':
-        return `${auditoria.trabajadorNombre} modificó el campo crítico "${condicionValor.campo}". ${auditoria.descripcion}`;
+        return `${nombreTrabajador} modificó el campo crítico "${condicionValor.campo}". ${auditoria.descripcion}`;
 
       case 'CODIGO_RESPUESTA':
-        return `${auditoria.trabajadorNombre} intentó realizar una acción no autorizada. Código: ${condicionValor.codigo}. ${auditoria.descripcion}`;
+        return `${nombreTrabajador} - acción registrada. ${auditoria.descripcion}`;
 
       default:
         return auditoria.descripcion;

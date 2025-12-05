@@ -23,7 +23,6 @@ export class PacienteController {
   @Auditable({
     modulo: 'PACIENTES',
     accion: 'CREAR_PACIENTE',
-    entidadTipo: 'Paciente',
   })
   createCompleto(@Body() dto: CreatePacienteCompletoDto) {
     return this.pacienteService.createCompleto(dto);
@@ -111,8 +110,6 @@ async findAllIncludingInactive(@Query() query: any) {
   @Auditable({
     modulo: 'PACIENTES',
     accion: 'EDITAR_PACIENTE',
-    entidadTipo: 'Paciente',
-    entidadIdResponse: 'id',
   })
   update(@Param('id') id: string, @Body() dto: UpdatePacienteDto) {
     return this.pacienteService.update(+id, dto);
@@ -123,8 +120,6 @@ async findAllIncludingInactive(@Query() query: any) {
     @Auditable({
       modulo: 'PACIENTES',
       accion: 'VER_PACIENTE',
-      entidadTipo: 'Paciente',
-      entidadIdParam: 'id',
   })
   findOne(@Param('id') id: string) {
     return this.pacienteService.findOneById(+id);
@@ -134,8 +129,6 @@ async findAllIncludingInactive(@Query() query: any) {
   @Auditable({
     modulo: 'PACIENTES',
     accion: 'CAMBIAR_ESTADO_PACIENTE',
-    entidadTipo: 'Paciente',
-    entidadIdParam: 'id',
   })
   updateEstado(@Param('id') id: string, @Body() dto: UpdateEstadoPacienteDto) {
     return this.pacienteService.updateEstado(+id, dto);
@@ -145,8 +138,6 @@ async findAllIncludingInactive(@Query() query: any) {
   @Auditable({
     modulo: 'PACIENTES',
     accion: 'CAMBIAR_VISIBILIDAD_PACIENTE',
-    entidadTipo: 'Paciente',
-    entidadIdParam: 'id',
   })
   controlarVisibilidad(
     @Param('id') id: string,

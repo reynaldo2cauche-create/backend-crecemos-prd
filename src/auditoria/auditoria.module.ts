@@ -20,6 +20,6 @@ import { AuditoriaInterceptor } from './auditoria.interceptor';
   ],
   controllers: [AuditoriaController],
   providers: [AuditoriaService, AlertasService, AuditoriaInterceptor],
-  exports: [AuditoriaService, AlertasService, AuditoriaInterceptor],
+  exports: [AuditoriaService, AlertasService, AuditoriaInterceptor,TypeOrmModule,],
 })
 export class AuditoriaModule {}

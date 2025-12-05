@@ -10,36 +10,25 @@ export class Vacacion {
   @JoinColumn({ name: 'trabajador_id' })
   empleado: TrabajadorCentro;
 
-  @Column({ type: 'date', name: 'fechaInicio' })
-  fechaSalida: Date;
+  @Column({ type: 'date' })
+  fecha_inicio: Date;
 
-  @Column({ type: 'date', name: 'fechaFin' })
-  fechaRegreso: Date;
-
-  @Column()
-  diasTomados: number;
+  @Column({ type: 'date' })
+  fecha_fin: Date;
 
   @Column()
-  periodoAnio: number;
-
-  @Column({ default: 'pendiente' })
-  estado: string;
+  dias_tomados: number;
 
   @Column({ nullable: true })
   observaciones: string;
 
-  @Column({ nullable: true })
-  aprobadoPor: number;
+  @ManyToOne(() => TrabajadorCentro, { eager: true, nullable: true })
+  @JoinColumn({ name: 'user_id_crea' })
+  usuarioCrea: TrabajadorCentro;
 
-  @Column({ type: 'date', nullable: true })
-  fechaAprobacion: Date;
-
-  // ✅ NUEVOS CAMPOS: Usuario que crea/actualiza el registro de vacaciones
-  @Column({ nullable: true, name: 'user_id_crea' })
-  userIdCrea: number;
-
-  @Column({ nullable: true, name: 'user_id_actua' })
-  userIdActua: number;
+  @ManyToOne(() => TrabajadorCentro, { eager: true, nullable: true })
+  @JoinColumn({ name: 'user_id_actua' })
+  usuarioActualiza: TrabajadorCentro;
 
   @Column({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' })
   created_at: Date;

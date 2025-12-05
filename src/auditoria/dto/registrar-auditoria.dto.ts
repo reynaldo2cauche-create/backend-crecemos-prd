@@ -1,19 +1,26 @@
+import { IsInt, IsString, IsOptional } from 'class-validator';
+
 export class RegistrarAuditoriaDto {
+  @IsInt()
   trabajadorId: number;
-  trabajadorNombre: string;
-  trabajadorUsername: string;
-  trabajadorRol?: string;
+
+  @IsString()
   accion: string;
+
+  @IsString()
   modulo: string;
-  entidadTipo?: string;
-  entidadId?: number;
-  entidadNombre?: string;
+
+  @IsString()
   descripcion: string;
-  datosAnteriores?: any;
+
+  @IsOptional()
   datosNuevos?: any;
+
+  @IsOptional()
+  @IsString()
   ipAddress?: string;
+
+  @IsOptional()
+  @IsString()
   userAgent?: string;
-  metodoHttp?: string;
-  endpoint?: string;
-  codigoRespuesta?: number;
 }

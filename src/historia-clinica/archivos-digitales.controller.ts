@@ -42,8 +42,6 @@ export class ArchivosDigitalesController {
   @Auditable({
     modulo: 'ARCHIVOS_DIGITALES',
     accion: 'SUBIR_ARCHIVO',
-    entidadTipo: 'Paciente',
-    entidadIdResponse: 'paciente.id',
   })
   @UseInterceptors(FileInterceptor('archivo', {
     storage: undefined, // Usaremos manejo manual del archivo
@@ -223,22 +221,18 @@ export class ArchivosDigitalesController {
 
       await this.auditoriaService.registrar({
         trabajadorId: userCompleto.id,
-        trabajadorNombre: `${userCompleto.nombres} ${userCompleto.apellidos}`,
-        trabajadorUsername: userCompleto.username,
-        trabajadorRol: userCompleto.rol?.nombre || 'Sin rol',
+
         accion: 'ABRIR_ARCHIVO',
         modulo: 'ARCHIVOS_DIGITALES',
-        entidadTipo: 'Paciente',
-        entidadId: archivoDigital.paciente.id,
-        entidadNombre: nombrePaciente,
+      
+     
+
         descripcion: `Abrió archivo digital del paciente ${nombrePaciente}`,
-        datosAnteriores: null,
+
         datosNuevos: { archivoId: archivoDigital.id, nombreArchivo: archivoDigital.nombreOriginal },
         ipAddress: req.ip,
         userAgent: req.headers['user-agent'],
-        metodoHttp: 'GET',
-        endpoint: req.url,
-        codigoRespuesta: 200,
+  
       });
     }
 
@@ -277,22 +271,20 @@ export class ArchivosDigitalesController {
 
       await this.auditoriaService.registrar({
         trabajadorId: userCompleto.id,
-        trabajadorNombre: `${userCompleto.nombres} ${userCompleto.apellidos}`,
-        trabajadorUsername: userCompleto.username,
-        trabajadorRol: userCompleto.rol?.nombre || 'Sin rol',
+      
+
         accion: 'DESCARGAR_ARCHIVO',
         modulo: 'ARCHIVOS_DIGITALES',
-        entidadTipo: 'Paciente',
-        entidadId: archivoDigital.paciente.id,
-        entidadNombre: nombrePaciente,
+
+      
         descripcion: `Descargó archivo digital del paciente ${nombrePaciente}`,
-        datosAnteriores: null,
+     
         datosNuevos: { archivoId: archivoDigital.id, nombreArchivo: archivoDigital.nombreOriginal },
         ipAddress: req.ip,
         userAgent: req.headers['user-agent'],
-        metodoHttp: 'GET',
-        endpoint: req.url,
-        codigoRespuesta: 200,
+      
+  
+
       });
     }
 
@@ -324,8 +316,6 @@ export class ArchivosDigitalesController {
   @Auditable({
     modulo: 'ARCHIVOS_DIGITALES',
     accion: 'ELIMINAR_ARCHIVO',
-    entidadTipo: 'Paciente',
-    entidadIdResponse: 'paciente.id',
   })
   async remove(@Param('id') id: string) {
     const numericId = parseInt(id);

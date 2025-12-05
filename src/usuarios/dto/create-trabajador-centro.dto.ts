@@ -96,8 +96,4 @@ export class CreateTrabajadorCentroDto {
   @IsOptional()
   @IsString()
   banco?: string;
-  // ✅ NUEVO: Campo para marcar perfil completo
-  @IsOptional()
-  @IsBoolean()
-  perfil_completo?: boolean;
 } 

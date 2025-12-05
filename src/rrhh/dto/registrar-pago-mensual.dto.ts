@@ -1,5 +1,5 @@
 // src/rrhh/dto/registrar-pago-mensual.dto.ts
-import { IsInt, IsNumber, IsString, Min, IsDateString, IsOptional } from 'class-validator';
+import { IsInt, IsNumber, Min, IsDateString, IsOptional } from 'class-validator';
 
 export class RegistrarPagoMensualDto {
   @IsInt()
@@ -10,8 +10,9 @@ export class RegistrarPagoMensualDto {
   @Min(0)
   monto: number;
 
-  @IsString()
-  mes: string; // enero, febrero, etc.
+  @IsInt()
+  @Min(1)
+  mesId: number; // ID del mes (1-12)
 
   @IsInt()
   anio: number;

@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Between, Like } from 'typeorm';
+import { Repository } from 'typeorm';
 import { AuditoriaAccion } from './auditoria-accion.entity';
 import { TrabajadorCentro } from '../usuarios/trabajador-centro.entity';
 import { RegistrarAuditoriaDto } from './dto/registrar-auditoria.dto';
@@ -86,8 +86,6 @@ export class AuditoriaService {
       trabajadorId,
       modulo,
       accion,
-      entidadTipo,
-      entidadId,
       fechaInicio,
       fechaFin,
       busqueda,
@@ -97,7 +95,8 @@ export class AuditoriaService {
 
     const queryBuilder = this.auditoriaRepository
       .createQueryBuilder('auditoria')
-      .leftJoinAndSelect('auditoria.trabajador', 'trabajador');
+      .leftJoinAndSelect('auditoria.trabajador', 'trabajador')
+      .leftJoinAndSelect('trabajador.rol', 'rol');
 
     // Filtros
     if (trabajadorId) {
@@ -110,14 +109,6 @@ export class AuditoriaService {
 
     if (accion) {
       queryBuilder.andWhere('auditoria.accion = :accion', { accion });
-    }
-
-    if (entidadTipo) {
-      queryBuilder.andWhere('auditoria.entidadTipo = :entidadTipo', { entidadTipo });
-    }
-
-    if (entidadId) {
-      queryBuilder.andWhere('auditoria.entidadId = :entidadId', { entidadId });
     }
 
     if (fechaInicio && fechaFin) {
@@ -133,7 +124,7 @@ export class AuditoriaService {
 
     if (busqueda) {
       queryBuilder.andWhere(
-        '(auditoria.descripcion LIKE :busqueda OR auditoria.trabajadorNombre LIKE :busqueda OR auditoria.entidadNombre LIKE :busqueda)',
+        '(auditoria.descripcion LIKE :busqueda OR trabajador.nombres LIKE :busqueda OR trabajador.apellidos LIKE :busqueda OR trabajador.username LIKE :busqueda)',
         { busqueda: `%${busqueda}%` },
       );
     }
@@ -157,86 +148,90 @@ export class AuditoriaService {
   }
 
   /**
-   * Obtiene el historial de una entidad específica
-   */
-  async obtenerHistorialEntidad(entidadTipo: string, entidadId: number) {
-    return this.auditoriaRepository.find({
-      where: { entidadTipo, entidadId },
-      order: { fechaHora: 'DESC' },
-      take: 100,
-    });
-  }
-
-  /**
    * Obtiene estadísticas de auditoría
    */
-/**
- * Obtiene estadísticas de auditoría
- */
-async obtenerEstadisticas(fechaInicio?: Date, fechaFin?: Date) {
-  const queryBuilder = this.auditoriaRepository.createQueryBuilder('auditoria');
+  async obtenerEstadisticas(fechaInicio?: Date, fechaFin?: Date) {
+    const queryBuilder = this.auditoriaRepository.createQueryBuilder('auditoria');
 
-  if (fechaInicio && fechaFin) {
-    queryBuilder.where('auditoria.fechaHora BETWEEN :fechaInicio AND :fechaFin', {
-      fechaInicio,
-      fechaFin,
-    });
+    if (fechaInicio && fechaFin) {
+      queryBuilder.where('auditoria.fechaHora BETWEEN :fechaInicio AND :fechaFin', {
+        fechaInicio,
+        fechaFin,
+      });
+    }
+
+    const [
+      totalAcciones,
+      accionesPorModulo,
+      accionesPorUsuario,
+      accionesPorTipo,
+    ] = await Promise.all([
+      // Total de acciones
+      queryBuilder.getCount(),
+
+      // Acciones por módulo
+      this.auditoriaRepository
+        .createQueryBuilder('auditoria')
+        .select('auditoria.modulo', 'modulo')
+        .addSelect('COUNT(*)', 'total')
+        .where(fechaInicio && fechaFin ? 'auditoria.fechaHora BETWEEN :fechaInicio AND :fechaFin' : '1=1', {
+          fechaInicio,
+          fechaFin,
+        })
+        .groupBy('auditoria.modulo')
+        .orderBy('total', 'DESC')
+        .getRawMany(),
+
+      // Acciones por usuario (top 10) - CON JOIN
+      this.auditoriaRepository
+        .createQueryBuilder('auditoria')
+        .leftJoin('auditoria.trabajador', 'trabajador')
+        .select('auditoria.trabajadorId', 'trabajadorId')
+        .addSelect("CONCAT(trabajador.nombres, ' ', trabajador.apellidos)", 'usuario')
+        .addSelect('trabajador.username', 'username')
+        .addSelect('COUNT(*)', 'total')
+        .where(fechaInicio && fechaFin ? 'auditoria.fechaHora BETWEEN :fechaInicio AND :fechaFin' : '1=1', {
+          fechaInicio,
+          fechaFin,
+        })
+        .groupBy('auditoria.trabajadorId')
+        .addGroupBy('trabajador.nombres')
+        .addGroupBy('trabajador.apellidos')
+        .addGroupBy('trabajador.username')
+        .orderBy('total', 'DESC')
+        .limit(10)
+        .getRawMany(),
+
+      // Acciones por tipo
+      this.auditoriaRepository
+        .createQueryBuilder('auditoria')
+        .select('auditoria.accion', 'accion')
+        .addSelect('COUNT(*)', 'total')
+        .where(fechaInicio && fechaFin ? 'auditoria.fechaHora BETWEEN :fechaInicio AND :fechaFin' : '1=1', {
+          fechaInicio,
+          fechaFin,
+        })
+        .groupBy('auditoria.accion')
+        .orderBy('total', 'DESC')
+        .limit(10)
+        .getRawMany(),
+    ]);
+
+    return {
+      totalAcciones,
+      accionesPorModulo,
+      accionesPorUsuario,
+      accionesPorTipo,
+    };
   }
 
-  const [
-    totalAcciones,
-    accionesPorModulo,
-    accionesPorUsuario,
-    accionesPorTipo,
-  ] = await Promise.all([
-    // Total de acciones
-    queryBuilder.getCount(),
-
-    // Acciones por módulo
-    this.auditoriaRepository
-      .createQueryBuilder('auditoria')
-      .select('auditoria.modulo', 'modulo')
-      .addSelect('COUNT(*)', 'total')
-      .groupBy('auditoria.modulo')
-      .orderBy('total', 'DESC')
-      .getRawMany(),
-
-    // Acciones por usuario (top 10) - 👇 CORREGIDO
-    this.auditoriaRepository
-      .createQueryBuilder('auditoria')
-      .select('auditoria.trabajadorId', 'trabajadorId')
-      .addSelect('auditoria.trabajadorNombre', 'usuario')  // 👈 Agregado al GROUP BY implícitamente
-      .addSelect('COUNT(*)', 'total')
-      .groupBy('auditoria.trabajadorId')
-      .addGroupBy('auditoria.trabajadorNombre')  // 👈 AGREGADO
-      .orderBy('total', 'DESC')
-      .limit(10)
-      .getRawMany(),
-
-    // Acciones por tipo
-    this.auditoriaRepository
-      .createQueryBuilder('auditoria')
-      .select('auditoria.accion', 'accion')
-      .addSelect('COUNT(*)', 'total')
-      .groupBy('auditoria.accion')
-      .orderBy('total', 'DESC')
-      .limit(10)
-      .getRawMany(),
-  ]);
-
-  return {
-    totalAcciones,
-    accionesPorModulo,
-    accionesPorUsuario,
-    accionesPorTipo,
-  };
-}
   /**
    * Obtiene actividad reciente de un usuario
    */
   async obtenerActividadUsuario(trabajadorId: number, limite: number = 20) {
     return this.auditoriaRepository.find({
       where: { trabajadorId },
+      relations: ['trabajador', 'trabajador.rol'],
       order: { fechaHora: 'DESC' },
       take: limite,
     });
@@ -271,7 +266,7 @@ async obtenerEstadisticas(fechaInicio?: Date, fechaFin?: Date) {
     return this.auditoriaRepository.find({
       order: { fechaHora: 'DESC' },
       take: limite,
-      relations: ['trabajador'],
+      relations: ['trabajador', 'trabajador.rol'],
     });
   }
 }

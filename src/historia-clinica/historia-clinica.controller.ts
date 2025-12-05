@@ -25,8 +25,6 @@ export class HistoriaClinicaController {
   @Auditable({
       modulo: 'HISTORIA_CLINICA',
       accion: 'CREAR_REPORTE_EVOLUCION',
-      entidadTipo: 'Paciente',
-      entidadIdBody: 'paciente_id',  // 🎯 Toma el ID del paciente, no del reporte creado
     })
   @Post('reporte-evolucion')
   createReporteEvolucion(@Body() createReporteDto: CreateReporteEvolucionDto): Promise<ReporteEvolucion> {
@@ -36,8 +34,6 @@ export class HistoriaClinicaController {
   @Auditable({
     modulo: 'HISTORIA_CLINICA',
     accion: 'CREAR_ENTREVISTA_PADRES',
-    entidadTipo: 'Paciente',
-    entidadIdBody: 'paciente_id',  // 🎯 Toma el ID del paciente del body
   })
   @Post('entrevista-padres')
   createEntrevistaPadres(@Body() createEntrevistaDto: CreateEntrevistaPadresDto): Promise<EntrevistaPadres> {
@@ -57,8 +53,6 @@ export class HistoriaClinicaController {
   @Auditable({
     modulo: 'HISTORIA_CLINICA',
     accion: 'EDITAR_ENTREVISTA_PADRES',
-    entidadTipo: 'Paciente',
-    entidadIdResponse: 'pacienteId',  // 🎯 Toma el ID del paciente de la respuesta
   })
   @Put('entrevista-padres/:id')
   updateEntrevistaPadres(
@@ -76,8 +70,6 @@ export class HistoriaClinicaController {
   @Auditable({
     modulo: 'HISTORIA_CLINICA',
     accion: 'EDITAR_REPORTE_EVOLUCION',
-    entidadTipo: 'Paciente',
-    entidadIdResponse: 'pacienteId',  // 🎯 Toma el ID del paciente de la respuesta
   })
   @Put('reporte-evolucion/:id')
   updateReporteEvolucion(
@@ -91,8 +83,6 @@ export class HistoriaClinicaController {
   @Auditable({
     modulo: 'HISTORIA_CLINICA',
     accion: 'CREAR_EVALUACION_TERAPIA',
-    entidadTipo: 'Paciente',
-    entidadIdBody: 'paciente_id',  // 🎯 Toma el ID del paciente del body
   })
   @Post('evaluacion-terapia')
   createEvaluacionTerapia(@Body() createEvaluacionDto: CreateEvaluacionTerapiaDto): Promise<EvaluacionTerapiaOcupacional> {
@@ -112,8 +102,6 @@ export class HistoriaClinicaController {
   @Auditable({
     modulo: 'HISTORIA_CLINICA',
     accion: 'EDITAR_EVALUACION_TERAPIA',
-    entidadTipo: 'Paciente',
-    entidadIdResponse: 'pacienteId',  // 🎯 Toma el ID del paciente de la respuesta
   })
   @Put('evaluacion-terapia/:id')
   updateEvaluacionTerapia(

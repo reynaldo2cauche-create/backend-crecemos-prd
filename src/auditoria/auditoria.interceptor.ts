@@ -8,8 +8,11 @@ import {
 import { Observable, throwError } from 'rxjs';
 import { tap, catchError } from 'rxjs/operators';
 import { Reflector } from '@nestjs/core';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 import { AuditoriaService } from './auditoria.service';
 import { AlertasService } from './alertas.service';
+import { AuditoriaAccion } from './auditoria-accion.entity';
 import { AUDITABLE_KEY, AuditableMetadata } from './decorators/auditable.decorator';
 
 @Injectable()
@@ -22,6 +25,8 @@ export class AuditoriaInterceptor implements NestInterceptor {
     private readonly reflector: Reflector,
     private readonly auditoriaService: AuditoriaService,
     private readonly alertasService: AlertasService,
+    @InjectRepository(AuditoriaAccion)
+    private readonly auditoriaRepository: Repository<AuditoriaAccion>,
   ) {
     // Limpiar cache periódicamente
     setInterval(() => {
@@ -49,23 +54,20 @@ export class AuditoriaInterceptor implements NestInterceptor {
       return next.handle();
     }
 
-    // 🔥 OBTENER USUARIO - AHORA FUNCIONA PARA TODOS
+    // 🔥 OBTENER USUARIO
     const user = request.user;
 
-    // 🚨 SI NO HAY USUARIO, SIMPLEMENTE NO AUDITAR (endpoints públicos o sin auth)
-    // Pero TODOS los endpoints con @Auditable deberían tener autenticación
+    // 🚨 SI NO HAY USUARIO, SIMPLEMENTE NO AUDITAR
     if (!user) {
       this.logger.warn(`Intento de auditar sin usuario en: ${request.url}`);
       return next.handle();
     }
 
     // 🛡️ PROTECCIÓN CONTRA REGISTROS DUPLICADOS
-    // Generar una clave única para este request basada en usuario, acción, endpoint y tiempo
     const requestKey = `${user.id}-${metadata.accion}-${metadata.modulo}-${request.url}-${request.method}`;
     const now = Date.now();
     const lastRequestTime = this.requestCache.get(requestKey);
 
-    // Si ya existe un registro reciente (dentro de CACHE_TTL), no auditar
     if (lastRequestTime && (now - lastRequestTime) < this.CACHE_TTL) {
       this.logger.debug(`⏭️ Request duplicado detectado y omitido: ${requestKey}`);
       return next.handle();
@@ -85,8 +87,6 @@ export class AuditoriaInterceptor implements NestInterceptor {
     }, null, 2));
 
     // Obtener información de la petición
-    const metodoHttp = request.method;
-    const endpoint = request.url;
     const ipAddress = this.obtenerIPReal(request);
     const userAgent = request.headers['user-agent'];
 
@@ -103,46 +103,39 @@ export class AuditoriaInterceptor implements NestInterceptor {
           // 🔧 COMPLETAR DATOS DEL USUARIO si no vienen en el token
           const userCompleto = await this.auditoriaService.completarDatosUsuario(user);
 
-          // Extraer información de la entidad afectada
-          const entidadInfo = this.extraerInfoEntidad(metadata, request, responseData);
-
           // Generar descripción legible
           const descripcion = this.generarDescripcion(
             metadata,
             userCompleto,
-            entidadInfo,
-            metodoHttp,
+            request,
+            responseData,
           );
 
-          // 🔥 REGISTRAR AUDITORÍA - ESTO SE EJECUTA PARA TODOS LOS USUARIOS
-          this.logger.debug(`📝 Registrando auditoría: ${metadata.accion} - Entidad: ${entidadInfo.id} "${entidadInfo.nombre}"`);
+          // 🔥 REGISTRAR AUDITORÍA (sin campos eliminados)
+          this.logger.debug(`📝 Registrando auditoría: ${metadata.accion}`);
 
           await this.auditoriaService.registrar({
             trabajadorId: userCompleto.id,
-            trabajadorNombre: `${userCompleto.nombres} ${userCompleto.apellidos}`,
-            trabajadorUsername: userCompleto.username,
-            trabajadorRol: userCompleto.rol?.nombre || 'Sin rol',
             accion: metadata.accion,
             modulo: metadata.modulo,
-            entidadTipo: metadata.entidadTipo || null,
-            entidadId: entidadInfo.id,
-            entidadNombre: entidadInfo.nombre,
             descripcion,
-            datosAnteriores: null,
             datosNuevos,
             ipAddress,
             userAgent,
-            metodoHttp,
-            endpoint,
-            codigoRespuesta: response.statusCode,
           });
 
           // Evaluar y generar alertas si es necesario
           setImmediate(async () => {
             try {
-              const ultimasAcciones = await this.auditoriaService.obtenerActividadUsuario(user.id, 1);
-              if (ultimasAcciones.length > 0) {
-                await this.alertasService.evaluarYGenerarAlertas(ultimasAcciones[0]);
+              // Obtener la última auditoría CON la relación trabajador cargada
+              const ultimaAuditoria = await this.auditoriaRepository.findOne({
+                where: { trabajadorId: userCompleto.id },
+                order: { fechaHora: 'DESC' },
+                relations: ['trabajador'], // 👈 CRÍTICO para que funcione AlertasService
+              });
+
+              if (ultimaAuditoria) {
+                await this.alertasService.evaluarYGenerarAlertas(ultimaAuditoria);
               }
             } catch (error) {
               this.logger.error('Error al evaluar alertas:', error);
@@ -164,28 +157,18 @@ export class AuditoriaInterceptor implements NestInterceptor {
         const descripcion = this.generarDescripcion(
           metadata,
           userCompleto,
-          { id: null, nombre: null },
-          metodoHttp,
+          request,
+          null,
         );
 
         this.auditoriaService.registrar({
           trabajadorId: userCompleto.id,
-          trabajadorNombre: `${userCompleto.nombres} ${userCompleto.apellidos}`,
-          trabajadorUsername: userCompleto.username,
-          trabajadorRol: userCompleto.rol?.nombre || 'Sin rol',
           accion: metadata.accion,
           modulo: metadata.modulo,
-          entidadTipo: metadata.entidadTipo || null,
-          entidadId: null,
-          entidadNombre: null,
           descripcion: `${descripcion} - ERROR: ${error.message}`,
-          datosAnteriores: null,
           datosNuevos,
-          ipAddress,
-          userAgent,
-          metodoHttp,
-          endpoint,
-          codigoRespuesta: error.status || 500,
+          ipAddress: this.obtenerIPReal(request),
+          userAgent: request.headers['user-agent'],
         });
 
         return throwError(() => error);
@@ -194,94 +177,49 @@ export class AuditoriaInterceptor implements NestInterceptor {
   }
 
   /**
-   * Extrae información de la entidad afectada
+   * Extrae el nombre del paciente de la respuesta o request
    */
-  private extraerInfoEntidad(
-    metadata: AuditableMetadata,
-    request: any,
-    responseData: any,
-  ): { id: number | null; nombre: string | null } {
-    let id: number | null = null;
-    let nombre: string | null = null;
+  private extraerNombrePaciente(request: any, responseData: any): string {
+    // Función helper para construir nombre completo
+    const construirNombreCompleto = (obj: any): string | null => {
+      if (!obj) return null;
 
-    // 1️⃣ Prioridad: Si se especificó entidadIdParam, buscar en params
-    if (metadata.entidadIdParam && request.params?.[metadata.entidadIdParam]) {
-      id = parseInt(request.params[metadata.entidadIdParam]);
-    }
-    // 2️⃣ Si se especificó entidadIdBody, buscar en body
-    else if (metadata.entidadIdBody && request.body?.[metadata.entidadIdBody]) {
-      id = parseInt(request.body[metadata.entidadIdBody]);
-    }
-    // 3️⃣ Si se especificó entidadIdResponse, buscar en respuesta (soporta rutas anidadas)
-    else if (metadata.entidadIdResponse && responseData) {
-      id = this.obtenerValorAnidado(responseData, metadata.entidadIdResponse);
-    }
-    // 4️⃣ Comportamiento por defecto: buscar en params.id o responseData.id
-    else {
-      if (request.params?.id) {
-        id = parseInt(request.params.id);
-      }
-      if (!id && responseData?.id) {
-        id = responseData.id;
-      }
-    }
+      // Si ya viene nombre_completo
+      if (obj.nombre_completo) return obj.nombre_completo;
 
-    // Extraer el nombre según el tipo de entidad
-    if (metadata.entidadTipo === 'Paciente') {
-      // Función auxiliar para construir el nombre completo
-      const construirNombreCompleto = (obj: any) => {
-        if (obj?.nombre_completo) return obj.nombre_completo;
+      // Construir desde nombres y apellidos
+      if (obj.nombres) {
+        const apellidos = obj.apellidos ||
+                         (obj.apellido_paterno || obj.apellido_materno
+                           ? `${obj.apellido_paterno || ''} ${obj.apellido_materno || ''}`.trim()
+                           : null);
 
-        if (obj?.nombres) {
-          // Probar diferentes combinaciones de apellidos
-          const apellidos = obj.apellidos ||
-                          (obj.apellido_paterno || obj.apellido_materno
-                            ? `${obj.apellido_paterno || ''} ${obj.apellido_materno || ''}`.trim()
-                            : null);
-
-          if (apellidos) {
-            return `${obj.nombres} ${apellidos}`;
-          }
+        if (apellidos) {
+          return `${obj.nombres} ${apellidos}`;
         }
-        return null;
-      };
-
-      // 1. Intentar desde el responseData directo (para GET /pacientes/:id, PATCH /pacientes/:id)
-      nombre = construirNombreCompleto(responseData);
-
-      // 2. Si no, buscar en responseData.paciente (para servicios, asignaciones)
-      if (!nombre && responseData?.paciente) {
-        nombre = construirNombreCompleto(responseData.paciente);
+        return obj.nombres;
       }
 
-      // 3. Si no, buscar en responseData.pacienteServicio.paciente (para historia clínica)
-      if (!nombre && responseData?.pacienteServicio?.paciente) {
-        nombre = construirNombreCompleto(responseData.pacienteServicio.paciente);
-      }
-    } else if (metadata.entidadTipo === 'TrabajadorCentro') {
-      nombre = responseData?.nombres && responseData?.apellidos
-        ? `${responseData.nombres} ${responseData.apellidos}`
-        : null;
-    } else if (metadata.entidadTipo === 'Cita') {
-      nombre = responseData?.motivo || `Cita #${id}`;
-    } else if (responseData?.nombre) {
-      nombre = responseData.nombre;
-    }
-
-    return { id, nombre };
-  }
-
-  /**
-   * Obtiene un valor anidado de un objeto usando notación de puntos
-   * Ej: obtenerValorAnidado(obj, 'paciente.id') -> obj.paciente.id
-   */
-  private obtenerValorAnidado(obj: any, path: string): number | null {
-    try {
-      const valor = path.split('.').reduce((o, key) => o?.[key], obj);
-      return valor ? parseInt(valor) : null;
-    } catch {
       return null;
-    }
+    };
+
+    // 1. Intentar desde responseData directo
+    let nombre = construirNombreCompleto(responseData);
+    if (nombre) return nombre;
+
+    // 2. Desde responseData.paciente
+    nombre = construirNombreCompleto(responseData?.paciente);
+    if (nombre) return nombre;
+
+    // 3. Desde responseData.pacienteServicio.paciente
+    nombre = construirNombreCompleto(responseData?.pacienteServicio?.paciente);
+    if (nombre) return nombre;
+
+    // 4. Desde request.body
+    nombre = construirNombreCompleto(request?.body);
+    if (nombre) return nombre;
+
+    return null;
   }
 
   /**
@@ -290,20 +228,18 @@ export class AuditoriaInterceptor implements NestInterceptor {
   private generarDescripcion(
     metadata: AuditableMetadata,
     user: any,
-    entidadInfo: { id: number | null; nombre: string | null },
-    metodoHttp: string,
+    request: any,
+    responseData: any,
   ): string {
     const nombreUsuario = `${user.nombres} ${user.apellidos}`;
-    const entidadDescripcion = entidadInfo.nombre
-      ? `"${entidadInfo.nombre}"`
-      : entidadInfo.id
-        ? `#${entidadInfo.id}`
-        : '';
+
+    // Extraer nombre del paciente si está disponible
+    const nombrePaciente = this.extraerNombrePaciente(request, responseData);
+    const pacienteDescripcion = nombrePaciente ? ` del paciente ${nombrePaciente}` : ' de un paciente';
 
     const accionesDescripciones: Record<string, string> = {
       // AUDITORÍA
       VER_HISTORIAL: 'Consultó el historial de auditoría',
-      VER_HISTORIAL_ENTIDAD: `Consultó el historial de ${metadata.entidadTipo} ${entidadDescripcion}`,
       VER_ESTADISTICAS: 'Consultó las estadísticas de auditoría',
       VER_ACTIVIDAD_USUARIO: 'Consultó la actividad de un usuario',
       VER_ALERTAS: 'Consultó las alertas del sistema',
@@ -312,61 +248,61 @@ export class AuditoriaInterceptor implements NestInterceptor {
       RESOLVER_ALERTA: 'Resolvió una alerta',
 
       // PACIENTES
-      VER_PACIENTE: `Consultó el perfil del paciente ${entidadDescripcion}`,
+      VER_PACIENTE: `Consultó el perfil${pacienteDescripcion}`,
       VER_LISTA_PACIENTES: 'Consultó el listado de pacientes',
-      CREAR_PACIENTE: `Registró un nuevo paciente ${entidadDescripcion}`,
-      EDITAR_PACIENTE: `Editó datos del paciente ${entidadDescripcion}`,
-      EDITAR_FILIACION: `Editó datos de filiación del paciente ${entidadDescripcion}`,
-      CAMBIAR_ESTADO_PACIENTE: `Cambió estado del paciente ${entidadDescripcion}`,
-      CAMBIAR_VISIBILIDAD_PACIENTE: `Cambió visibilidad del paciente ${entidadDescripcion}`,
+      CREAR_PACIENTE: `Registró un nuevo paciente${nombrePaciente ? `: ${nombrePaciente}` : ''}`,
+      EDITAR_PACIENTE: `Editó datos${pacienteDescripcion}`,
+      EDITAR_FILIACION: `Editó datos de filiación${pacienteDescripcion}`,
+      CAMBIAR_ESTADO_PACIENTE: `Cambió estado${pacienteDescripcion}`,
+      CAMBIAR_VISIBILIDAD_PACIENTE: `Cambió visibilidad${pacienteDescripcion}`,
 
       // SERVICIOS Y TERAPIAS
-      ASIGNAR_SERVICIO: `Asignó servicio al paciente ${entidadDescripcion}`,
-      DESASIGNAR_SERVICIO: `Desasignó servicio del paciente ${entidadDescripcion}`,
-      EDITAR_TERAPEUTA: `Editó terapeuta del paciente ${entidadDescripcion}`,
+      ASIGNAR_SERVICIO: `Asignó servicio${pacienteDescripcion}`,
+      DESASIGNAR_SERVICIO: `Desasignó servicio${pacienteDescripcion}`,
+      EDITAR_TERAPEUTA: `Editó terapeuta${pacienteDescripcion}`,
 
       // HISTORIA CLÍNICA Y EVOLUCIÓN
-      CREAR_HISTORIA_CLINICA: `Creó historia clínica del paciente ${entidadDescripcion}`,
-      EDITAR_HISTORIA_CLINICA: `Editó historia clínica del paciente ${entidadDescripcion}`,
-      CREAR_NOTA_EVOLUCION: `Creó nota de evolución del paciente ${entidadDescripcion}`,
-      CREAR_REPORTE_EVOLUCION: `Creó reporte de evolución del paciente ${entidadDescripcion}`,
-      EDITAR_REPORTE_EVOLUCION: `Editó reporte de evolución del paciente ${entidadDescripcion}`,
-      CREAR_ENTREVISTA_PADRES: `Creó entrevista a padres del paciente ${entidadDescripcion}`,
-      EDITAR_ENTREVISTA_PADRES: `Editó entrevista a padres del paciente ${entidadDescripcion}`,
-      CREAR_EVALUACION_TERAPIA: `Creó evaluación de terapia ocupacional del paciente ${entidadDescripcion}`,
-      EDITAR_EVALUACION_TERAPIA: `Editó evaluación de terapia ocupacional del paciente ${entidadDescripcion}`,
+      CREAR_HISTORIA_CLINICA: `Creó historia clínica${pacienteDescripcion}`,
+      EDITAR_HISTORIA_CLINICA: `Editó historia clínica${pacienteDescripcion}`,
+      CREAR_NOTA_EVOLUCION: `Creó nota de evolución${pacienteDescripcion}`,
+      CREAR_REPORTE_EVOLUCION: `Creó reporte de evolución${pacienteDescripcion}`,
+      EDITAR_REPORTE_EVOLUCION: `Editó reporte de evolución${pacienteDescripcion}`,
+      CREAR_ENTREVISTA_PADRES: `Creó entrevista a padres${pacienteDescripcion}`,
+      EDITAR_ENTREVISTA_PADRES: `Editó entrevista a padres${pacienteDescripcion}`,
+      CREAR_EVALUACION_TERAPIA: `Creó evaluación de terapia ocupacional${pacienteDescripcion}`,
+      EDITAR_EVALUACION_TERAPIA: `Editó evaluación de terapia ocupacional${pacienteDescripcion}`,
 
       // ARCHIVOS DIGITALES
-      SUBIR_ARCHIVO: `Subió archivo digital del paciente ${entidadDescripcion}`,
-      ABRIR_ARCHIVO: `Abrió archivo digital del paciente ${entidadDescripcion}`,
-      DESCARGAR_ARCHIVO: `Descargó archivo digital del paciente ${entidadDescripcion}`,
-      ELIMINAR_ARCHIVO: `Eliminó archivo digital del paciente ${entidadDescripcion}`,
+      SUBIR_ARCHIVO: `Subió archivo digital${pacienteDescripcion}`,
+      ABRIR_ARCHIVO: `Abrió archivo digital${pacienteDescripcion}`,
+      DESCARGAR_ARCHIVO: `Descargó archivo digital${pacienteDescripcion}`,
+      ELIMINAR_ARCHIVO: `Eliminó archivo digital${pacienteDescripcion}`,
 
       // CITAS
       VER_AGENDA: 'Consultó la agenda de citas',
-      CREAR_CITA: `Creó una nueva cita ${entidadDescripcion}`,
-      EDITAR_CITA: `Editó la cita ${entidadDescripcion}`,
-      ELIMINAR_CITA: `Eliminó la cita ${entidadDescripcion}`,
+      CREAR_CITA: 'Creó una nueva cita',
+      EDITAR_CITA: 'Editó una cita',
+      ELIMINAR_CITA: 'Eliminó una cita',
 
       // CERTIFICADOS Y OTROS ARCHIVOS
-      CREAR_CERTIFICADO: `Creó un certificado oficial ${entidadDescripcion}`,
-      VER_CERTIFICADO: `Consultó el certificado ${entidadDescripcion}`,
+      CREAR_CERTIFICADO: 'Creó un certificado oficial',
+      VER_CERTIFICADO: 'Consultó un certificado',
 
       // EMPLEADOS
-      VER_EMPLEADO: `Consultó datos del empleado ${entidadDescripcion}`,
-      CREAR_EMPLEADO: `Registró un nuevo empleado ${entidadDescripcion}`,
-      EDITAR_EMPLEADO: `Editó datos del empleado ${entidadDescripcion}`,
-      ELIMINAR_EMPLEADO: `Eliminó al empleado ${entidadDescripcion}`,
+      VER_EMPLEADO: 'Consultó datos de un empleado',
+      CREAR_EMPLEADO: 'Registró un nuevo empleado',
+      EDITAR_EMPLEADO: 'Editó datos de un empleado',
+      ELIMINAR_EMPLEADO: 'Eliminó a un empleado',
 
       // RECURSOS HUMANOS
-      CALCULAR_GRATIFICACION: `Calculó gratificación para el empleado ${entidadDescripcion}`,
-      REGISTRAR_PAGO: `Registró un pago para el empleado ${entidadDescripcion}`,
-      REGISTRAR_VACACION: `Registró vacaciones para el empleado ${entidadDescripcion}`,
+      CALCULAR_GRATIFICACION: 'Calculó gratificación para un empleado',
+      REGISTRAR_PAGO: 'Registró un pago para un empleado',
+      REGISTRAR_VACACION: 'Registró vacaciones para un empleado',
 
       // POSTULACIONES
-      VER_POSTULACION: `Consultó la postulación ${entidadDescripcion}`,
-      CAMBIAR_ESTADO_POSTULACION: `Cambió estado de la postulación ${entidadDescripcion}`,
-      AGREGAR_COMENTARIO: `Agregó un comentario a la postulación ${entidadDescripcion}`,
+      VER_POSTULACION: 'Consultó una postulación',
+      CAMBIAR_ESTADO_POSTULACION: 'Cambió estado de una postulación',
+      AGREGAR_COMENTARIO: 'Agregó un comentario a una postulación',
 
       // SISTEMA
       EXPORTAR_DATOS: `Exportó datos del módulo ${metadata.modulo}`,
@@ -375,7 +311,7 @@ export class AuditoriaInterceptor implements NestInterceptor {
     };
 
     return accionesDescripciones[metadata.accion] ||
-           `Realizó la acción ${metadata.accion} en ${metadata.modulo} ${entidadDescripcion}`;
+           `Realizó la acción ${metadata.accion} en ${metadata.modulo}`;
   }
 
   /**
@@ -408,23 +344,19 @@ export class AuditoriaInterceptor implements NestInterceptor {
   }
 
   /**
-   * Obtiene la IP real del cliente, considerando proxies y balanceadores de carga
+   * Obtiene la IP real del cliente
    */
   private obtenerIPReal(request: any): string {
     let ip = 'IP desconocida';
 
-    // 1. Verificar header X-Forwarded-For (estándar de proxies)
     const forwardedFor = request.headers['x-forwarded-for'];
     if (forwardedFor) {
-      // X-Forwarded-For puede contener múltiples IPs separadas por coma
-      // La primera IP es la del cliente original
       const ips = forwardedFor.split(',').map((ip: string) => ip.trim());
       if (ips.length > 0 && ips[0]) {
         ip = ips[0];
       }
     }
 
-    // 2. Verificar header X-Real-IP (usado por Nginx)
     if (!ip || ip === 'IP desconocida') {
       const realIp = request.headers['x-real-ip'];
       if (realIp) {
@@ -432,7 +364,6 @@ export class AuditoriaInterceptor implements NestInterceptor {
       }
     }
 
-    // 3. Verificar header CF-Connecting-IP (Cloudflare)
     if (!ip || ip === 'IP desconocida') {
       const cfIp = request.headers['cf-connecting-ip'];
       if (cfIp) {
@@ -440,7 +371,6 @@ export class AuditoriaInterceptor implements NestInterceptor {
       }
     }
 
-    // 4. Verificar header X-Client-IP
     if (!ip || ip === 'IP desconocida') {
       const clientIp = request.headers['x-client-ip'];
       if (clientIp) {
@@ -448,15 +378,12 @@ export class AuditoriaInterceptor implements NestInterceptor {
       }
     }
 
-    // 5. Usar request.ip (funciona con trust proxy habilitado)
     if (!ip || ip === 'IP desconocida') {
       if (request.ip) {
-        // Limpiar el formato IPv6 localhost
         ip = request.ip.replace(/^::ffff:/, '');
       }
     }
 
-    // 6. Fallback a connection.remoteAddress
     if (!ip || ip === 'IP desconocida') {
       const remoteAddress = request.connection?.remoteAddress ||
                            request.socket?.remoteAddress;
@@ -465,9 +392,7 @@ export class AuditoriaInterceptor implements NestInterceptor {
       }
     }
 
-    // 7. Detectar localhost y agregar contexto
     if (ip === '::1' || ip === '127.0.0.1' || ip === 'localhost') {
-      // En desarrollo local, intentar obtener la IP pública de la red local
       const forwarded = request.headers['x-forwarded-for'];
       if (forwarded) {
         return `${ip} (proxy: ${forwarded})`;

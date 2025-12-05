@@ -65,6 +65,12 @@ export class TrabajadorCentroController {
     return this.service.update(req.user.id, dto);
   }
 
+  @Get('perfil/me/campos-bloqueados')
+  @UseGuards(JwtAuthGuard)
+  async getMisCamposBloqueados(@Request() req) {
+    return this.service.getCamposBloqueados(req.user.id);
+  }
+
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.service.findOneById(+id);

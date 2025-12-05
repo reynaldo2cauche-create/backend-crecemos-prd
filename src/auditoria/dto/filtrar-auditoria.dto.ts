@@ -1,9 +1,9 @@
-import { IsOptional, IsNumber, IsString, IsDateString } from 'class-validator';
+import { IsOptional, IsInt, IsString, IsDateString } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class FiltrarAuditoriaDto {
   @IsOptional()
-  @IsNumber()
+  @IsInt()
   @Type(() => Number)
   trabajadorId?: number;
 
@@ -14,15 +14,6 @@ export class FiltrarAuditoriaDto {
   @IsOptional()
   @IsString()
   accion?: string;
-
-  @IsOptional()
-  @IsString()
-  entidadTipo?: string;
-
-  @IsOptional()
-  @IsNumber()
-  @Type(() => Number)
-  entidadId?: number;
 
   @IsOptional()
   @IsDateString()
@@ -37,12 +28,12 @@ export class FiltrarAuditoriaDto {
   busqueda?: string;
 
   @IsOptional()
-  @IsNumber()
+  @IsInt()
   @Type(() => Number)
-  page?: number = 1;
+  page?: number;
 
   @IsOptional()
-  @IsNumber()
+  @IsInt()
   @Type(() => Number)
-  limit?: number = 50;
+  limit?: number;
 }

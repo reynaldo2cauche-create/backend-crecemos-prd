@@ -54,8 +54,6 @@ export class PacienteServicioController {
   @Auditable({
     modulo: 'PACIENTES',
     accion: 'ASIGNAR_SERVICIO',
-    entidadTipo: 'Paciente',
-    entidadIdBody: 'paciente_id',
   })
   asignarServicioYTerapeuta(@Body() dto: AsignarServicioTerapeutaDto) {
     return this.pacienteServicioService.asignarServicioYTerapeuta(dto);
@@ -66,8 +64,6 @@ export class PacienteServicioController {
   @Auditable({
     modulo: 'PACIENTES',
     accion: 'DESASIGNAR_SERVICIO',
-    entidadTipo: 'Paciente',
-    entidadIdResponse: 'paciente.id',
   })
   desasignarServicio(
     @Param('pacienteId') pacienteId: string,
@@ -81,8 +77,6 @@ export class PacienteServicioController {
   @Auditable({
     modulo: 'PACIENTES',
     accion: 'DESASIGNAR_SERVICIO',
-    entidadTipo: 'Paciente',
-    entidadIdResponse: 'paciente.id',
   })
   desasignarServicioPorId(@Param('id') id: string) {
     return this.pacienteServicioService.desasignarServicioPorId(+id);
@@ -93,8 +87,6 @@ export class PacienteServicioController {
   @Auditable({
     modulo: 'PACIENTES',
     accion: 'EDITAR_TERAPEUTA',
-    entidadTipo: 'Paciente',
-    entidadIdResponse: 'paciente.id',
   })
   actualizarAsignacionTerapeuta(
     @Param('id') id: string,

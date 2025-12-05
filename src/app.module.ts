@@ -71,6 +71,9 @@ import { RrhhModule } from './rrhh/rrhh.module';
 import { Pago } from './rrhh/pago.entity';
 import { Vacacion } from './rrhh/vacacion.entity';
 import { CuentaBancaria } from './rrhh/cuenta-bancaria.entity';
+import { TipoSueldo } from './rrhh/tipo-sueldo.entity';
+import { Mes } from './rrhh/mes.entity';
+import { PeriodoGratificacion } from './rrhh/periodo-gratificacion.entity';
 import { AuditoriaModule } from './auditoria/auditoria.module';
 import { AuditoriaAccion } from './auditoria/auditoria-accion.entity';
 import { AlertaSistema } from './auditoria/alerta-sistema.entity';
@@ -150,6 +153,9 @@ import { AuditoriaInterceptor } from './auditoria/auditoria.interceptor';
         Pago,
         Vacacion,
         CuentaBancaria,
+        TipoSueldo,
+        Mes,
+        PeriodoGratificacion,
         TrabajadorServicio,
         AuditoriaAccion,
         AlertaSistema,

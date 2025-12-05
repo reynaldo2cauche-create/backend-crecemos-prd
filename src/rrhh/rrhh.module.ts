@@ -4,6 +4,9 @@ import { TrabajadorCentro } from '../usuarios/trabajador-centro.entity';
 import { Pago } from './pago.entity';
 import { Vacacion } from './vacacion.entity';
 import { CuentaBancaria } from './cuenta-bancaria.entity';
+import { TipoSueldo } from './tipo-sueldo.entity';
+import { Mes } from './mes.entity';
+import { PeriodoGratificacion } from './periodo-gratificacion.entity';
 import { PagosController } from './pagos.controller';
 import { PagosService } from './pagos.service';
 import { VacacionesController } from './vacaciones.controller';
@@ -12,7 +15,17 @@ import { CuentasBancariasController } from './cuentas-bancarias.controller';
 import { CuentasBancariasService } from './cuentas-bancarias.service';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([TrabajadorCentro, Pago, Vacacion, CuentaBancaria])],
+  imports: [
+    TypeOrmModule.forFeature([
+      TrabajadorCentro,
+      Pago,
+      Vacacion,
+      CuentaBancaria,
+      TipoSueldo,
+      Mes,
+      PeriodoGratificacion,
+    ]),
+  ],
   controllers: [PagosController, VacacionesController, CuentasBancariasController],
   providers: [PagosService, VacacionesService, CuentasBancariasService],
   exports: [PagosService, VacacionesService, CuentasBancariasService],

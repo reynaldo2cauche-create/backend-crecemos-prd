@@ -46,23 +46,6 @@ export class AuditoriaController {
   }
 
   /**
-   * Obtiene el historial de una entidad específica
-   * Solo para ADMINISTRADORES
-   */
-  @Get('historial/:entidadTipo/:entidadId')
-  @Roles('Administrador')
-  @Auditable({
-    modulo: 'AUDITORIA',
-    accion: 'VER_HISTORIAL_ENTIDAD',
-  })
-  async obtenerHistorialEntidad(
-    @Param('entidadTipo') entidadTipo: string,
-    @Param('entidadId', ParseIntPipe) entidadId: number,
-  ) {
-    return this.auditoriaService.obtenerHistorialEntidad(entidadTipo, entidadId);
-  }
-
-  /**
    * Obtiene estadísticas de auditoría
    * Solo para ADMINISTRADORES
    */

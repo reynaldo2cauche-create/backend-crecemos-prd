@@ -13,9 +13,6 @@ export class NotaEvolucionController {
   @Auditable({
     modulo: 'PACIENTES',
     accion: 'CREAR_NOTA_EVOLUCION',
-    entidadTipo: 'Paciente',
-    entidadIdBody: 'paciente_id',
-    entidadIdResponse: 'paciente.id',
   })
   create(@Body() dto: CreateNotaEvolucionDto) {
     return this.service.create(dto);

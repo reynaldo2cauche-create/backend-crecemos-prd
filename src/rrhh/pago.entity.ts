@@ -1,5 +1,8 @@
 import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn } from 'typeorm';
 import { TrabajadorCentro } from '../usuarios/trabajador-centro.entity';
+import { TipoSueldo } from './tipo-sueldo.entity';
+import { Mes } from './mes.entity';
+import { PeriodoGratificacion } from './periodo-gratificacion.entity';
 
 @Entity('pagos')
 export class Pago {
@@ -10,39 +13,40 @@ export class Pago {
   @JoinColumn({ name: 'trabajador_id' })
   empleado: TrabajadorCentro;
 
-  @Column()
-  tipo: string; // gratificacion, bono, aguinaldo
+  @ManyToOne(() => TipoSueldo, { eager: true })
+  @JoinColumn({ name: 'tipo_sueldo_id' })
+  tipo_sueldo: TipoSueldo;
+
+  @ManyToOne(() => Mes, { eager: true })
+  @JoinColumn({ name: 'mes_id' })
+  mes: Mes;
+
+  @Column({ nullable: true })
+  anio: number;
+
+  @ManyToOne(() => PeriodoGratificacion, { eager: true, nullable: true })
+  @JoinColumn({ name: 'periodo_gratificacion_id' })
+  periodo_gratificacion: PeriodoGratificacion;
 
   @Column('decimal', { precision: 10, scale: 2 })
   monto: number; // Monto total del pago
 
   @Column('decimal', { precision: 10, scale: 2, nullable: true })
-  montoSueldo: number; // Desglose: monto del sueldo base
+  monto_sueldo: number; // Desglose: monto del sueldo base
 
   @Column('decimal', { precision: 10, scale: 2, nullable: true })
-  montoGratificacion: number; // Desglose: monto de gratificación
-
-  @Column()
-  periodo: string; // julio-2024, diciembre-2024
-
-  @Column({ nullable: true })
-  mes: string; // enero, febrero, marzo, etc.
-
-  @Column({ nullable: true })
-  anio: number; // 2024, 2025, etc.
+  monto_gratificacion: number; // Desglose: monto de gratificación
 
   @Column({ type: 'date' })
-  fechaPago: Date;
+  fecha_pago: Date;
 
-  @Column({ nullable: true })
-  registradoPor: string;
+  @ManyToOne(() => TrabajadorCentro, { eager: true, nullable: true })
+  @JoinColumn({ name: 'user_id_crea' })
+  usuarioCrea: TrabajadorCentro;
 
-  // ✅ NUEVOS CAMPOS: Usuario que crea/actualiza el pago
-  @Column({ nullable: true, name: 'user_id_crea' })
-  userIdCrea: number;
-
-  @Column({ nullable: true, name: 'user_id_actua' })
-  userIdActua: number;
+  @ManyToOne(() => TrabajadorCentro, { eager: true, nullable: true })
+  @JoinColumn({ name: 'user_id_actua' })
+  usuarioActualiza: TrabajadorCentro;
 
   @Column({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' })
   created_at: Date;

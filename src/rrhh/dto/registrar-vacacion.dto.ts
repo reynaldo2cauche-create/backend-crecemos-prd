@@ -13,9 +13,6 @@ export class RegistrarVacacionDto {
   @IsDateString()
   fechaFin: string;
 
-  @IsNotEmpty()
-  @IsNumber()
-  periodoAnio: number;
 
   @IsOptional()
   @IsString()
