@@ -339,8 +339,7 @@ export class PacienteService {
   
 
   async update(id: number, dto: UpdatePacienteDto): Promise<Paciente> {
-    console.log('Update - ID:', id);
-    console.log('Update - DTO:', dto);
+
     
     const paciente = await this.pacienteRepository.findOne({
       where: { id, activo: true },
