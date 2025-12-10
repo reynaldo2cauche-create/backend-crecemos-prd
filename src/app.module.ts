@@ -66,7 +66,7 @@ import { ArchivoTerapia } from './historia-clinica/entities/archivo-terapia.enti
 import { CargoPostulacion } from './postulaciones/cargo-postulacion.entity';
 import { EstadoPostulacion } from './postulaciones/estado-postulacion.entity';
 import { PopupModule } from './popup/popup.module';
-import { PopupConfiguracion } from './popup/popup-configuracion.entity';
+import { PopupProgramado } from './popup/popup-programado.entity';
 import { RrhhModule } from './rrhh/rrhh.module';
 import { Pago } from './rrhh/pago.entity';
 import { Vacacion } from './rrhh/vacacion.entity';
@@ -149,7 +149,7 @@ import { AuditoriaInterceptor } from './auditoria/auditoria.interceptor';
         ArchivoTerapia,
         CargoPostulacion,
         EstadoPostulacion,
-        PopupConfiguracion,
+        PopupProgramado,
         Pago,
         Vacacion,
         CuentaBancaria,
