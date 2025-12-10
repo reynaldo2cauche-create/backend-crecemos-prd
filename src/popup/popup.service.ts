@@ -1,130 +1,252 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { PopupConfiguracion } from './popup-configuracion.entity';
+import { Repository, LessThanOrEqual, MoreThanOrEqual } from 'typeorm';
+import { PopupProgramado } from './popup-programado.entity';
+import { CrearPopupDto } from './dto/crear-popup.dto';
+import { ActualizarPopupDto } from './dto/actualizar-popup.dto';
 import * as fs from 'fs';
 import * as path from 'path';
 
 @Injectable()
 export class PopupService {
   constructor(
-    @InjectRepository(PopupConfiguracion)
-    private readonly popupRepository: Repository<PopupConfiguracion>,
+    @InjectRepository(PopupProgramado)
+    private readonly popupRepository: Repository<PopupProgramado>,
   ) {}
 
   /**
-   * Obtener la configuración actual del popup
+   * Convertir fecha de UTC a hora local de Perú (UTC-5)
    */
-  async obtenerConfiguracion(): Promise<PopupConfiguracion> {
-    let config = await this.popupRepository.findOne({ where: { id: 1 } });
+  private convertirUTCaPeruano(fecha: Date): Date {
+    const fechaUTC = new Date(fecha);
+    // Restar 5 horas para convertir a hora peruana
+    fechaUTC.setHours(fechaUTC.getHours() - 5);
+    return fechaUTC;
+  }
 
-    if (!config) {
-      config = this.popupRepository.create({
-        activo: false,
-        imagenUrl: null,
-      });
-      await this.popupRepository.save(config);
+  /**
+   * Convertir fecha de hora local de Perú (UTC-5) a UTC
+   */
+  private convertirPeruanoAUTC(fecha: Date): Date {
+    const fechaLocal = new Date(fecha);
+    // Sumar 5 horas para convertir a UTC
+    fechaLocal.setHours(fechaLocal.getHours() + 5);
+    return fechaLocal;
+  }
+
+  /**
+   * Obtener popup activo actual según fecha
+   */
+  async obtenerPopupActivo(): Promise<{ activo: boolean; popup: PopupProgramado | null }> {
+    // Obtener la hora actual en UTC
+    const ahoraUTC = new Date();
+    
+    // Convertir a hora peruana para la comparación
+    const ahoraPeruano = this.convertirUTCaPeruano(ahoraUTC);
+
+
+
+    const popup = await this.popupRepository.findOne({
+      where: {
+        activo: true,
+        fechaInicio: LessThanOrEqual(ahoraPeruano),
+        fechaFin: MoreThanOrEqual(ahoraPeruano),
+      },
+      order: {
+        fechaInicio: 'DESC',
+      },
+    });
+
+    if (!popup) {
+      return { activo: false, popup: null };
     }
 
-    return config;
-  }
+    // Convertir las fechas del popup a UTC para enviar al frontend
+    const popupConFechasUTC = {
+      ...popup,
+      fechaInicio: this.convertirPeruanoAUTC(popup.fechaInicio),
+      fechaFin: this.convertirPeruanoAUTC(popup.fechaFin),
+    };
 
-  
+    return { activo: true, popup: popupConFechasUTC as PopupProgramado };
+  }
 
   /**
-   * Subir imagen del popup - CORRECTO
+   * Listar todos los popups programados
    */
- async subirImagen(file: Express.Multer.File, userId: number): Promise<PopupConfiguracion> {
-  if (!file) {
-    throw new BadRequestException('No se proporcionó archivo');
-  }
-
-  let config = await this.popupRepository.findOne({ where: { id: 1 } });
-
-  // Eliminar imagen anterior si existe
-  if (config && config.imagenUrl) {
-    this.eliminarArchivoFisico(config.imagenUrl);
-  }
-
-  const imagenUrl = file.filename;
-
-  if (!config) {
-    // ✅ CREAR: guardamos user_id_crea
-    config = this.popupRepository.create({
-      activo: true,
-      imagenUrl,
-      userIdCrea: userId,
-      userIdActua: userId
+  async listarPopups(): Promise<PopupProgramado[]> {
+    const popups = await this.popupRepository.find({
+      order: {
+        fechaInicio: 'DESC',
+      },
     });
-  } else {
-    // ✅ ACTUALIZAR: guardamos user_id_actua
-    config.imagenUrl = imagenUrl;
-    config.activo = true;
-    config.userIdActua = userId;
+
+    // Convertir las fechas a UTC para el frontend
+    return popups.map(popup => ({
+      ...popup,
+      fechaInicio: this.convertirPeruanoAUTC(popup.fechaInicio),
+      fechaFin: this.convertirPeruanoAUTC(popup.fechaFin),
+    }));
   }
-
-  return await this.popupRepository.save(config);
-}
-
-/**
-   * Actualizar configuración (activar/desactivar)
-   */
-
-async actualizarConfiguracion(activo: boolean, userId: number): Promise<PopupConfiguracion> {
-  let config = await this.popupRepository.findOne({ where: { id: 1 } });
-
-  if (!config) {
-    config = this.popupRepository.create({ 
-      activo,
-      userIdCrea: userId,
-      userIdActua: userId
-    });
-  } else {
-    config.activo = activo;
-    config.userIdActua = userId; // ✅ Actualizamos quién modificó
-  }
-
-  return await this.popupRepository.save(config);
-}
 
   /**
-   * Actualizar URL de imagen
+   * Obtener un popup por ID
    */
-  async actualizarImagenUrl(imagenUrl: string): Promise<PopupConfiguracion> {
-    let config = await this.popupRepository.findOne({ where: { id: 1 } });
+  async obtenerPopupPorId(id: number): Promise<PopupProgramado> {
+    const popup = await this.popupRepository.findOne({ where: { id } });
 
-    if (!config) {
-      config = this.popupRepository.create({
-        activo: false,
-        imagenUrl,
-      });
-    } else {
-      if (config.imagenUrl) {
-        this.eliminarArchivoFisico(config.imagenUrl);
+    if (!popup) {
+      throw new NotFoundException(`Popup con ID ${id} no encontrado`);
+    }
+
+    // Convertir fechas a UTC
+    return {
+      ...popup,
+      fechaInicio: this.convertirPeruanoAUTC(popup.fechaInicio),
+      fechaFin: this.convertirPeruanoAUTC(popup.fechaFin),
+    };
+  }
+
+  /**
+   * Crear nuevo popup programado
+   */
+  async crearPopup(
+    crearPopupDto: CrearPopupDto,
+    file: Express.Multer.File,
+    userId: number,
+  ): Promise<PopupProgramado> {
+    if (!file) {
+      throw new BadRequestException('Se requiere una imagen');
+    }
+
+    // Convertir las fechas del frontend (UTC) a hora peruana para guardar
+    const fechaInicioPeruano = this.convertirUTCaPeruano(new Date(crearPopupDto.fechaInicio));
+    const fechaFinPeruano = this.convertirUTCaPeruano(new Date(crearPopupDto.fechaFin));
+
+    if (fechaInicioPeruano >= fechaFinPeruano) {
+      throw new BadRequestException('La fecha de inicio debe ser anterior a la fecha de fin');
+    }
+
+    const popup = this.popupRepository.create({
+      titulo: crearPopupDto.titulo,
+      imagenUrl: file.filename,
+      fechaInicio: fechaInicioPeruano,
+      fechaFin: fechaFinPeruano,
+      activo: crearPopupDto.activo !== undefined ? crearPopupDto.activo : true,
+      mensajeWhatsapp: crearPopupDto.mensajeWhatsapp || null,
+      userIdCrea: userId,
+      userIdActua: userId,
+    });
+
+    const savedPopup = await this.popupRepository.save(popup);
+
+    // Devolver con fechas en UTC
+    return {
+      ...savedPopup,
+      fechaInicio: this.convertirPeruanoAUTC(savedPopup.fechaInicio),
+      fechaFin: this.convertirPeruanoAUTC(savedPopup.fechaFin),
+    };
+  }
+
+  /**
+   * Actualizar popup existente
+   */
+  async actualizarPopup(
+    id: number,
+    actualizarPopupDto: ActualizarPopupDto,
+    file: Express.Multer.File | null,
+    userId: number,
+  ): Promise<PopupProgramado> {
+    const popup = await this.popupRepository.findOne({ where: { id } });
+    
+    if (!popup) {
+      throw new NotFoundException(`Popup con ID ${id} no encontrado`);
+    }
+
+    // Si hay nueva imagen, eliminar la anterior
+    if (file) {
+      if (popup.imagenUrl) {
+        this.eliminarArchivoFisico(popup.imagenUrl);
       }
-      config.imagenUrl = imagenUrl;
+      popup.imagenUrl = file.filename;
     }
 
-    return await this.popupRepository.save(config);
+    // Actualizar campos
+    if (actualizarPopupDto.titulo) {
+      popup.titulo = actualizarPopupDto.titulo;
+    }
+
+    if (actualizarPopupDto.fechaInicio) {
+      popup.fechaInicio = this.convertirUTCaPeruano(new Date(actualizarPopupDto.fechaInicio));
+    }
+
+    if (actualizarPopupDto.fechaFin) {
+      popup.fechaFin = this.convertirUTCaPeruano(new Date(actualizarPopupDto.fechaFin));
+    }
+
+    if (actualizarPopupDto.activo !== undefined) {
+      popup.activo = actualizarPopupDto.activo;
+    }
+    if (actualizarPopupDto.mensajeWhatsapp!== undefined) {
+      popup.mensajeWhatsapp = actualizarPopupDto.mensajeWhatsapp;
+    }
+
+    // Validar fechas
+    if (popup.fechaInicio >= popup.fechaFin) {
+      throw new BadRequestException('La fecha de inicio debe ser anterior a la fecha de fin');
+    }
+
+    popup.userIdActua = userId;
+
+    const savedPopup = await this.popupRepository.save(popup);
+
+    // Devolver con fechas en UTC
+    return {
+      ...savedPopup,
+      fechaInicio: this.convertirPeruanoAUTC(savedPopup.fechaInicio),
+      fechaFin: this.convertirPeruanoAUTC(savedPopup.fechaFin),
+    };
   }
 
   /**
-   * Eliminar imagen del popup
+   * Eliminar popup
    */
-  async eliminarImagen(): Promise<void> {
-    const config = await this.popupRepository.findOne({ where: { id: 1 } });
+  async eliminarPopup(id: number): Promise<void> {
+    const popup = await this.popupRepository.findOne({ where: { id } });
 
-    if (!config) {
-      throw new NotFoundException('Configuración no encontrada');
+    if (!popup) {
+      throw new NotFoundException(`Popup con ID ${id} no encontrado`);
     }
 
-    if (config.imagenUrl) {
-      this.eliminarArchivoFisico(config.imagenUrl);
+    // Eliminar imagen del servidor
+    if (popup.imagenUrl) {
+      this.eliminarArchivoFisico(popup.imagenUrl);
     }
 
-    config.imagenUrl = null;
-    config.activo = false;
-    await this.popupRepository.save(config);
+    await this.popupRepository.remove(popup);
+  }
+
+  /**
+   * Activar/Desactivar popup
+   */
+  async toggleActivo(id: number, activo: boolean, userId: number): Promise<PopupProgramado> {
+    const popup = await this.popupRepository.findOne({ where: { id } });
+
+    if (!popup) {
+      throw new NotFoundException(`Popup con ID ${id} no encontrado`);
+    }
+
+    popup.activo = activo;
+    popup.userIdActua = userId;
+
+    const savedPopup = await this.popupRepository.save(popup);
+
+    // Devolver con fechas en UTC
+    return {
+      ...savedPopup,
+      fechaInicio: this.convertirPeruanoAUTC(savedPopup.fechaInicio),
+      fechaFin: this.convertirPeruanoAUTC(savedPopup.fechaFin),
+    };
   }
 
   /**
