@@ -4,6 +4,7 @@ import {
   Get,
   Put,
   Delete,
+  Patch,
   UseInterceptors,
   UploadedFile,
   Body,
@@ -12,6 +13,7 @@ import {
   HttpStatus,
   Param,
   Res,
+  ParseIntPipe,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
@@ -20,16 +22,18 @@ import { Response } from 'express';
 import * as fs from 'fs';
 import * as path from 'path';
 import { PopupService } from './popup.service';
-import { PopupConfiguracion } from './popup-configuracion.entity';
+import { PopupProgramado } from './popup-programado.entity';
+import { CrearPopupDto } from './dto/crear-popup.dto';
+import { ActualizarPopupDto } from './dto/actualizar-popup.dto';
 
 const storage = diskStorage({
   destination: (req, file, cb) => {
     const uploadPath = path.join(process.cwd(), 'uploads', 'popup');
-    
+
     if (!fs.existsSync(uploadPath)) {
       fs.mkdirSync(uploadPath, { recursive: true });
     }
-    
+
     cb(null, uploadPath);
   },
   filename: (req, file, cb) => {
@@ -43,7 +47,7 @@ const storage = diskStorage({
 
 const fileFilter = (req, file, cb) => {
   const allowedMimes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
-  
+
   if (!allowedMimes.includes(file.mimetype)) {
     return cb(new BadRequestException('Solo se permiten imágenes JPG, PNG, WebP o GIF'), false);
   }
@@ -56,15 +60,31 @@ export class PopupController {
   constructor(private readonly popupService: PopupService) {}
 
   /**
-   * GET /api/popup/configuracion - Obtener configuración actual
+   * GET /backend_api/popup/activo - Obtener popup activo actual (PÚBLICO)
    */
-  @Get('configuracion')
-  async obtenerConfiguracion(): Promise<PopupConfiguracion> {
-    return await this.popupService.obtenerConfiguracion();
+  @Get('activo')
+  async obtenerPopupActivo(): Promise<{ activo: boolean; popup: PopupProgramado | null }> {
+    return await this.popupService.obtenerPopupActivo();
   }
 
   /**
-   * GET /api/popup/imagen/:filename - Servir imagen del popup
+   * GET /backend_api/popup/lista - Listar todos los popups (ADMIN)
+   */
+  @Get('lista')
+  async listarPopups(): Promise<PopupProgramado[]> {
+    return await this.popupService.listarPopups();
+  }
+
+  /**
+   * GET /backend_api/popup/:id - Obtener popup por ID (ADMIN)
+   */
+  @Get(':id')
+  async obtenerPopupPorId(@Param('id', ParseIntPipe) id: number): Promise<PopupProgramado> {
+    return await this.popupService.obtenerPopupPorId(id);
+  }
+
+  /**
+   * GET /backend_api/popup/imagen/:filename - Servir imagen
    */
   @Get('imagen/:filename')
   async verImagen(@Param('filename') filename: string, @Res() res: Response) {
@@ -74,7 +94,6 @@ export class PopupController {
       throw new BadRequestException('Imagen no encontrada');
     }
 
-    // Determinar el tipo MIME basado en la extensión
     const ext = extname(filename).toLowerCase();
     const mimeTypes = {
       '.jpg': 'image/jpeg',
@@ -92,58 +111,115 @@ export class PopupController {
     const fileStream = fs.createReadStream(rutaArchivo);
     fileStream.pipe(res);
   }
-@Post('imagen')
-@HttpCode(HttpStatus.OK)
-@UseInterceptors(
-  FileInterceptor('imagen', {
-    storage,
-    fileFilter,
-    limits: { fileSize: 5 * 1024 * 1024 },
-  })
-)
-async subirImagen(
-  @UploadedFile() file: Express.Multer.File,
-  @Body('userId') userId: number, // ✅ Recibimos userId
-): Promise<any> {
-  if (!file) {
-    throw new BadRequestException('No se proporcionó archivo');
-  }
 
-  if (!userId) {
-    throw new BadRequestException('Se requiere userId');
-  }
-
-  const config = await this.popupService.subirImagen(file, userId);
-  return {
-    success: true,
-    message: 'Imagen subida correctamente',
-    data: config,
-  };
-}
-
-@Put('configuracion')
-async actualizarConfiguracion(
-  @Body() body: { activo?: boolean; imagenUrl?: string; userId: number }, // ✅ Agregamos userId
-): Promise<PopupConfiguracion> {
-  if (!body.userId) {
-    throw new BadRequestException('Se requiere userId');
-  }
-
-  if (body.activo !== undefined) {
-    return await this.popupService.actualizarConfiguracion(body.activo, body.userId);
-  }
-  
-  throw new BadRequestException('Se requiere activo');
-}
   /**
-   * DELETE /api/popup/imagen - Eliminar imagen del popup
+   * POST /backend_api/popup/crear - Crear nuevo popup programado (ADMIN)
    */
-  @Delete('imagen')
-  async eliminarImagen(): Promise<{ success: boolean; message: string }> {
-    await this.popupService.eliminarImagen();
+  @Post('crear')
+  @HttpCode(HttpStatus.CREATED)
+  @UseInterceptors(
+    FileInterceptor('imagen', {
+      storage,
+      fileFilter,
+      limits: { fileSize: 5 * 1024 * 1024 },
+    })
+  )
+  async crearPopup(
+    @UploadedFile() file: Express.Multer.File,
+    @Body() crearPopupDto: CrearPopupDto,
+  ): Promise<{ success: boolean; message: string; popup: PopupProgramado }> {
+    if (!file) {
+      throw new BadRequestException('Se requiere una imagen');
+    }
+
+    if (!crearPopupDto.userId) {
+      throw new BadRequestException('Se requiere userId');
+    }
+
+    const popup = await this.popupService.crearPopup(
+      crearPopupDto,
+      file,
+      Number(crearPopupDto.userId)
+    );
+
     return {
       success: true,
-      message: 'Imagen eliminada correctamente',
+      message: 'Popup creado correctamente',
+      popup,
+    };
+  }
+
+  /**
+   * PUT /backend_api/popup/:id - Actualizar popup existente (ADMIN)
+   */
+  @Put(':id')
+  @UseInterceptors(
+    FileInterceptor('imagen', {
+      storage,
+      fileFilter,
+      limits: { fileSize: 5 * 1024 * 1024 },
+    })
+  )
+  async actualizarPopup(
+    @Param('id', ParseIntPipe) id: number,
+    @UploadedFile() file: Express.Multer.File,
+    @Body() actualizarPopupDto: ActualizarPopupDto,
+  ): Promise<{ success: boolean; message: string; popup: PopupProgramado }> {
+    if (!actualizarPopupDto.userId) {
+      throw new BadRequestException('Se requiere userId');
+    }
+
+    const popup = await this.popupService.actualizarPopup(
+      id,
+      actualizarPopupDto,
+      file || null,
+      Number(actualizarPopupDto.userId)
+    );
+
+    return {
+      success: true,
+      message: 'Popup actualizado correctamente',
+      popup,
+    };
+  }
+
+  /**
+   * DELETE /backend_api/popup/:id - Eliminar popup (ADMIN)
+   */
+  @Delete(':id')
+  async eliminarPopup(
+    @Param('id', ParseIntPipe) id: number
+  ): Promise<{ success: boolean; message: string }> {
+    await this.popupService.eliminarPopup(id);
+
+    return {
+      success: true,
+      message: 'Popup eliminado correctamente',
+    };
+  }
+
+  /**
+   * PATCH /backend_api/popup/:id/toggle - Activar/Desactivar popup (ADMIN)
+   */
+  @Patch(':id/toggle')
+  async toggleActivo(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: { activo: boolean; userId: number }
+  ): Promise<{ success: boolean; message: string; popup: PopupProgramado }> {
+    if (body.activo === undefined) {
+      throw new BadRequestException('Se requiere el campo activo');
+    }
+
+    if (!body.userId) {
+      throw new BadRequestException('Se requiere userId');
+    }
+
+    const popup = await this.popupService.toggleActivo(id, body.activo, body.userId);
+
+    return {
+      success: true,
+      message: `Popup ${body.activo ? 'activado' : 'desactivado'} correctamente`,
+      popup,
     };
   }
 }
