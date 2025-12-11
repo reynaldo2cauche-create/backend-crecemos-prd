@@ -1,35 +1,58 @@
-import { IsNotEmpty, IsNumber, IsString, IsOptional, IsDateString, Matches } from 'class-validator';
+import { IsNotEmpty, IsNumber, IsString, IsOptional, IsArray, ValidateNested } from 'class-validator';
+import { Type } from 'class-transformer';
 
-export class CreateCitaDto {
+// DTO para encargado de visita escolar
+export class EncargadoDto {
   @IsNotEmpty()
+  @IsString()
+  nombre_completo: string;
+
+  @IsOptional()
+  @IsString()
+  cargo?: string;
+
+  @IsOptional()
+  @IsString()
+  institucion?: string;
+
+  @IsOptional()
+  @IsString()
+  telefono?: string;
+
+  @IsOptional()
+  @IsString()
+  email?: string;
+}
+
+// DTO principal para crear citas
+export class CreateCitaDto {
+  // ============ CAMPO OBLIGATORIO: TIPO DE CITA ============
+  @IsNotEmpty({ message: 'El tipo de cita es obligatorio' })
+  @IsNumber()
+  tipo_cita_id: number;
+
+  // ============ CAMPOS COMUNES ============
+  @IsNotEmpty({ message: 'El paciente es obligatorio' })
   @IsNumber()
   paciente_id: number;
 
-  @IsNotEmpty()
-  @IsNumber()
-  doctor_id: number;
-
-  @IsNotEmpty()
-  @IsNumber()
-  servicio_id: number;
-
-  @IsNotEmpty()
+  @IsNotEmpty({ message: 'El motivo es obligatorio' })
   @IsNumber()
   motivo_id: number;
 
-  @IsNotEmpty()
+  @IsNotEmpty({ message: 'El estado es obligatorio' })
   @IsNumber()
   estado_id: number;
 
-  @IsNotEmpty()
-  @IsDateString()
+  @IsNotEmpty({ message: 'La fecha es obligatoria' })
+  @IsString()
   fecha: string;
 
-  @IsNotEmpty()
-  @Matches(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]$/, { message: 'hora_inicio debe tener formato HH:MM:SS' })
+  @IsNotEmpty({ message: 'La hora de inicio es obligatoria' })
+  @IsString()
   hora_inicio: string;
 
-  @IsNotEmpty()
+  @IsNotEmpty({ message: 'La duración es obligatoria' })
   @IsNumber()
   duracion_minutos: number;
 
@@ -40,4 +63,35 @@ export class CreateCitaDto {
   @IsOptional()
   @IsNumber()
   user_id?: number;
+
+  // ============ CITA NORMAL (tipo_cita_id = 1) ============
+  // Requiere: doctor_id, servicio_id
+  @IsOptional()
+  @IsNumber()
+  doctor_id?: number;
+
+  @IsOptional()
+  @IsNumber()
+  servicio_id?: number;
+
+  // ============ REUNIÓN CLÍNICA (tipo_cita_id = 2) ============
+  // Requiere: terapeutas_ids[], servicios_ids[]
+  // Sin jerarquías, todos al mismo nivel
+  @IsOptional()
+  @IsArray()
+  @IsNumber({}, { each: true })
+  terapeutas_ids?: number[];
+
+  @IsOptional()
+  @IsArray()
+  @IsNumber({}, { each: true })
+  servicios_ids?: number[];
+
+  // ============ VISITA ESCOLAR (tipo_cita_id = 3) ============
+  // Requiere: encargado
+  // Opcional: servicio_id
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => EncargadoDto)
+  encargado?: EncargadoDto;
 }
