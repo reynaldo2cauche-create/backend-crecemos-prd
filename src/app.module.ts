@@ -80,6 +80,10 @@ import { AlertaSistema } from './auditoria/alerta-sistema.entity';
 import { ConfiguracionAlerta } from './auditoria/configuracion-alerta.entity';
 import { APP_INTERCEPTOR } from '@nestjs/core';
 import { AuditoriaInterceptor } from './auditoria/auditoria.interceptor';
+import { CitaTerapeuta } from './citas/cita-terapeuta.entity';
+import { CitaServicio } from './citas/cita-servicio.entity';
+import { HistorialCitaServicio } from './citas/historial-cita-servicio.entity';
+import { HistorialCitaTerapeuta } from './citas/historial-cita-terapeuta.entity';
 
 @Module({
   imports: [
@@ -139,6 +143,10 @@ import { AuditoriaInterceptor } from './auditoria/auditoria.interceptor';
         MotivoCita,
         EstadoCita,
         Cita,
+        CitaTerapeuta,
+        CitaServicio,
+        HistorialCitaServicio,
+        HistorialCitaTerapeuta,
         HermanoEntrevista,
      FamiliarEntrevista,
         HistorialCita
