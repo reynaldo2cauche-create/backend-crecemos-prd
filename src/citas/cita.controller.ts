@@ -31,10 +31,10 @@ export class CitaController {
   /**
    * Obtener historial de cambios de una cita específica
    */
-  @Get(':id/historial')
-  obtenerHistorial(@Param('id') id: string) {
-    return this.citaService.obtenerHistorial(+id);
-  }
+  // @Get(':id/historial')
+  // obtenerHistorial(@Param('id') id: string) {
+  //   return this.citaService.obtenerHistorial(+id);
+  // }
 
   /**
    * Obtener una cita por ID

@@ -1,13 +1,10 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, OneToMany, JoinColumn } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn } from 'typeorm';
 import { Paciente } from '../pacientes/paciente.entity';
 import { TrabajadorCentro } from '../usuarios/trabajador-centro.entity';
 import { Servicios } from '../catalogos/servicios.entity';
 import { MotivoCita } from '../catalogos/motivo-cita.entity';
 import { EstadoCita } from '../catalogos/estado-cita.entity';
 import { TipoCita } from '../catalogos/tipo-cita.entity';
-import { CitaTerapeuta } from './cita-terapeuta.entity';
-import { CitaServicio } from './cita-servicio.entity';
-import { CitaEncargado } from './cita-encargado.entity';
 
 @Entity('citas')
 export class Cita {
@@ -20,6 +17,9 @@ export class Cita {
   @ManyToOne(() => TipoCita, { eager: true })
   @JoinColumn({ name: 'tipo_cita_id' })
   tipo_cita: TipoCita;
+
+  @Column({ type: 'int' })
+  paciente_id: number;
 
   @ManyToOne(() => Paciente, { eager: true })
   @JoinColumn({ name: 'paciente_id' })
@@ -39,24 +39,19 @@ export class Cita {
   @JoinColumn({ name: 'servicio_id' })
   servicio: Servicios;
 
+  @Column({ type: 'int' })
+  motivo_id: number;
+
   @ManyToOne(() => MotivoCita, { eager: true })
   @JoinColumn({ name: 'motivo_id' })
   motivo: MotivoCita;
 
+  @Column({ type: 'int' })
+  estado_id: number;
+
   @ManyToOne(() => EstadoCita, { eager: true })
   @JoinColumn({ name: 'estado_id' })
   estado: EstadoCita;
-
-  // Relaciones para múltiples terapeutas y servicios (REUNION_CLINICA)
-  @OneToMany(() => CitaTerapeuta, citaTerapeuta => citaTerapeuta.cita, { cascade: true })
-  terapeutas: CitaTerapeuta[];
-
-  @OneToMany(() => CitaServicio, citaServicio => citaServicio.cita, { cascade: true })
-  servicios: CitaServicio[];
-
-  // Relación para encargados (VISITA_ESCOLAR)
-  @OneToMany(() => CitaEncargado, citaEncargado => citaEncargado.cita, { cascade: true })
-  encargados: CitaEncargado[];
 
   @Column({ type: 'date' })
   fecha: string;
@@ -72,6 +67,9 @@ export class Cita {
 
   @Column({ type: 'text', nullable: true })
   nota: string;
+
+  @Column({ type: 'tinyint', default: 0 })
+  firma_documento: number;
 
   @Column({ type: 'int', nullable: true })
   user_id_crea: number;
