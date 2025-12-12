@@ -20,17 +20,8 @@ export class Beneficio {
   @Column({ length: 50, nullable: true })
   descuento: string;
 
-  @Column({ length: 10, nullable: true })
+  @Column({ length: 255, nullable: true })
   icono: string;
-
-  @Column({ length: 20, nullable: true })
-  codigo_beneficio: string;
-
-  @Column({ type: 'text', nullable: true })
-  como_canjear: string;
-
-  @Column({ type: 'date', nullable: true })
-  fecha_vigencia: Date;
 
   @Column({ length: 50, nullable: true })
   etiqueta: string;

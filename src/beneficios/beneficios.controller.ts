@@ -8,13 +8,13 @@ export class BeneficiosController {
   constructor(private readonly beneficiosService: BeneficiosService) {}
 
   @Get()
-  @ApiOperation({ 
-    summary: 'Obtener todos los beneficios activos y vigentes',
-    description: 'Retorna todos los beneficios que están activos y con fecha de vigencia válida'
+  @ApiOperation({
+    summary: 'Obtener todos los beneficios activos',
+    description: 'Retorna todos los beneficios que están activos'
   })
-  @ApiResponse({ 
-    status: 200, 
-    description: 'Lista de beneficios activos y vigentes' 
+  @ApiResponse({
+    status: 200,
+    description: 'Lista de beneficios activos'
   })
   async findAll() {
     return this.beneficiosService.findAll();
