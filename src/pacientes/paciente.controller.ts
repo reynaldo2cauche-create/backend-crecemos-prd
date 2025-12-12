@@ -4,9 +4,10 @@ import { CreatePacienteDto } from './dto/create-paciente.dto';
 import { UpdatePacienteDto } from './dto/update-paciente.dto';
 import { CreatePacienteCompletoDto } from './dto/create-paciente-completo.dto';
 import { UpdateEstadoPacienteDto } from './dto/update-estado-paciente.dto';
-import { ApiOperation, ApiQuery } from '@nestjs/swagger';
+import { ApiOperation, ApiQuery, ApiResponse,ApiParam } from '@nestjs/swagger';
 import { Auditable } from 'src/auditoria/decorators/auditable.decorator';
 import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
+import { Public } from 'src/auth/decorators/public.decorator';
 
 @Controller('backend_api/pacientes')
 @UseGuards(JwtAuthGuard) 
@@ -104,6 +105,33 @@ async findAllIncludingInactive(@Query() query: any) {
   @Get('check-documento/:numeroDocumento')
   checkDocumentoExists(@Param('numeroDocumento') numeroDocumento: string) {
     return this.pacienteService.checkDocumentoExists(numeroDocumento);
+  }
+  
+  @Public()
+  @Get('beneficios/:numeroDocumento')
+  @ApiOperation({
+    summary: 'Verificar paciente y obtener beneficios disponibles',
+    description: 'Valida que el paciente exista y esté activo, luego retorna los beneficios disponibles'
+  })
+  @ApiParam({
+    name: 'numeroDocumento',
+    description: 'Número de documento del paciente',
+    example: '12345678'
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Paciente verificado y beneficios obtenidos exitosamente'
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Paciente no encontrado'
+  })
+  @ApiResponse({
+    status: 403,
+    description: 'Paciente inactivo, sin acceso a beneficios'
+  })
+  verificarYObtenerBeneficios(@Param('numeroDocumento') numeroDocumento: string) {
+    return this.pacienteService.verificarPacienteYObtenerBeneficios(numeroDocumento);
   }
 
   @Patch(':id')
