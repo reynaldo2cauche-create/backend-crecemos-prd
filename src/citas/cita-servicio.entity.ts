@@ -1,5 +1,6 @@
 import { Entity, Column, PrimaryGeneratedColumn, ManyToOne, JoinColumn } from 'typeorm';
 import { Servicios } from '../catalogos/servicios.entity';
+import { Cita } from './cita.entity';
 
 @Entity('cita_servicios')
 export class CitaServicio {
@@ -23,6 +24,10 @@ export class CitaServicio {
 
   @Column({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP', onUpdate: 'CURRENT_TIMESTAMP' })
   updated_at: Date;
+
+  @ManyToOne(() => Cita, cita => cita.servicios)
+  @JoinColumn({ name: 'cita_id' })
+  cita: Cita;
 
   @ManyToOne(() => Servicios, { eager: true })
   @JoinColumn({ name: 'servicio_id' })

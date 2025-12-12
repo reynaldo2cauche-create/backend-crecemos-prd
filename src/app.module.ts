@@ -82,8 +82,10 @@ import { APP_INTERCEPTOR } from '@nestjs/core';
 import { AuditoriaInterceptor } from './auditoria/auditoria.interceptor';
 import { CitaTerapeuta } from './citas/cita-terapeuta.entity';
 import { CitaServicio } from './citas/cita-servicio.entity';
+import { CitaEncargado } from './citas/cita-encargado.entity';
 import { HistorialCitaServicio } from './citas/historial-cita-servicio.entity';
 import { HistorialCitaTerapeuta } from './citas/historial-cita-terapeuta.entity';
+import { TipoCita } from './catalogos/tipo-cita.entity';
 
 @Module({
   imports: [
@@ -142,9 +144,11 @@ import { HistorialCitaTerapeuta } from './citas/historial-cita-terapeuta.entity'
         Ocupaciones,
         MotivoCita,
         EstadoCita,
+        TipoCita,
         Cita,
         CitaTerapeuta,
         CitaServicio,
+        CitaEncargado,
         HistorialCitaServicio,
         HistorialCitaTerapeuta,
         HermanoEntrevista,
