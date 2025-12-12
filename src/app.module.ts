@@ -63,6 +63,7 @@ import { Comentario } from './postulaciones/comentario.entity';
 import { EvaluacionTerapiaOcupacional } from './historia-clinica/entities/evaluacion-terapia-ocupacional.entity';
 import { ArchivoOficial } from './historia-clinica/entities/archivo-oficial.entity';
 import { ArchivoTerapia } from './historia-clinica/entities/archivo-terapia.entity';
+import { Beneficio } from './beneficios/beneficios.entity';
 import { CargoPostulacion } from './postulaciones/cargo-postulacion.entity';
 import { EstadoPostulacion } from './postulaciones/estado-postulacion.entity';
 import { PopupModule } from './popup/popup.module';
@@ -89,6 +90,31 @@ import { AuditoriaInterceptor } from './auditoria/auditoria.interceptor';
     ServeStaticModule.forRoot({
       rootPath: join(__dirname, '..', 'uploads'),  // Ruta de la carpeta de archivos
       serveRoot: '/uploads',  // URL base para acceder a los archivos
+      serveStaticOptions: {
+        index: false,
+        setHeaders: (res, path) => {
+          // Configurar headers para diferentes tipos de archivo
+          if (path.endsWith('.pdf')) {
+            res.set('Content-Type', 'application/pdf');
+          } else if (path.endsWith('.doc')) {
+            res.set('Content-Type', 'application/msword');
+          } else if (path.endsWith('.docx')) {
+            res.set('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+          } else if (path.endsWith('.xls')) {
+            res.set('Content-Type', 'application/vnd.ms-excel');
+          } else if (path.endsWith('.xlsx')) {
+            res.set('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+          } else if (path.endsWith('.ppt')) {
+            res.set('Content-Type', 'application/vnd.ms-powerpoint');
+          } else if (path.endsWith('.pptx')) {
+            res.set('Content-Type', 'application/vnd.openxmlformats-officedocument.presentationml.presentation');
+          } else if (path.endsWith('.svg')) {
+            res.set('Content-Type', 'image/svg+xml');
+          }
+          // Permitir que los archivos se puedan visualizar en el navegador
+          res.set('Access-Control-Allow-Origin', '*');
+        },
+      },
     }),
     TypeOrmModule.forRoot({
       type: 'mysql',
@@ -147,6 +173,7 @@ import { AuditoriaInterceptor } from './auditoria/auditoria.interceptor';
         EvaluacionTerapiaOcupacional,
         ArchivoOficial,
         ArchivoTerapia,
+        Beneficio,
         CargoPostulacion,
         EstadoPostulacion,
         PopupProgramado,

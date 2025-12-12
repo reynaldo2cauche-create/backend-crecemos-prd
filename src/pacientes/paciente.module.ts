@@ -28,6 +28,7 @@ import { ParejaPaciente } from './entities/pareja-paciente.entity';
 import { ParejaPacienteService } from './services/pareja-paciente.service';
 import { EstadoPacienteService } from './estado-paciente.service';
 import { EstadoPacienteController } from './estado-paciente.controller';
+import { BeneficiosModule } from 'src/beneficios/beneficios.module';
 
 @Module({
   imports: [
@@ -41,8 +42,10 @@ import { EstadoPacienteController } from './estado-paciente.controller';
       Servicios,
       NotaEvolucion,
       TrabajadorCentro,
-      ParejaPaciente
-    ])
+      ParejaPaciente,
+      
+    ]),
+    BeneficiosModule
   ],
   providers: [
     PacienteService,
