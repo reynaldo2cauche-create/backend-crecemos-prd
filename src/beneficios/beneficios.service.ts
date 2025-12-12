@@ -11,29 +11,17 @@ export class BeneficiosService {
   ) {}
 
   /**
-   * Obtiene todos los beneficios activos y vigentes
+   * Obtiene todos los beneficios activos
    */
   async findAll() {
-    const beneficios = await this.beneficioRepository.find({
-      where: { 
-        activo: true 
+    return await this.beneficioRepository.find({
+      where: {
+        activo: true
       },
       order: {
         categoria: 'ASC',
         nombre: 'ASC'
       }
     });
-
-    // Filtrar beneficios vigentes (fecha_vigencia >= hoy)
-    const hoy = new Date();
-    hoy.setHours(0, 0, 0, 0);
-    
-    const beneficiosVigentes = beneficios.filter(beneficio => {
-      const fechaVigencia = new Date(beneficio.fecha_vigencia);
-      fechaVigencia.setHours(0, 0, 0, 0);
-      return fechaVigencia >= hoy;
-    });
-
-    return beneficiosVigentes;
   }
 }
