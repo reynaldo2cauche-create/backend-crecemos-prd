@@ -1,4 +1,5 @@
-import { Entity, PrimaryGeneratedColumn, Column } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn } from 'typeorm';
+import { Cita } from './cita.entity';
 
 @Entity('cita_encargados')
 export class CitaEncargado {
@@ -34,4 +35,8 @@ export class CitaEncargado {
 
   @Column({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP', onUpdate: 'CURRENT_TIMESTAMP' })
   updated_at: Date;
+
+  @ManyToOne(() => Cita, cita => cita.encargados)
+  @JoinColumn({ name: 'cita_id' })
+  cita: Cita;
 }

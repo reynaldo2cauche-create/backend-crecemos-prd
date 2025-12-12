@@ -87,6 +87,17 @@ export class CreateCitaDto {
   @IsNumber({}, { each: true })
   servicios_ids?: number[];
 
+  // ============ TERAPEUTAS Y SERVICIOS ADICIONALES ============
+  @IsOptional()
+  @IsArray()
+  @IsNumber({}, { each: true })
+  terapeutas_adicionales?: number[];
+
+  @IsOptional()
+  @IsArray()
+  @IsNumber({}, { each: true })
+  servicios_adicionales?: number[];
+
   // ============ VISITA ESCOLAR (tipo_cita_id = 3) ============
   // Requiere: encargado
   // Opcional: servicio_id
