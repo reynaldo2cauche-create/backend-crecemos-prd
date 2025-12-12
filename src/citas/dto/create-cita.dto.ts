@@ -1,11 +1,18 @@
 import { IsNotEmpty, IsNumber, IsString, IsOptional, IsArray, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 
-// DTO para encargado de visita escolar
 export class EncargadoDto {
   @IsNotEmpty()
   @IsString()
   nombre_completo: string;
+
+  @IsNotEmpty()
+  @IsString()
+  institucion: string;
+
+  @IsNotEmpty()
+  @IsString()
+  telefono: string;
 
   @IsOptional()
   @IsString()
@@ -13,25 +20,14 @@ export class EncargadoDto {
 
   @IsOptional()
   @IsString()
-  institucion?: string;
-
-  @IsOptional()
-  @IsString()
-  telefono?: string;
-
-  @IsOptional()
-  @IsString()
   email?: string;
 }
 
-// DTO principal para crear citas
 export class CreateCitaDto {
-  // ============ CAMPO OBLIGATORIO: TIPO DE CITA ============
   @IsNotEmpty({ message: 'El tipo de cita es obligatorio' })
   @IsNumber()
   tipo_cita_id: number;
 
-  // ============ CAMPOS COMUNES ============
   @IsNotEmpty({ message: 'El paciente es obligatorio' })
   @IsNumber()
   paciente_id: number;
@@ -64,8 +60,7 @@ export class CreateCitaDto {
   @IsNumber()
   user_id?: number;
 
-  // ============ CITA NORMAL (tipo_cita_id = 1) ============
-  // Requiere: doctor_id, servicio_id
+  // CITA NORMAL (tipo_cita_id = 1)
   @IsOptional()
   @IsNumber()
   doctor_id?: number;
@@ -74,9 +69,7 @@ export class CreateCitaDto {
   @IsNumber()
   servicio_id?: number;
 
-  // ============ REUNIÓN CLÍNICA (tipo_cita_id = 2) ============
-  // Requiere: terapeutas_ids[], servicios_ids[]
-  // Sin jerarquías, todos al mismo nivel
+  // REUNIÓN CLÍNICA (tipo_cita_id = 2)
   @IsOptional()
   @IsArray()
   @IsNumber({}, { each: true })
@@ -87,22 +80,13 @@ export class CreateCitaDto {
   @IsNumber({}, { each: true })
   servicios_ids?: number[];
 
-  // ============ TERAPEUTAS Y SERVICIOS ADICIONALES ============
-  @IsOptional()
-  @IsArray()
-  @IsNumber({}, { each: true })
-  terapeutas_adicionales?: number[];
-
-  @IsOptional()
-  @IsArray()
-  @IsNumber({}, { each: true })
-  servicios_adicionales?: number[];
-
-  // ============ VISITA ESCOLAR (tipo_cita_id = 3) ============
-  // Requiere: encargado
-  // Opcional: servicio_id
+  // VISITA ESCOLAR (tipo_cita_id = 3)
   @IsOptional()
   @ValidateNested()
   @Type(() => EncargadoDto)
   encargado?: EncargadoDto;
+
+  @IsOptional()
+  @IsNumber()
+  firma_documento?: number;
 }
