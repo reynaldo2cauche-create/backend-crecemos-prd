@@ -14,12 +14,15 @@ import { Public } from 'src/auth/decorators/public.decorator';
 export class PacienteController {
   constructor(private readonly pacienteService: PacienteService) {}
 
+
+  @Public()
   @Post()
   create(@Body() dto: CreatePacienteDto) {
     return this.pacienteService.create(dto);
   }
 
 
+  @Public()
   @Post('completo')
   @Auditable({
     modulo: 'PACIENTES',
@@ -102,6 +105,7 @@ async findAllIncludingInactive(@Query() query: any) {
     return this.pacienteService.buscarPacientes(query);
   }
 
+  @Public()
   @Get('check-documento/:numeroDocumento')
   checkDocumentoExists(@Param('numeroDocumento') numeroDocumento: string) {
     return this.pacienteService.checkDocumentoExists(numeroDocumento);
