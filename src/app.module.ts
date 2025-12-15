@@ -81,6 +81,7 @@ import { AlertaSistema } from './auditoria/alerta-sistema.entity';
 import { ConfiguracionAlerta } from './auditoria/configuracion-alerta.entity';
 import { APP_INTERCEPTOR } from '@nestjs/core';
 import { AuditoriaInterceptor } from './auditoria/auditoria.interceptor';
+import { Cargo } from './usuarios/cargo.entity';
 
 @Module({
   imports: [
@@ -149,6 +150,7 @@ import { AuditoriaInterceptor } from './auditoria/auditoria.interceptor';
         Institucion,
         Seccion,
         TrabajadorCentro,
+        Cargo,
         NotaEvolucion,
         TrabajadorCentroUsuario,
         Rol,

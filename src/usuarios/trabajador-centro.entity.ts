@@ -2,6 +2,7 @@ import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, OneToMan
 import { Institucion } from '../evaluaciones/institucion.entity';
 import { Rol } from './rol.entity';
 import { Especialidad } from './especialidad.entity';
+import { Cargo } from './cargo.entity';
 import { Pago } from '../rrhh/pago.entity';
 import { Vacacion } from '../rrhh/vacacion.entity';
 import { CuentaBancaria } from '../rrhh/cuenta-bancaria.entity';
@@ -62,9 +63,6 @@ export class TrabajadorCentro {
   @Column({ nullable: true })
   talla_zapatos?: string;
 
-  @Column({ nullable: true })
-  cargo: string;
-
   @ManyToOne(() => Rol, { eager: true, nullable: true })
   @JoinColumn({ name: 'rol_id' })
   rol: Rol;
@@ -72,6 +70,17 @@ export class TrabajadorCentro {
   @ManyToOne(() => Especialidad, { eager: true, nullable: true })
   @JoinColumn({ name: 'especialidad_id' })
   especialidad: Especialidad;
+
+  @ManyToOne(() => Cargo, { eager: true, nullable: true })
+  @JoinColumn({ name: 'cargo_id' })
+  cargo: Cargo;
+
+  @ManyToOne(() => TrabajadorCentro, { nullable: true })
+  @JoinColumn({ name: 'jefe_id' })
+  jefe: TrabajadorCentro;
+
+  @OneToMany(() => TrabajadorCentro, trabajador => trabajador.jefe)
+  subordinados: TrabajadorCentro[];
 
   @ManyToOne(() => Institucion, { eager: true, nullable: true })
   @JoinColumn({ name: 'institucion_id' })
