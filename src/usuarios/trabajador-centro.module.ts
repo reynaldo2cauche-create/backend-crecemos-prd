@@ -9,15 +9,18 @@ import { RolController } from './rol.controller';
 import { Especialidad } from './especialidad.entity';
 import { EspecialidadService } from './especialidad.service';
 import { EspecialidadController } from './especialidad.controller';
+import { Cargo } from './cargo.entity';
+import { CargoService } from './cargo.service';
+import { CargoController } from './cargo.controller';
 import { TrabajadorServicio } from './trabajador-servicio.entity';
 import { TrabajadorServicioService } from './trabajador-servicio.service';
 import { TrabajadorServicioController } from './trabajador-servicio.controller';
 import { Servicios } from '../catalogos/servicios.entity';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([TrabajadorCentro, Rol, Especialidad, TrabajadorServicio, Servicios])],
-  providers: [TrabajadorCentroService, RolService, EspecialidadService, TrabajadorServicioService],
-  controllers: [TrabajadorCentroController, RolController, EspecialidadController, TrabajadorServicioController],
-  exports: [TrabajadorCentroService, RolService, EspecialidadService, TrabajadorServicioService],
+  imports: [TypeOrmModule.forFeature([TrabajadorCentro, Rol, Especialidad, Cargo, TrabajadorServicio, Servicios])],
+  providers: [TrabajadorCentroService, RolService, EspecialidadService, CargoService, TrabajadorServicioService],
+  controllers: [TrabajadorCentroController, RolController, EspecialidadController, CargoController, TrabajadorServicioController],
+  exports: [TrabajadorCentroService, RolService, EspecialidadService, CargoService, TrabajadorServicioService],
 })
 export class TrabajadorCentroModule {} 
