@@ -2,6 +2,7 @@ import { Controller, Get, Post, Body, Patch, Param, Delete, Query } from '@nestj
 import { CitaService } from './cita.service';
 import { CreateCitaDto } from './dto/create-cita.dto';
 import { UpdateCitaDto } from './dto/update-cita.dto';
+import { Auditable } from 'src/auditoria/decorators/auditable.decorator';
 
 @Controller('backend_api/citas')
 export class CitaController {
@@ -34,6 +35,10 @@ export class CitaController {
   }
 
   @Delete(':id')
+  @Auditable({
+    modulo: 'CITAS',
+    accion: 'ELIMINAR_CITA',
+  })
   remove(@Param('id') id: string, @Body() body?: { user_id?: number }) {
     return this.citaService.remove(+id, body?.user_id);
   }
