@@ -16,9 +16,10 @@ import { TrabajadorServicio } from './trabajador-servicio.entity';
 import { TrabajadorServicioService } from './trabajador-servicio.service';
 import { TrabajadorServicioController } from './trabajador-servicio.controller';
 import { Servicios } from '../catalogos/servicios.entity';
+import { PacienteServicio } from '../pacientes/paciente-servicio.entity';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([TrabajadorCentro, Rol, Especialidad, Cargo, TrabajadorServicio, Servicios])],
+  imports: [TypeOrmModule.forFeature([TrabajadorCentro, Rol, Especialidad, Cargo, TrabajadorServicio, Servicios, PacienteServicio])],
   providers: [TrabajadorCentroService, RolService, EspecialidadService, CargoService, TrabajadorServicioService],
   controllers: [TrabajadorCentroController, RolController, EspecialidadController, CargoController, TrabajadorServicioController],
   exports: [TrabajadorCentroService, RolService, EspecialidadService, CargoService, TrabajadorServicioService],
