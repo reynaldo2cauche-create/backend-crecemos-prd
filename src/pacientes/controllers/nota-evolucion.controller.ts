@@ -27,5 +27,5 @@ export class NotaEvolucionController {
     return this.service.findByPaciente(+id, trabajadorIdNumber);
   }
 
-  
+ 
 } 

@@ -23,6 +23,7 @@ import { Servicios } from '../catalogos/servicios.entity';
 import { NotaEvolucion } from './entities/nota-evolucion.entity';
 import { NotaEvolucionService } from './services/nota-evolucion.service';
 import { NotaEvolucionController } from './controllers/nota-evolucion.controller';
+import { TransferenciaNotas } from './entities/transferencia-notas.entity';
 import { TrabajadorCentro } from '../usuarios/trabajador-centro.entity';
 import { ParejaPaciente } from './entities/pareja-paciente.entity';
 import { ParejaPacienteService } from './services/pareja-paciente.service';
@@ -41,9 +42,10 @@ import { BeneficiosModule } from 'src/beneficios/beneficios.module';
       EstadoPaciente,
       Servicios,
       NotaEvolucion,
+      TransferenciaNotas,
       TrabajadorCentro,
       ParejaPaciente,
-      
+
     ]),
     BeneficiosModule
   ],

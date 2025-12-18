@@ -82,6 +82,24 @@ export class PacienteServicioController {
     return this.pacienteServicioService.desasignarServicioPorId(+id);
   }
 
+  @Post('asignacion')
+  @UseGuards(JwtAuthGuard)
+  @Auditable({
+    modulo: 'PACIENTES',
+    accion: 'CREAR_ASIGNACION_TERAPEUTA',
+  })
+  crearAsignacionTerapeuta(
+    @Body() dto: {
+      paciente_servicio_id: number;
+      terapeuta_id: number;
+      fecha_asignacion: string;
+      estado: string;
+      user_id_crea: number;
+    }
+  ) {
+    return this.pacienteServicioService.crearAsignacionTerapeuta(dto);
+  }
+
   @Patch('asignacion/:id')
   @UseGuards(JwtAuthGuard)
   @Auditable({
@@ -93,5 +111,15 @@ export class PacienteServicioController {
     @Body() dto: { terapeuta_id: number; user_id_actua: number }
   ) {
     return this.pacienteServicioService.actualizarAsignacionTerapeuta(+id, dto);
+  }
+
+  @Delete('asignacion/:id')
+  @UseGuards(JwtAuthGuard)
+  @Auditable({
+    modulo: 'PACIENTES',
+    accion: 'DESASIGNAR_TERAPEUTA',
+  })
+  desasignarTerapeutaIndividual(@Param('id') id: string) {
+    return this.pacienteServicioService.desasignarTerapeutaIndividual(+id);
   }
 } 

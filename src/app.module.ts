@@ -82,6 +82,7 @@ import { ConfiguracionAlerta } from './auditoria/configuracion-alerta.entity';
 import { APP_INTERCEPTOR } from '@nestjs/core';
 import { AuditoriaInterceptor } from './auditoria/auditoria.interceptor';
 import { Cargo } from './usuarios/cargo.entity';
+import { TransferenciaNotas } from './pacientes/entities/transferencia-notas.entity';
 
 @Module({
   imports: [
@@ -188,7 +189,8 @@ import { Cargo } from './usuarios/cargo.entity';
         TrabajadorServicio,
         AuditoriaAccion,
         AlertaSistema,
-        ConfiguracionAlerta
+        ConfiguracionAlerta,
+        TransferenciaNotas,
       ],
         synchronize: false,   // true en desarrollo, false en producción
           // Activar logs de SQL para debug
