@@ -139,27 +139,33 @@ export class PacienteServicioService {
     if (dto.terapeuta_id) {
       console.log('Asignando terapeuta:', dto.terapeuta_id, 'a paciente_servicio:', savedPacienteServicio.id);
 
-      // Desactivar asignaciones anteriores del mismo paciente_servicio
-      const asignacionesAnteriores = await this.asignacionTerapeutaRepository.find({
+      // Verificar si este terapeuta ya está asignado activamente a este paciente_servicio
+      const asignacionExistente = await this.asignacionTerapeutaRepository.findOne({
         where: {
           pacienteServicio: { id: savedPacienteServicio.id },
+          terapeuta: { id: dto.terapeuta_id },
           estado: 'ACTIVO',
           activo: true
         }
       });
 
-      console.log('Asignaciones anteriores encontradas:', asignacionesAnteriores.length);
-
-      if (asignacionesAnteriores.length > 0) {
-        for (const asignacion of asignacionesAnteriores) {
-          asignacion.estado = 'INACTIVO';
-          asignacion.fecha_fin = new Date();
-          asignacion.activo = false;
-          await this.asignacionTerapeutaRepository.save(asignacion);
-        }
+      // Si el terapeuta ya está asignado, no crear duplicado
+      if (asignacionExistente) {
+        console.log('⚠️ El terapeuta ya está asignado a este servicio');
+        return {
+          message: 'El terapeuta ya está asignado a este servicio',
+          pacienteServicio: {
+            id: savedPacienteServicio.id
+          },
+          paciente: savedPacienteServicio.paciente ? {
+            id: savedPacienteServicio.paciente.id,
+            nombres: savedPacienteServicio.paciente.nombres,
+            apellidos: savedPacienteServicio.paciente.apellido_paterno + ' ' + savedPacienteServicio.paciente.apellido_materno
+          } : null
+        };
       }
 
-      // Crear nueva asignación activa
+      // Crear nueva asignación activa SIN desactivar las anteriores
       const asignacion = this.asignacionTerapeutaRepository.create({
         pacienteServicio: savedPacienteServicio,
         terapeuta: { id: dto.terapeuta_id },
@@ -169,7 +175,7 @@ export class PacienteServicioService {
       });
 
       const resultado = await this.asignacionTerapeutaRepository.save(asignacion);
-      console.log('Nueva asignación creada:', resultado);
+      console.log('✅ Nueva asignación creada (múltiples terapeutas permitidos):', resultado);
     }
 
     // Retornar el pacienteServicio con su ID y datos del paciente para auditoría
@@ -200,19 +206,15 @@ export class PacienteServicioService {
     });
 
     return servicios.map(ps => {
-      // Buscar la asignación activa más reciente
-      const terapeutaActual = ps.asignaciones?.find(a => 
+      // Obtener TODAS las asignaciones activas (múltiples terapeutas)
+      const asignacionesActivas = ps.asignaciones?.filter(a =>
         a.estado === 'ACTIVO' && a.activo
-      );
-      
+      ) || [];
+
       return {
         id: ps.id,
-        servicio: ps.servicio?.nombre,
-        servicio_id: ps.servicio?.id,
-        terapeuta: terapeutaActual?.terapeuta
-          ? `Lic. ${terapeutaActual.terapeuta.nombres} ${terapeutaActual.terapeuta.apellidos}`
-          : null,
-        terapeuta_id: terapeutaActual?.terapeuta?.id || null,
+        servicio: ps.servicio,
+        asignaciones: asignacionesActivas,
         fecha_inicio: ps.fecha_inicio,
         estado: ps.estado,
         motivo_consulta: ps.motivo_consulta
@@ -302,6 +304,51 @@ export class PacienteServicioService {
     };
   }
 
+  async crearAsignacionTerapeuta(dto: {
+    paciente_servicio_id: number;
+    terapeuta_id: number;
+    fecha_asignacion: string;
+    estado: string;
+    user_id_crea: number;
+  }) {
+    console.log('📝 Creando primera asignación de terapeuta:', dto);
+
+    // 1. Buscar el paciente_servicio con sus relaciones
+    const pacienteServicio = await this.pacienteServicioRepository.findOne({
+      where: { id: dto.paciente_servicio_id },
+      relations: ['paciente', 'servicio']
+    });
+
+    if (!pacienteServicio) {
+      throw new Error(`PacienteServicio con ID ${dto.paciente_servicio_id} no encontrado`);
+    }
+
+    // 2. Crear la asignación
+    const asignacion = this.asignacionTerapeutaRepository.create({
+      pacienteServicio: pacienteServicio,
+      terapeuta: { id: dto.terapeuta_id },
+      fecha_asignacion: new Date(dto.fecha_asignacion),
+      estado: dto.estado || 'ACTIVO',
+      activo: true
+    });
+
+    const asignacionGuardada = await this.asignacionTerapeutaRepository.save(asignacion);
+    console.log('✅ Asignación creada con ID:', asignacionGuardada.id);
+
+    // 3. Retornar información del paciente para auditoría
+    return {
+      message: 'Terapeuta asignado correctamente',
+      asignacion: {
+        id: asignacionGuardada.id
+      },
+      paciente: pacienteServicio.paciente ? {
+        id: pacienteServicio.paciente.id,
+        nombres: pacienteServicio.paciente.nombres,
+        apellidos: pacienteServicio.paciente.apellido_paterno + ' ' + pacienteServicio.paciente.apellido_materno
+      } : null
+    };
+  }
+
   async actualizarAsignacionTerapeuta(asignacionId: number, dto: { terapeuta_id: number; user_id_actua: number }) {
     // 1. Buscar la asignación actual
     const asignacion = await this.asignacionTerapeutaRepository.findOne({
@@ -333,6 +380,34 @@ export class PacienteServicioService {
     // 4. Retornar información del paciente para auditoría
     return {
       message: 'Terapeuta actualizado correctamente',
+      paciente: asignacion.pacienteServicio?.paciente ? {
+        id: asignacion.pacienteServicio.paciente.id,
+        nombres: asignacion.pacienteServicio.paciente.nombres,
+        apellidos: asignacion.pacienteServicio.paciente.apellido_paterno + ' ' + asignacion.pacienteServicio.paciente.apellido_materno
+      } : null
+    };
+  }
+
+  async desasignarTerapeutaIndividual(asignacionId: number): Promise<{ message: string; paciente?: any }> {
+    // 1. Buscar la asignación con relaciones
+    const asignacion = await this.asignacionTerapeutaRepository.findOne({
+      where: { id: asignacionId, activo: true },
+      relations: ['pacienteServicio', 'pacienteServicio.paciente', 'terapeuta']
+    });
+
+    if (!asignacion) {
+      throw new Error(`Asignación con ID ${asignacionId} no encontrada`);
+    }
+
+    // 2. Desactivar solo esta asignación específica
+    asignacion.estado = 'INACTIVO';
+    asignacion.fecha_fin = new Date();
+    asignacion.activo = false;
+    await this.asignacionTerapeutaRepository.save(asignacion);
+
+    // 3. Retornar información
+    return {
+      message: `Terapeuta ${asignacion.terapeuta.nombres} ${asignacion.terapeuta.apellidos} desasignado correctamente`,
       paciente: asignacion.pacienteServicio?.paciente ? {
         id: asignacion.pacienteServicio.paciente.id,
         nombres: asignacion.pacienteServicio.paciente.nombres,

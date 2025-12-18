@@ -1,0 +1,274 @@
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { NotaEvolucion } from '../entities/nota-evolucion.entity';
+import { CreateNotaEvolucionDto } from '../dto/create-nota-evolucion.dto';
+import { Paciente } from '../paciente.entity';
+import { TrabajadorCentro } from '../../usuarios/trabajador-centro.entity';
+import { TransferenciaNotas } from '../entities/transferencia-notas.entity';
+
+@Injectable()
+export class NotaEvolucionService {
+  constructor(
+    @InjectRepository(NotaEvolucion)
+    private notaEvolucionRepository: Repository<NotaEvolucion>,
+    @InjectRepository(Paciente)
+    private pacienteRepository: Repository<Paciente>,
+    @InjectRepository(TrabajadorCentro)
+    private trabajadorRepository: Repository<TrabajadorCentro>,
+    @InjectRepository(TransferenciaNotas)
+    private transferenciaNotasRepository: Repository<TransferenciaNotas>,
+  ) {}
+
+  async create(dto: CreateNotaEvolucionDto) {
+    console.log('📝 Creando nota de evolución:', dto);
+
+    // Validar que los campos requeridos no estén vacíos
+    if (!dto.paciente_id) {
+      throw new BadRequestException('El ID del paciente es requerido');
+    }
+    if (!dto.user_id_crea) {
+      throw new BadRequestException('El ID del usuario creador es requerido');
+    }
+
+    // Buscar el paciente
+    const paciente = await this.pacienteRepository.findOne({
+      where: { id: dto.paciente_id }
+    });
+    if (!paciente) {
+      throw new NotFoundException(`Paciente con ID ${dto.paciente_id} no encontrado`);
+    }
+
+    // Buscar el trabajador (usuario creador)
+    const trabajador = await this.trabajadorRepository.findOne({
+      where: { id: dto.user_id_crea }
+    });
+    if (!trabajador) {
+      throw new NotFoundException(`Trabajador con ID ${dto.user_id_crea} no encontrado`);
+    }
+
+    console.log('✅ Paciente encontrado:', paciente.id, paciente.nombres);
+    console.log('✅ Trabajador encontrado:', trabajador.id, trabajador.nombres);
+
+    // Crear la nota de evolución
+    const nota = this.notaEvolucionRepository.create({
+      paciente,
+      usuarioCreador: trabajador,
+      entrevista: dto.entrevista,
+      sesion_evaluacion: dto.sesion_evaluacion,
+      sesion_terapias: dto.sesion_terapias,
+      objetivos_terapeuticos: dto.objetivos_terapeuticos,
+      observaciones: dto.observaciones,
+      fecha_crea: new Date(),
+    });
+
+    console.log('💾 Guardando nota en BD...');
+
+    try {
+      const notaGuardada = await this.notaEvolucionRepository.save(nota);
+      console.log('✅ Nota guardada exitosamente con ID:', notaGuardada.id);
+
+      // Obtener la nota con todas las relaciones para la respuesta
+      const notaCompleta = await this.notaEvolucionRepository.findOne({
+        where: { id: notaGuardada.id },
+        relations: ['paciente', 'usuarioCreador', 'usuarioCreador.rol', 'usuarioCreador.especialidad']
+      });
+
+      return notaCompleta;
+    } catch (error) {
+      console.error('❌ Error al guardar nota en BD:', error);
+      throw new BadRequestException(`Error al guardar la nota: ${error.message}`);
+    }
+  }
+
+  async findByPaciente(paciente_id: number, trabajador_id?: number) {
+    let notas: NotaEvolucion[];
+
+    if (trabajador_id) {
+      // LÓGICA CON TRANSFERENCIAS:
+      // Mostrar notas propias + notas transferidas de terapeutas anteriores
+      notas = await this.notaEvolucionRepository
+        .createQueryBuilder('nota')
+        .leftJoinAndSelect('nota.usuarioCreador', 'usuarioCreador')
+        .leftJoinAndSelect('usuarioCreador.rol', 'rol')
+        .leftJoinAndSelect('usuarioCreador.especialidad', 'especialidad')
+        .leftJoin('nota.paciente', 'paciente')
+        .where('paciente.id = :paciente_id', { paciente_id })
+        .andWhere(
+          `(
+            nota.user_id_crea = :trabajador_id
+            OR
+            EXISTS (
+              SELECT 1
+              FROM transferencia_notas tn
+              WHERE tn.paciente_id = :paciente_id
+                AND tn.user_id_crea_retiro = nota.user_id_crea
+                AND tn.user_id_asignado_nuevo = :trabajador_id
+                AND tn.activo = 1
+            )
+          )`,
+          { trabajador_id, paciente_id }
+        )
+        .orderBy('nota.fecha_crea', 'DESC')
+        .getMany();
+
+      console.log(`✅ Notas encontradas para terapeuta ${trabajador_id}:`, notas.length);
+    } else {
+      // Sin filtro de trabajador: mostrar todas las notas del paciente
+      notas = await this.notaEvolucionRepository.find({
+        where: { paciente: { id: paciente_id } },
+        order: { fecha_crea: 'DESC' },
+        relations: ['usuarioCreador', 'usuarioCreador.rol', 'usuarioCreador.especialidad']
+      });
+    }
+
+    return notas.map(nota => {
+      const esNotaPropia = trabajador_id && nota.usuarioCreador?.id === trabajador_id;
+
+      return {
+        id: nota.id,
+        entrevista: nota.entrevista,
+        sesion_evaluacion: nota.sesion_evaluacion,
+        sesion_terapias: nota.sesion_terapias,
+        objetivos_terapeuticos: nota.objetivos_terapeuticos,
+        observaciones: nota.observaciones,
+        fecha_crea: nota.fecha_crea,
+        tipo_nota: trabajador_id ? (esNotaPropia ? 'Nota propia' : 'Nota transferida') : null,
+        trabajador: nota.usuarioCreador
+          ? {
+              id: nota.usuarioCreador.id,
+              nombres: nota.usuarioCreador.nombres,
+              apellidos: nota.usuarioCreador.apellidos,
+              especialidad: nota.usuarioCreador.especialidad,
+              rol: nota.usuarioCreador.rol
+            }
+          : null
+      };
+    });
+  }
+
+  // Método para crear una transferencia de notas
+  async transferirNotas(paciente_id: number, user_id_crea_retiro: number, user_id_asignado_nuevo: number) {
+    console.log('🔄 TRANSFERIR NOTAS - Iniciando proceso...');
+    console.log('📋 Datos recibidos:', {
+      paciente_id,
+      user_id_crea_retiro,
+      user_id_asignado_nuevo
+    });
+
+    // Validar que el paciente exista
+    const paciente = await this.pacienteRepository.findOne({
+      where: { id: paciente_id }
+    });
+    if (!paciente) {
+      console.error('❌ Paciente no encontrado:', paciente_id);
+      throw new NotFoundException(`Paciente con ID ${paciente_id} no encontrado`);
+    }
+
+
+    // Validar que los trabajadores existan
+    const terapeutaRetiro = await this.trabajadorRepository.findOne({
+      where: { id: user_id_crea_retiro }
+    });
+    if (!terapeutaRetiro) {
+      throw new NotFoundException(`Terapeuta saliente con ID ${user_id_crea_retiro} no encontrado`);
+    }
+
+    const terapeutaNuevo = await this.trabajadorRepository.findOne({
+      where: { id: user_id_asignado_nuevo }
+    });
+    if (!terapeutaNuevo) {
+      throw new NotFoundException(`Terapeuta nuevo con ID ${user_id_asignado_nuevo} no encontrado`);
+    }
+
+    // Verificar si ya existe una transferencia activa
+    const transferenciaExistente = await this.transferenciaNotasRepository.findOne({
+      where: {
+        paciente: { id: paciente_id },
+        terapeutaRetiro: { id: user_id_crea_retiro },
+        terapeutaNuevo: { id: user_id_asignado_nuevo },
+        activo: true
+      }
+    });
+
+    if (transferenciaExistente) {
+      throw new BadRequestException('Ya existe una transferencia activa entre estos terapeutas para este paciente');
+    }
+
+    // Crear la transferencia
+    console.log('🔨 Creando objeto transferencia...');
+    const transferencia = this.transferenciaNotasRepository.create({
+      paciente,
+      terapeutaRetiro,
+      terapeutaNuevo,
+      activo: true
+    });
+    console.log('📋 Objeto transferencia creado:', JSON.stringify({
+      paciente_id: transferencia.paciente?.id,
+      terapeuta_retiro_id: transferencia.terapeutaRetiro?.id,
+      terapeuta_nuevo_id: transferencia.terapeutaNuevo?.id,
+      activo: transferencia.activo
+    }));
+
+    console.log('💾 Intentando guardar en BD...');
+    const transferenciaGuardada = await this.transferenciaNotasRepository.save(transferencia);
+    console.log('✅ GUARDADO EXITOSO EN BD - ID:', transferenciaGuardada.id);
+    console.log('📊 Datos guardados:', JSON.stringify({
+      id: transferenciaGuardada.id,
+      paciente_id,
+      fecha_transferencia: transferenciaGuardada.fecha_transferencia,
+      activo: transferenciaGuardada.activo
+    }));
+
+    console.log(`✅ Transferencia creada: ${terapeutaRetiro.nombres} → ${terapeutaNuevo.nombres} para paciente ${paciente_id}`);
+
+    // 🔍 VERIFICAR QUE REALMENTE SE GUARDÓ EN LA BD
+    console.log('🔍 Verificando que se guardó en BD...');
+    const verificacion = await this.transferenciaNotasRepository.findOne({
+      where: { id: transferenciaGuardada.id }
+    });
+    if (verificacion) {
+      console.log('✅ CONFIRMADO: Registro encontrado en BD con ID:', verificacion.id);
+    } else {
+      console.error('❌ ERROR CRÍTICO: No se encuentra el registro en BD después de guardar!');
+    }
+
+    return {
+      message: 'Transferencia de notas creada exitosamente',
+      transferencia: {
+        id: transferenciaGuardada.id,
+        paciente_id: paciente_id,
+        terapeuta_retiro: {
+          id: terapeutaRetiro.id,
+          nombres: terapeutaRetiro.nombres,
+          apellidos: terapeutaRetiro.apellidos
+        },
+        terapeuta_nuevo: {
+          id: terapeutaNuevo.id,
+          nombres: terapeutaNuevo.nombres,
+          apellidos: terapeutaNuevo.apellidos
+        },
+        fecha_transferencia: transferenciaGuardada.fecha_transferencia
+      }
+    };
+  }
+
+  // Método para desactivar una transferencia
+  async desactivarTransferencia(transferencia_id: number) {
+    const transferencia = await this.transferenciaNotasRepository.findOne({
+      where: { id: transferencia_id }
+    });
+
+    if (!transferencia) {
+      throw new NotFoundException(`Transferencia con ID ${transferencia_id} no encontrada`);
+    }
+
+    transferencia.activo = false;
+    await this.transferenciaNotasRepository.save(transferencia);
+
+    return {
+      message: 'Transferencia desactivada exitosamente',
+      transferencia_id
+    };
+  }
+} 
