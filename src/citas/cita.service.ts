@@ -1,10 +1,11 @@
-import { Injectable, ConflictException, BadRequestException } from '@nestjs/common';
+import { Injectable, ConflictException, BadRequestException, Inject, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Between, LessThanOrEqual, MoreThanOrEqual } from 'typeorm';
 import { Cita } from './cita.entity';
 import { HistorialCita } from './historial-cita.entity';
 import { CreateCitaDto } from './dto/create-cita.dto';
 import { UpdateCitaDto } from './dto/update-cita.dto';
+import { NotificacionesService } from '../notificaciones/notificaciones.service';
 
 @Injectable()
 export class CitaService {
@@ -13,6 +14,8 @@ export class CitaService {
     private citaRepository: Repository<Cita>,
     @InjectRepository(HistorialCita)
     private historialCitaRepository: Repository<HistorialCita>,
+    @Inject(forwardRef(() => NotificacionesService))
+    private notificacionesService: NotificacionesService,
   ) {}
 
   /**
@@ -379,6 +382,15 @@ export class CitaService {
 
     // Eliminar la cita (el CASCADE eliminará automáticamente el historial)
     await this.citaRepository.delete(id);
+
+    // Notificar eliminación de cita
+    if (userId) {
+      try {
+        await this.notificacionesService.notificarCitaEliminada(id, citaInfo, userId);
+      } catch (error) {
+        console.error('Error al notificar eliminación de cita:', error);
+      }
+    }
 
     return {
       success: true,
