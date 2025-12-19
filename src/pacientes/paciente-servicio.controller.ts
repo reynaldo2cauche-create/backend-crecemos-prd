@@ -49,15 +49,21 @@ export class PacienteServicioController {
     return this.pacienteServicioService.remove(+id);
   }
 
-  @Post('asignar')
-  @UseGuards(JwtAuthGuard)
-  @Auditable({
-    modulo: 'PACIENTES',
-    accion: 'ASIGNAR_SERVICIO',
-  })
-  asignarServicioYTerapeuta(@Body() dto: AsignarServicioTerapeutaDto) {
-    return this.pacienteServicioService.asignarServicioYTerapeuta(dto);
-  }
+@Post('asignar')
+@UseGuards(JwtAuthGuard)
+@Auditable({  // ← COMENTA ESTO TEMPORALMENTE
+  modulo: 'PACIENTES',
+  accion: 'ASIGNAR_SERVICIO',
+})
+async asignarServicioYTerapeuta(@Body() dto: AsignarServicioTerapeutaDto) {
+
+  
+
+    const resultado = await this.pacienteServicioService.asignarServicioYTerapeuta(dto);
+    console.log('✅ CONTROLLER: Servicio ejecutado correctamente:', resultado);
+    return resultado;
+
+}
 
   @Delete('paciente/:pacienteId/servicio/:servicioId')
   @UseGuards(JwtAuthGuard)

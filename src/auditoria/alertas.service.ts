@@ -22,20 +22,11 @@ export class AlertasService {
 
   /**
    * Evalúa si se debe generar una alerta basada en la auditoría
+   * DESHABILITADO: ConfiguracionAlerta fue eliminada
    */
   async evaluarYGenerarAlertas(auditoria: AuditoriaAccion): Promise<void> {
-    try {
-      const configuraciones = await this.configRepository.find({ where: { activa: true } });
-
-      for (const config of configuraciones) {
-        const debeAlertar = await this.evaluarCondicion(config, auditoria);
-        if (debeAlertar) {
-          await this.crearAlerta(config, auditoria);
-        }
-      }
-    } catch (error) {
-      this.logger.error('Error al evaluar alertas:', error);
-    }
+    // Deshabilitado - ConfiguracionAlerta eliminada
+    return;
   }
 
   /**

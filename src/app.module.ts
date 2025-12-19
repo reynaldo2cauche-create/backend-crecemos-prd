@@ -77,18 +77,21 @@ import { Mes } from './rrhh/mes.entity';
 import { PeriodoGratificacion } from './rrhh/periodo-gratificacion.entity';
 import { AuditoriaModule } from './auditoria/auditoria.module';
 import { AuditoriaAccion } from './auditoria/auditoria-accion.entity';
-import { AlertaSistema } from './auditoria/alerta-sistema.entity';
-import { ConfiguracionAlerta } from './auditoria/configuracion-alerta.entity';
 import { APP_INTERCEPTOR } from '@nestjs/core';
 import { AuditoriaInterceptor } from './auditoria/auditoria.interceptor';
 import { Cargo } from './usuarios/cargo.entity';
 import { TransferenciaNotas } from './pacientes/entities/transferencia-notas.entity';
+import { NotificacionesModule } from './notificaciones/notificaciones.module';
+import { Notificacion } from './notificaciones/notificacion.entity';
+import { ConfiguracionNotificacion } from './notificaciones/configuracion-notificacion.entity';
+import { ScheduleModule } from '@nestjs/schedule';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true, // Hace las variables accesibles en toda la aplicación
     }),
+    ScheduleModule.forRoot(),
     ServeStaticModule.forRoot({
       rootPath: join(__dirname, '..', 'uploads'),  // Ruta de la carpeta de archivos
       serveRoot: '/uploads',  // URL base para acceder a los archivos
@@ -188,9 +191,9 @@ import { TransferenciaNotas } from './pacientes/entities/transferencia-notas.ent
         PeriodoGratificacion,
         TrabajadorServicio,
         AuditoriaAccion,
-        AlertaSistema,
-        ConfiguracionAlerta,
         TransferenciaNotas,
+        Notificacion,
+        ConfiguracionNotificacion,
       ],
         synchronize: false,   // true en desarrollo, false en producción
           // Activar logs de SQL para debug
@@ -219,6 +222,7 @@ import { TransferenciaNotas } from './pacientes/entities/transferencia-notas.ent
     PopupModule,
     RrhhModule,
     AuditoriaModule,
+    NotificacionesModule,
     AuthModule,
     Comentario
   ],

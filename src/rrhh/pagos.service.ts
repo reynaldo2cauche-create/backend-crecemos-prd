@@ -204,7 +204,7 @@ export class PagosService {
           id: emp.id,
           nombres: emp.nombres,
           apellidos: emp.apellidos,
-          cargo: emp.cargo,
+          cargo: emp.cargo?.nombre || emp.cargo || 'Sin cargo',
           sueldoBase,
           fecha_ingreso: fechaFormateada,
           mesesTrabajados,
