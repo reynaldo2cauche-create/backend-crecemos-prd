@@ -84,14 +84,14 @@ import { TransferenciaNotas } from './pacientes/entities/transferencia-notas.ent
 import { NotificacionesModule } from './notificaciones/notificaciones.module';
 import { Notificacion } from './notificaciones/notificacion.entity';
 import { ConfiguracionNotificacion } from './notificaciones/configuracion-notificacion.entity';
-import { ScheduleModule } from '@nestjs/schedule';
+// import { ScheduleModule } from '@nestjs/schedule';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true, // Hace las variables accesibles en toda la aplicación
     }),
-    ScheduleModule.forRoot(),
+    // ScheduleModule.forRoot(),
     ServeStaticModule.forRoot({
       rootPath: join(__dirname, '..', 'uploads'),  // Ruta de la carpeta de archivos
       serveRoot: '/uploads',  // URL base para acceder a los archivos
@@ -122,11 +122,11 @@ import { ScheduleModule } from '@nestjs/schedule';
       },
     }),
     TypeOrmModule.forRoot({
-      type: 'mysql',
+       type: 'mysql',
       host: 'localhost',
       port: 3306,
-      username: 'root',  // Asegúrate de poner el nombre de usuario correcto
-      password: 'admin',  // Asegúrate de poner la contraseña correcta
+      username: 'root',
+      password: 'admin',
       database: 'crecemos_website',
       entities: [
         Postulacion,

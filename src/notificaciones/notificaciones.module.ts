@@ -2,8 +2,8 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { JwtModule } from '@nestjs/jwt';
 import { EventEmitterModule } from '@nestjs/event-emitter';
-import { NotificacionesController } from './notificaciones.controller';
-import { NotificacionesService } from './notificaciones.service';
+// import { NotificacionesController } from './notificaciones.controller';
+// import { NotificacionesService } from './notificaciones.service';
 import { Notificacion } from './notificacion.entity';
 import { ConfiguracionNotificacion } from './configuracion-notificacion.entity';
 import { Paciente } from '../pacientes/paciente.entity';
@@ -24,8 +24,8 @@ import { SseAuthGuard } from '../auth/guards/sse-auth.guard';
       signOptions: { expiresIn: '24h' },
     }),
   ],
-  controllers: [NotificacionesController],
-  providers: [NotificacionesService, SseAuthGuard],
-  exports: [NotificacionesService],
+  // controllers: [NotificacionesController],
+  // providers: [NotificacionesService, SseAuthGuard],
+  // exports: [NotificacionesService],
 })
 export class NotificacionesModule {}
