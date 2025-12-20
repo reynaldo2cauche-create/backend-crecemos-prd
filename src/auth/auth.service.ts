@@ -3,7 +3,7 @@ import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { TrabajadorCentro } from '../usuarios/trabajador-centro.entity';
-import { NotificacionesService } from '../notificaciones/notificaciones.service';
+// import { NotificacionesService } from '../notificaciones/notificaciones.service';
 import * as bcrypt from 'bcrypt';
 
 @Injectable()
@@ -12,8 +12,8 @@ export class AuthService {
     @InjectRepository(TrabajadorCentro)
     private trabajadorRepository: Repository<TrabajadorCentro>,
     private jwtService: JwtService,
-    @Inject(forwardRef(() => NotificacionesService))
-    private notificacionesService: NotificacionesService,
+    // @Inject(forwardRef(() => NotificacionesService))
+    // private notificacionesService: NotificacionesService,
   ) {}
 
   async validateUser(username: string, password: string): Promise<any> {
@@ -59,7 +59,7 @@ export class AuthService {
 
     // Notificar login fuera de horario
     try {
-      await this.notificacionesService.notificarLoginFueraHorario(user.id, ip, userAgent);
+      // await this.notificacionesService.notificarLoginFueraHorario(user.id, ip, userAgent);
     } catch (error) {
       console.error('Error al notificar login fuera de horario:', error);
     }
