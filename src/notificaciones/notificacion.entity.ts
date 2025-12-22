@@ -10,6 +10,8 @@ import {
 import { TrabajadorCentro } from '../usuarios/trabajador-centro.entity';
 import { Paciente } from '../pacientes/paciente.entity';
 
+// DEPRECATED: Este enum ya no se usa, se maneja desde configuracion_notificaciones
+// Se deja solo como referencia de tipos comunes
 export enum TipoNotificacion {
   CUMPLEANOS_PACIENTE = 'CUMPLEANOS_PACIENTE',
   ANIVERSARIO_EMPLEADO = 'ANIVERSARIO_EMPLEADO',
@@ -26,10 +28,10 @@ export class Notificacion {
   id: number;
 
   @Column({
-    type: 'enum',
-    enum: TipoNotificacion,
+    type: 'varchar',
+    length: 50,
   })
-  tipo: TipoNotificacion;
+  tipo: string;
 
   @Column({ name: 'usuario_id' })
   usuarioId: number;

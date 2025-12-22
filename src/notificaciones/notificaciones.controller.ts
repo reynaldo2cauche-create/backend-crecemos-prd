@@ -9,20 +9,20 @@ import {
   Sse,
   MessageEvent,
 } from '@nestjs/common';
-import { Observable, fromEvent, merge } from 'rxjs';
+import { Observable, merge } from 'rxjs';
 import { map, filter, switchMap } from 'rxjs/operators';
 import { NotificacionesService } from './notificaciones.service';
+import { NotificacionesEventsService } from './notificaciones-events.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { SseAuthGuard } from '../auth/guards/sse-auth.guard';
 import { Public } from '../auth/decorators/public.decorator';
-import { EventEmitter2 } from '@nestjs/event-emitter';
 
 @Controller('backend_api/notificaciones')
 @UseGuards(JwtAuthGuard)
 export class NotificacionesController {
   constructor(
     private readonly notificacionesService: NotificacionesService,
-    private eventEmitter: EventEmitter2,
+    private readonly eventsService: NotificacionesEventsService,
   ) {}
 
   /**
@@ -75,9 +75,57 @@ export class NotificacionesController {
   }
 
   /**
+   * ENDPOINT MANUAL PARA TESTING
+   * Fuerza la generación de notificaciones diarias sin importar si ya se ejecutó hoy
+   * Solo para administradores
+   */
+  @Get('generar-diarias-manual')
+  async generarManual(@Req() req) {
+    const usuarioId = req.user.userId;
+    const usuario = await this.notificacionesService['trabajadorRepo'].findOne({
+      where: { id: usuarioId },
+      relations: ['rol'],
+    });
+
+    if (usuario?.rol?.id !== 1) {
+      return { error: 'Solo administradores pueden ejecutar esto' };
+    }
+
+    // Resetear el flag para permitir regeneración
+    this.notificacionesService['ultimoCalculoDiario'] = null;
+
+    const resultado = await this.notificacionesService.generarNotificacionesDiarias();
+    return {
+      ...resultado,
+      mensaje: 'Notificaciones generadas manualmente para testing',
+    };
+  }
+
+  /**
+   * ENDPOINT PARA INICIALIZAR CONFIGURACIONES
+   * Crea las configuraciones iniciales si no existen
+   * Solo para administradores
+   */
+  @Get('inicializar-configuraciones')
+  async inicializarConfiguraciones(@Req() req) {
+    const usuarioId = req.user.userId;
+    const usuario = await this.notificacionesService['trabajadorRepo'].findOne({
+      where: { id: usuarioId },
+      relations: ['rol'],
+    });
+
+    if (usuario?.rol?.id !== 1) {
+      return { error: 'Solo administradores pueden ejecutar esto' };
+    }
+
+    const resultado = await this.notificacionesService.inicializarConfiguraciones();
+    return resultado;
+  }
+
+  /**
    * SSE: Stream de notificaciones en tiempo real
    * Funciona en cPanel y hosting compartido
-   * Envía updates solo cuando hay cambios reales
+   * Usa RxJS Subject (100% nativo de NestJS, sin librerías externas)
    */
   @Public()
   @Sse('stream')
@@ -87,9 +135,9 @@ export class NotificacionesController {
 
     console.log(`📡 SSE: Usuario ${usuarioId} conectado`);
 
-    // Escuchar eventos de nuevas notificaciones
-    const notificacionEvent$ = fromEvent(this.eventEmitter, 'notificacion.nueva').pipe(
-      filter((event: any) => event.usuarioId === usuarioId),
+    // Escuchar eventos de nuevas notificaciones desde el Subject
+    const notificacionEvent$ = this.eventsService.notificacionNueva$.pipe(
+      filter((event) => event.usuarioId === usuarioId),
       map(() => ({ trigger: 'nueva' })),
     );
 
