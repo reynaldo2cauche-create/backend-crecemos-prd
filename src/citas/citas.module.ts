@@ -1,27 +1,33 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { Cita } from './cita.entity';
-import { CitaService } from './cita.service';
-import { CitaController } from './cita.controller';
-import { CitaReunionEstado } from './cita-reunion-estado.entity';
-import { CitaReunionClinica } from './cita-reunion-clinica.entity';
-import { CitaReunionClinicaTerapeutas } from './cita-reunion-clinica-terapeutas.entity';
-import { CitaReunionClinicaServicios } from './cita-reunion-clinica-servicios.entity';
-import { VisitaEscolar } from './visita-escolar.entity';
+import { CitasController } from './citas.controller';
+import { CitasService } from './citas.service';
+
+// Entidades
+import { Cita } from './entities/cita.entity';
+import { CitaReunionClinica } from './entities/cita-reunion-clinica.entity';
+import { CitaReunionClinicaTerapeutas } from './entities/cita-reunion-clinica-terapeutas.entity';
+import { CitaReunionClinicaServicios } from './entities/cita-reunion-clinica-servicios.entity';
+import { CitaVisitaEscolar } from './entities/cita-visita-escolar.entity';
+import { TipoCita } from './entities/tipo-cita.entity';
+import { MotivoCita } from './entities/motivo-cita.entity';
+import { EstadoCita } from './entities/estado-cita.entity';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([
       Cita,
-      CitaReunionEstado,
       CitaReunionClinica,
       CitaReunionClinicaTerapeutas,
       CitaReunionClinicaServicios,
-      VisitaEscolar
-    ])
+      CitaVisitaEscolar,
+      TipoCita,
+      MotivoCita,
+      EstadoCita,
+    ]),
   ],
-  providers: [CitaService],
-  controllers: [CitaController],
-  exports: [CitaService]
+  controllers: [CitasController],
+  providers: [CitasService],
+  exports: [CitasService],
 })
 export class CitasModule {}

@@ -53,12 +53,17 @@ import { Atenciones } from './catalogos/atenciones.entity';
 import { RelacionPadres } from './catalogos/relacion-padres.entity';
 import { AntecedentesFamiliares } from './catalogos/antecedentes-familiares.entity';
 import { Ocupaciones } from './catalogos/ocupaciones.entity';
-import { MotivoCita } from './catalogos/motivo-cita.entity';
-import { EstadoCita } from './catalogos/estado-cita.entity';
-import { Cita } from './citas/cita.entity';
+import { Cita } from './citas/entities/cita.entity';
+import { CitaReunionClinica } from './citas/entities/cita-reunion-clinica.entity';
+import { CitaReunionClinicaTerapeutas } from './citas/entities/cita-reunion-clinica-terapeutas.entity';
+import { CitaReunionClinicaServicios } from './citas/entities/cita-reunion-clinica-servicios.entity';
+import { CitaVisitaEscolar } from './citas/entities/cita-visita-escolar.entity';
+import { MotivoCita } from './citas/entities/motivo-cita.entity';
+import { EstadoCita } from './citas/entities/estado-cita.entity';
+import { TipoCita } from './citas/entities/tipo-cita.entity';
 import { HermanoEntrevista } from './historia-clinica/entities/hermano-entrevista.entity';
 import { FamiliarEntrevista } from './historia-clinica/entities/familiar-entrevista.entity';
-import { HistorialCita } from './citas/historial-cita.entity';
+
 import { Comentario } from './postulaciones/comentario.entity';
 import { EvaluacionTerapiaOcupacional } from './historia-clinica/entities/evaluacion-terapia-ocupacional.entity';
 import { ArchivoOficial } from './historia-clinica/entities/archivo-oficial.entity';
@@ -80,12 +85,6 @@ import { AlertaSistema } from './auditoria/alerta-sistema.entity';
 import { ConfiguracionAlerta } from './auditoria/configuracion-alerta.entity';
 import { APP_INTERCEPTOR } from '@nestjs/core';
 import { AuditoriaInterceptor } from './auditoria/auditoria.interceptor';
-import { CitaTerapeuta } from './citas/cita-terapeuta.entity';
-import { CitaServicio } from './citas/cita-servicio.entity';
-import { CitaEncargado } from './citas/cita-encargado.entity';
-import { HistorialCitaServicio } from './citas/historial-cita-servicio.entity';
-import { HistorialCitaTerapeuta } from './citas/historial-cita-terapeuta.entity';
-import { TipoCita } from './catalogos/tipo-cita.entity';
 
 @Module({
   imports: [
@@ -146,14 +145,13 @@ import { TipoCita } from './catalogos/tipo-cita.entity';
         EstadoCita,
         TipoCita,
         Cita,
-        CitaTerapeuta,
-        CitaServicio,
-        CitaEncargado,
-        HistorialCitaServicio,
-        HistorialCitaTerapeuta,
+        CitaReunionClinica,
+        CitaReunionClinicaTerapeutas,
+        CitaReunionClinicaServicios,
+        CitaVisitaEscolar,
         HermanoEntrevista,
-     FamiliarEntrevista,
-        HistorialCita
+        FamiliarEntrevista,
+
         
         ,Comentario,
         EvaluacionTerapiaOcupacional,

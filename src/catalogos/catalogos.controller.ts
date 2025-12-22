@@ -59,14 +59,4 @@ export class CatalogosController {
   getOcupaciones() {
     return this.catalogosService.getOcupaciones();
   }
-
-  @Get('motivos-cita')
-  getMotivosCita() {
-    return this.catalogosService.getMotivosCita();
-  }
-
-  @Get('estados-cita')
-  getEstadosCita() {
-    return this.catalogosService.getEstadosCita();
-  }
 }
