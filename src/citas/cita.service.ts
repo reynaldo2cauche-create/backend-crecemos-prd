@@ -83,7 +83,7 @@ export class CitaService {
 
   private async crearReunionClinica(citaId: number, dto: CreateCitaDto): Promise<void> {
     const reunion = this.reunionRepository.create({
-      id_cita: citaId,
+      id: citaId,
       id_estado: dto.estado_id,
       user_id_crea: dto.user_id
     });
@@ -195,7 +195,7 @@ export class CitaService {
 
         if (cita.tipo_cita_id === 2) {
           const reunion = await this.reunionRepository.findOne({
-            where: { id_cita: cita.id },
+            where: { id: cita.id },
             relations: ['terapeutas', 'terapeutas.terapeuta', 'servicios', 'servicios.servicio']
           });
           if (reunion) {
@@ -242,7 +242,7 @@ export class CitaService {
 
     if (cita.tipo_cita_id === 2) {
       const reunion = await this.reunionRepository.findOne({
-        where: { id_cita: cita.id },
+        where: { id: cita.id },
         relations: ['terapeutas', 'terapeutas.terapeuta', 'servicios', 'servicios.servicio']
       });
       if (reunion) {
@@ -328,7 +328,7 @@ export class CitaService {
 
     if (citaAnterior.tipo_cita_id === 2 && updateDto.terapeutas_ids) {
       const reunion = await this.reunionRepository.findOne({
-        where: { id_cita: id }
+        where: { id: id }
       });
       if (reunion) {
         await this.reunionTerapeutasRepository.delete({ id_reunion: reunion.id });
@@ -345,7 +345,7 @@ export class CitaService {
 
     if (citaAnterior.tipo_cita_id === 2 && updateDto.servicios_ids) {
       const reunion = await this.reunionRepository.findOne({
-        where: { id_cita: id }
+        where: { id: id }
       });
       if (reunion) {
         await this.reunionServiciosRepository.delete({ id_reunion: reunion.id });
@@ -388,7 +388,7 @@ export class CitaService {
 
     if (cita.tipo_cita_id === 2) {
       const reunion = await this.reunionRepository.findOne({
-        where: { id_cita: id }
+        where: { id: id }
       });
       if (reunion) {
         await this.reunionTerapeutasRepository.delete({ id_reunion: reunion.id });

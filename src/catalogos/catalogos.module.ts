@@ -11,14 +11,12 @@ import { Atenciones } from './atenciones.entity';
 import { RelacionPadres } from './relacion-padres.entity';
 import { AntecedentesFamiliares } from './antecedentes-familiares.entity';
 import { Ocupaciones } from './ocupaciones.entity';
-import { MotivoCita } from './motivo-cita.entity';
-import { EstadoCita } from './estado-cita.entity';
 import { CatalogosService } from './catalogos.service';
 import { CatalogosController } from './catalogos.controller';
 
 @Module({
   imports: [TypeOrmModule.forFeature([
-    TipoDocumento, Sexo, Distrito, RelacionResponsable, AreaServicio, Servicios, GradoEscolar, Atenciones, RelacionPadres, AntecedentesFamiliares, Ocupaciones, MotivoCita, EstadoCita
+    TipoDocumento, Sexo, Distrito, RelacionResponsable, AreaServicio, Servicios, GradoEscolar, Atenciones, RelacionPadres, AntecedentesFamiliares, Ocupaciones
   ])],
   providers: [CatalogosService],
   controllers: [CatalogosController],
