@@ -5,7 +5,7 @@ import { Notificacion, TipoNotificacion } from './notificacion.entity';
 import { ConfiguracionNotificacion } from './configuracion-notificacion.entity';
 import { Paciente } from '../pacientes/paciente.entity';
 import { TrabajadorCentro } from '../usuarios/trabajador-centro.entity';
-import { EventEmitter2 } from '@nestjs/event-emitter';
+import { NotificacionesEventsService } from './notificaciones-events.service';
 
 @Injectable()
 export class NotificacionesService {
@@ -21,8 +21,62 @@ export class NotificacionesService {
     private pacienteRepo: Repository<Paciente>,
     @InjectRepository(TrabajadorCentro)
     private trabajadorRepo: Repository<TrabajadorCentro>,
-    private eventEmitter: EventEmitter2,
+    private eventsService: NotificacionesEventsService,
   ) {}
+
+  /**
+   * Inicializa las configuraciones de notificaciones si no existen
+   */
+  async inicializarConfiguraciones(): Promise<{ mensaje: string; configuraciones: any[] }> {
+    const configuracionesIniciales = [
+      {
+        tipo: 'CUMPLEANOS_PACIENTE',
+        activa: true,
+        descripcion: 'Notifica cumpleaños de pacientes',
+        diasAnticipacion: 1,
+      },
+      {
+        tipo: 'ANIVERSARIO_EMPLEADO',
+        activa: true,
+        descripcion: 'Notifica aniversarios laborales de empleados',
+        diasAnticipacion: 1,
+      },
+      {
+        tipo: 'LOGIN_FUERA_HORARIO',
+        activa: true,
+        descripcion: 'Notifica logins fuera del horario laboral',
+        diasAnticipacion: 0,
+      },
+      {
+        tipo: 'CITA_ELIMINADA',
+        activa: true,
+        descripcion: 'Notifica cuando se elimina una cita',
+        diasAnticipacion: 0,
+      },
+    ];
+
+    const configuracionesCreadas = [];
+
+    for (const config of configuracionesIniciales) {
+      // Verificar si ya existe
+      const existe = await this.configRepo.findOne({
+        where: { tipo: config.tipo },
+      });
+
+      if (!existe) {
+        const nuevaConfig = await this.configRepo.save(config);
+        configuracionesCreadas.push(nuevaConfig);
+        this.logger.log(`✅ Configuración creada: ${config.tipo}`);
+      } else {
+        this.logger.log(`⏭️ Configuración ya existe: ${config.tipo}`);
+      }
+    }
+
+    return {
+      mensaje: `Se inicializaron ${configuracionesCreadas.length} configuraciones`,
+      configuraciones: configuracionesCreadas,
+    };
+  }
 
   /**
    * Genera notificaciones diarias (cumpleaños y aniversarios)
@@ -69,19 +123,25 @@ export class NotificacionesService {
       });
 
       if (!config) {
-        this.logger.debug('Configuración de CUMPLEANOS_PACIENTE inactiva');
+        this.logger.warn('⚠️ Configuración de CUMPLEANOS_PACIENTE no encontrada o inactiva. Ejecuta /notificaciones/inicializar-configuraciones');
         return;
       }
 
       const hoy = new Date();
       const fechaObjetivo = new Date(hoy);
-      fechaObjetivo.setDate(fechaObjetivo.getDate() + config.diasAnticipacion);
+      // TEMPORAL PARA TESTING: Buscar en los próximos 30 días
+      // CAMBIAR A: fechaObjetivo.setDate(fechaObjetivo.getDate() + config.diasAnticipacion);
+      fechaObjetivo.setDate(fechaObjetivo.getDate() + 30);
+
+      // Usar UTC para evitar problemas de timezone
+      const diaObjetivo = fechaObjetivo.getUTCDate();
+      const mesObjetivo = fechaObjetivo.getUTCMonth() + 1;
 
       const pacientes = await this.pacienteRepo
         .createQueryBuilder('p')
         .where(
           'DAY(p.fecha_nacimiento) = :dia AND MONTH(p.fecha_nacimiento) = :mes',
-          { dia: fechaObjetivo.getDate(), mes: fechaObjetivo.getMonth() + 1 },
+          { dia: diaObjetivo, mes: mesObjetivo },
         )
         .andWhere('p.activo = :activo', { activo: true })
         .getMany();
@@ -143,7 +203,7 @@ export class NotificacionesService {
       });
 
       if (!config) {
-        this.logger.debug('Configuración de ANIVERSARIO_EMPLEADO inactiva');
+        this.logger.warn('⚠️ Configuración de ANIVERSARIO_EMPLEADO no encontrada o inactiva. Ejecuta /notificaciones/inicializar-configuraciones');
         return;
       }
 
@@ -166,15 +226,23 @@ export class NotificacionesService {
       let notificacionesGeneradas = 0;
 
       for (const empleado of empleados) {
+        // Usar UTC para evitar problemas de timezone
         const fechaIngreso = new Date(empleado.fecha_ingreso);
-        fechaIngreso.setHours(0, 0, 0, 0);
+        const diaIngreso = fechaIngreso.getUTCDate();
+        const mesIngreso = fechaIngreso.getUTCMonth();
+        const anoIngreso = fechaIngreso.getUTCFullYear();
+
+        this.logger.debug(`📅 Procesando empleado: ${empleado.nombres}`);
+        this.logger.debug(`   Fecha ingreso BD: ${empleado.fecha_ingreso}`);
+        this.logger.debug(`   Fecha ingreso UTC: ${anoIngreso}-${mesIngreso + 1}-${diaIngreso}`);
 
         // Calcular próximo aniversario
         let proximoAniversario = new Date(
           hoy.getFullYear(),
-          fechaIngreso.getMonth(),
-          fechaIngreso.getDate(),
+          mesIngreso,
+          diaIngreso,
         );
+        proximoAniversario.setHours(0, 0, 0, 0);
 
         // Si el aniversario de este año ya pasó, usar el del próximo año
         if (proximoAniversario < hoy) {
@@ -187,10 +255,16 @@ export class NotificacionesService {
         );
 
         // Calcular años de servicio
-        const anosServicio = proximoAniversario.getFullYear() - fechaIngreso.getFullYear();
+        const anosServicio = proximoAniversario.getFullYear() - anoIngreso;
+
+        this.logger.debug(`   Próximo aniversario: ${proximoAniversario.toLocaleDateString('es-PE')}`);
+        this.logger.debug(`   Días hasta aniversario: ${diasHasta}`);
+        this.logger.debug(`   Años de servicio: ${anosServicio}`);
 
         // Verificar si está dentro del rango de anticipación
-        if (diasHasta >= 0 && diasHasta <= config.diasAnticipacion) {
+        // TEMPORAL PARA TESTING: Buscar en los próximos 30 días
+        // CAMBIAR A: if (diasHasta >= 0 && diasHasta <= config.diasAnticipacion) {
+        if (diasHasta >= 0 && diasHasta <= 30) {
           // Evitar duplicados
           const hace24Horas = new Date(Date.now() - 24 * 60 * 60 * 1000);
           const notifExistente = await this.notificacionRepo
@@ -431,15 +505,16 @@ export class NotificacionesService {
 
   /**
    * Crea una notificación y emite evento para SSE
+   * Usa RxJS Subject en lugar de EventEmitter2 (100% nativo de NestJS)
    */
   private async crearYNotificar(notificacionData: Partial<Notificacion>): Promise<Notificacion> {
     const notificacion = await this.notificacionRepo.save(notificacionData);
 
-    // Emitir evento para SSE
-    this.eventEmitter.emit('notificacion.nueva', {
-      usuarioId: notificacionData.usuarioId,
+    // Emitir evento para SSE usando RxJS Subject
+    this.eventsService.emitirNotificacionNueva(
+      notificacionData.usuarioId,
       notificacion,
-    });
+    );
 
     this.logger.log(`✨ Notificación creada para usuario ${notificacionData.usuarioId}`);
 
