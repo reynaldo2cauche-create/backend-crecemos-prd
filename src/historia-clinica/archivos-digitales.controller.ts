@@ -161,16 +161,28 @@ export class ArchivosDigitalesController {
   }
 
   @Get()
-  async findAll(@Query('pacienteId') pacienteId?: string, @Query('terapeutaId') terapeutaId?: string) {
+  async findAll(
+    @Query('pacienteId') pacienteId?: string,
+    @Query('terapeutaId') terapeutaId?: string,
+    @Req() req?: any
+  ) {
     let archivos;
-    
+
+    // Obtener información del usuario autenticado
+    const trabajadorId = req?.user?.id;
+    const rolTrabajador = req?.user?.rol?.nombre || req?.user?.rol; // Obtener el nombre del rol
+
     // Si se proporcionan ambos parámetros, buscar por terapeuta Y paciente
     if (pacienteId && terapeutaId && !isNaN(parseInt(pacienteId)) && !isNaN(parseInt(terapeutaId))) {
       archivos = await this.archivosDigitalesService.findByTerapeutaAndPaciente(parseInt(terapeutaId), parseInt(pacienteId));
     }
     // Si solo se proporciona pacienteId
     else if (pacienteId && !isNaN(parseInt(pacienteId))) {
-      archivos = await this.archivosDigitalesService.findByPaciente(parseInt(pacienteId));
+      archivos = await this.archivosDigitalesService.findByPaciente(
+        parseInt(pacienteId),
+        trabajadorId,
+        rolTrabajador
+      );
     }
     // Si solo se proporciona terapeutaId
     else if (terapeutaId && !isNaN(parseInt(terapeutaId))) {
