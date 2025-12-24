@@ -84,6 +84,9 @@ import { TransferenciaNotas } from './pacientes/entities/transferencia-notas.ent
 import { NotificacionesModule } from './notificaciones/notificaciones.module';
 import { Notificacion } from './notificaciones/notificacion.entity';
 import { ConfiguracionNotificacion } from './notificaciones/configuracion-notificacion.entity';
+import { Convenio } from './convenios/entities/convenio.entity';
+import { PacienteConvenio } from './convenios/entities/paciente-convenio.entity';
+import { ConveniosModule } from './convenios/convenios.module';
 // import { ScheduleModule } from '@nestjs/schedule';
 
 @Module({
@@ -194,6 +197,8 @@ import { ConfiguracionNotificacion } from './notificaciones/configuracion-notifi
         TransferenciaNotas,
         Notificacion,
         ConfiguracionNotificacion,
+        Convenio,
+        PacienteConvenio
       ],
         synchronize: false,   // true en desarrollo, false en producción
           // Activar logs de SQL para debug
@@ -224,7 +229,8 @@ import { ConfiguracionNotificacion } from './notificaciones/configuracion-notifi
     AuditoriaModule,
     NotificacionesModule,
     AuthModule,
-    Comentario
+    Comentario,
+    ConveniosModule
   ],
   controllers: [AppController],
   providers: [
