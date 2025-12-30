@@ -6,12 +6,14 @@ import { ConveniosController } from './convenios.controller';
 import { ConveniosService } from './convenios.service';
 import { Convenio } from './entities/convenio.entity';
 import { PacienteConvenio } from './entities/paciente-convenio.entity';
+import { Beneficio } from './entities/beneficio.entity';
+import { CategoriaBeneficio } from './entities/categoria-beneficio.entity';
 import { diskStorage } from 'multer';
 import * as path from 'path';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Convenio, PacienteConvenio]),
+    TypeOrmModule.forFeature([Convenio, PacienteConvenio, Beneficio, CategoriaBeneficio]),
     MulterModule.register({
       storage: diskStorage({
         destination: './uploads/convenios',

@@ -63,7 +63,7 @@ import { Comentario } from './postulaciones/comentario.entity';
 import { EvaluacionTerapiaOcupacional } from './historia-clinica/entities/evaluacion-terapia-ocupacional.entity';
 import { ArchivoOficial } from './historia-clinica/entities/archivo-oficial.entity';
 import { ArchivoTerapia } from './historia-clinica/entities/archivo-terapia.entity';
-import { Beneficio } from './beneficios/beneficios.entity';
+import { Beneficio } from './convenios/entities/beneficio.entity';
 import { CargoPostulacion } from './postulaciones/cargo-postulacion.entity';
 import { EstadoPostulacion } from './postulaciones/estado-postulacion.entity';
 import { PopupModule } from './popup/popup.module';
@@ -87,6 +87,7 @@ import { ConfiguracionNotificacion } from './notificaciones/configuracion-notifi
 import { Convenio } from './convenios/entities/convenio.entity';
 import { PacienteConvenio } from './convenios/entities/paciente-convenio.entity';
 import { ConveniosModule } from './convenios/convenios.module';
+import { CategoriaBeneficio } from './convenios/entities/categoria-beneficio.entity';
 // import { ScheduleModule } from '@nestjs/schedule';
 
 @Module({
@@ -198,7 +199,8 @@ import { ConveniosModule } from './convenios/convenios.module';
         Notificacion,
         ConfiguracionNotificacion,
         Convenio,
-        PacienteConvenio
+        PacienteConvenio,
+        CategoriaBeneficio
       ],
         synchronize: false,   // true en desarrollo, false en producción
           // Activar logs de SQL para debug

@@ -1,22 +1,23 @@
 // src/convenios/entities/convenio.entity.ts
-import { 
-  Entity, 
-  PrimaryGeneratedColumn, 
-  Column, 
-  ManyToOne, 
-  JoinColumn, 
-  OneToMany 
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  ManyToOne,
+  JoinColumn,
+  OneToMany
 } from 'typeorm';
 import { TrabajadorCentro } from '../../usuarios/trabajador-centro.entity';
 import { PacienteConvenio } from './paciente-convenio.entity';
+import { Beneficio } from './beneficio.entity';
 
 @Entity('convenios')
 export class Convenio {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @Column({ length: 255 })
-  nombre: string;
+  @Column({ name: 'nombre', length: 100 })
+  empresa: string;
 
   @Column({ type: 'text', nullable: true })
   descripcion: string;
@@ -24,7 +25,7 @@ export class Convenio {
   @Column({ length: 500, nullable: true })
   logo_url: string;
 
-  @Column({ default: true })
+  @Column({ name: 'flg_activo', default: true })
   activo: boolean;
 
   @Column({ 
@@ -56,4 +57,7 @@ export class Convenio {
 
   @OneToMany(() => PacienteConvenio, pacienteConvenio => pacienteConvenio.convenio)
   pacienteConvenios: PacienteConvenio[];
+
+  @OneToMany(() => Beneficio, beneficio => beneficio.convenio)
+  beneficios: Beneficio[];
 }
