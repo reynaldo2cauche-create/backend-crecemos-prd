@@ -23,6 +23,8 @@ import { CreateConvenioDto } from './dto/create-convenio.dto';
 import { UpdateConvenioDto } from './dto/update-convenio.dto';
 import { CreatePacienteConvenioDto } from './dto/create-paciente-convenio.dto';
 import { UpdatePacienteConvenioDto } from './dto/update-paciente-convenio.dto';
+import { CreateBeneficioDto } from './dto/create-beneficio.dto';
+import { UpdateBeneficioDto } from './dto/update-beneficio.dto';
 import { ApiTags, ApiOperation, ApiResponse, ApiQuery, ApiParam, ApiConsumes, ApiBody } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { Auditable } from '../auditoria/decorators/auditable.decorator';
@@ -66,7 +68,7 @@ export class ConveniosController {
     @UploadedFile(
       new ParseFilePipe({
         validators: [
-          new MaxFileSizeValidator({ maxSize: 5 * 1024 * 1024 }), // 5MB
+          new MaxFileSizeValidator({ maxSize: 5 * 1024 * 1024 }),
           new FileTypeValidator({ fileType: '.(png|jpeg|jpg|webp)' }),
         ],
         fileIsRequired: false,
@@ -74,7 +76,6 @@ export class ConveniosController {
     )
     file?: Express.Multer.File,
   ) {
-   
     return this.conveniosService.create(dto, req.user?.id, file);
   }
 
@@ -86,6 +87,201 @@ export class ConveniosController {
     const activoBoolean = activo === 'true' ? true : activo === 'false' ? false : undefined;
     return this.conveniosService.findAll(activoBoolean);
   }
+
+  // =============== PACIENTE-CONVENIO ===============
+
+  @Post('pacientes')
+  @ApiOperation({ summary: 'Asignar un convenio a un paciente' })
+  @ApiResponse({ status: 201, description: 'Convenio asignado al paciente exitosamente' })
+  @ApiResponse({ status: 409, description: 'El paciente ya tiene este convenio asignado' })
+  @Auditable({
+    modulo: 'CONVENIOS',
+    accion: 'ASIGNAR_CONVENIO_PACIENTE',
+  })
+  asignarConvenioAPaciente(@Body() dto: CreatePacienteConvenioDto, @Request() req) {
+    return this.conveniosService.asignarConvenioAPaciente(dto, req.user?.id);
+  }
+
+  @Get('paciente/:pacienteId')
+  @ApiOperation({ summary: 'Obtener todos los convenios de un paciente' })
+  @ApiParam({ name: 'pacienteId', description: 'ID del paciente' })
+  @ApiResponse({ status: 200, description: 'Lista de convenios del paciente' })
+  findConveniosByPaciente(@Param('pacienteId') pacienteId: string) {
+    return this.conveniosService.findConveniosByPaciente(+pacienteId);
+  }
+
+  @Get('pacientes/por-convenio/:convenioId')
+  @ApiOperation({ summary: 'Obtener todos los pacientes de un convenio' })
+  @ApiParam({ name: 'convenioId', description: 'ID del convenio' })
+  @ApiQuery({ name: 'activo', required: false, type: Boolean })
+  @ApiResponse({ status: 200, description: 'Lista de pacientes del convenio' })
+  findPacientesByConvenio(
+    @Param('convenioId') convenioId: string,
+    @Query('activo') activo?: string,
+  ) {
+    const activoBoolean = activo === 'true' ? true : activo === 'false' ? false : undefined;
+    return this.conveniosService.findPacientesByConvenio(+convenioId, activoBoolean);
+  }
+
+  @Get('pacientes/:id')
+  @ApiOperation({ summary: 'Obtener una relación paciente-convenio por ID' })
+  @ApiParam({ name: 'id', description: 'ID de la relación paciente-convenio' })
+  @ApiResponse({ status: 200, description: 'Relación encontrada' })
+  @ApiResponse({ status: 404, description: 'Relación no encontrada' })
+  findOnePacienteConvenio(@Param('id') id: string) {
+    return this.conveniosService.findOnePacienteConvenio(+id);
+  }
+
+  @Patch('pacientes/:id')
+  @ApiOperation({ summary: 'Actualizar una relación paciente-convenio' })
+  @ApiParam({ name: 'id', description: 'ID de la relación' })
+  @ApiResponse({ status: 200, description: 'Relación actualizada exitosamente' })
+  @Auditable({
+    modulo: 'CONVENIOS',
+    accion: 'EDITAR_PACIENTE_CONVENIO',
+  })
+  updatePacienteConvenio(
+    @Param('id') id: string,
+    @Body() dto: UpdatePacienteConvenioDto,
+    @Request() req,
+  ) {
+    return this.conveniosService.updatePacienteConvenio(+id, dto, req.user?.id);
+  }
+
+  @Delete('pacientes/:id')
+  @ApiOperation({ summary: 'Eliminar una relación paciente-convenio' })
+  @ApiParam({ name: 'id', description: 'ID de la relación' })
+  @ApiResponse({ status: 200, description: 'Relación eliminada exitosamente' })
+  @Auditable({
+    modulo: 'CONVENIOS',
+    accion: 'ELIMINAR_PACIENTE_CONVENIO',
+  })
+  removePacienteConvenio(@Param('id') id: string) {
+    return this.conveniosService.removePacienteConvenio(+id);
+  }
+
+  @Put('pacientes/:id/activar')
+  @ApiOperation({ summary: 'Activar una relación paciente-convenio' })
+  @ApiParam({ name: 'id', description: 'ID de la relación' })
+  @ApiResponse({ status: 200, description: 'Relación activada exitosamente' })
+  @Auditable({
+    modulo: 'CONVENIOS',
+    accion: 'ACTIVAR_PACIENTE_CONVENIO',
+  })
+  activarPacienteConvenio(@Param('id') id: string, @Request() req) {
+    return this.conveniosService.setEstadoPacienteConvenio(+id, true, req.user?.id);
+  }
+
+  @Put('pacientes/:id/desactivar')
+  @ApiOperation({ summary: 'Desactivar una relación paciente-convenio' })
+  @ApiParam({ name: 'id', description: 'ID de la relación' })
+  @ApiResponse({ status: 200, description: 'Relación desactivada exitosamente' })
+  @Auditable({
+    modulo: 'CONVENIOS',
+    accion: 'DESACTIVAR_PACIENTE_CONVENIO',
+  })
+  desactivarPacienteConvenio(@Param('id') id: string, @Request() req) {
+    return this.conveniosService.setEstadoPacienteConvenio(+id, false, req.user?.id);
+  }
+
+  // =============== BENEFICIOS ===============
+
+  @Post('beneficios')
+  @ApiOperation({ summary: 'Crear un nuevo beneficio' })
+  @ApiResponse({ status: 201, description: 'Beneficio creado exitosamente' })
+  @Auditable({
+    modulo: 'CONVENIOS',
+    accion: 'CREAR_BENEFICIO',
+  })
+  createBeneficio(@Body() dto: CreateBeneficioDto, @Request() req) {
+    return this.conveniosService.createBeneficio(dto, req.user?.id);
+  }
+
+  @Get('categorias-beneficios')
+  @ApiOperation({ summary: 'Obtener todas las categorías de beneficios' })
+  @ApiResponse({ status: 200, description: 'Lista de categorías de beneficios' })
+  findAllCategoriasBeneficios() {
+    return this.conveniosService.findAllCategoriasBeneficios();
+  }
+
+  @Get('beneficios')
+  @ApiOperation({ summary: 'Obtener todos los beneficios' })
+  @ApiQuery({ name: 'activo', required: false, type: Boolean })
+  @ApiQuery({ name: 'convenio_id', required: false, type: Number })
+  @ApiResponse({ status: 200, description: 'Lista de beneficios' })
+  findAllBeneficios(
+    @Query('activo') activo?: string,
+    @Query('convenio_id') convenio_id?: string
+  ) {
+    const activoBoolean = activo === 'true' ? true : activo === 'false' ? false : undefined;
+    const convenioIdNumber = convenio_id ? +convenio_id : undefined;
+    return this.conveniosService.findAllBeneficios(activoBoolean, convenioIdNumber);
+  }
+
+  @Get('beneficios/:id')
+  @ApiOperation({ summary: 'Obtener un beneficio por ID' })
+  @ApiParam({ name: 'id', description: 'ID del beneficio' })
+  @ApiResponse({ status: 200, description: 'Beneficio encontrado' })
+  @ApiResponse({ status: 404, description: 'Beneficio no encontrado' })
+  findOneBeneficio(@Param('id') id: string) {
+    return this.conveniosService.findOneBeneficio(+id);
+  }
+
+  @Patch('beneficios/:id')
+  @ApiOperation({ summary: 'Actualizar un beneficio' })
+  @ApiParam({ name: 'id', description: 'ID del beneficio' })
+  @ApiResponse({ status: 200, description: 'Beneficio actualizado exitosamente' })
+  @Auditable({
+    modulo: 'CONVENIOS',
+    accion: 'EDITAR_BENEFICIO',
+  })
+  updateBeneficio(
+    @Param('id') id: string,
+    @Body() dto: UpdateBeneficioDto,
+    @Request() req,
+  ) {
+    return this.conveniosService.updateBeneficio(+id, dto, req.user?.id);
+  }
+
+  @Delete('beneficios/:id')
+  @ApiOperation({ summary: 'Eliminar un beneficio' })
+  @ApiParam({ name: 'id', description: 'ID del beneficio' })
+  @ApiResponse({ status: 200, description: 'Beneficio eliminado exitosamente' })
+  @ApiResponse({ status: 400, description: 'No se puede eliminar, tiene convenios asociados' })
+  @Auditable({
+    modulo: 'CONVENIOS',
+    accion: 'ELIMINAR_BENEFICIO',
+  })
+  removeBeneficio(@Param('id') id: string) {
+    return this.conveniosService.removeBeneficio(+id);
+  }
+
+  @Put('beneficios/:id/activar')
+  @ApiOperation({ summary: 'Activar un beneficio' })
+  @ApiParam({ name: 'id', description: 'ID del beneficio' })
+  @ApiResponse({ status: 200, description: 'Beneficio activado exitosamente' })
+  @Auditable({
+    modulo: 'CONVENIOS',
+    accion: 'ACTIVAR_BENEFICIO',
+  })
+  activarBeneficio(@Param('id') id: string, @Request() req) {
+    return this.conveniosService.setEstadoBeneficio(+id, true, req.user?.id);
+  }
+
+  @Put('beneficios/:id/desactivar')
+  @ApiOperation({ summary: 'Desactivar un beneficio' })
+  @ApiParam({ name: 'id', description: 'ID del beneficio' })
+  @ApiResponse({ status: 200, description: 'Beneficio desactivado exitosamente' })
+  @Auditable({
+    modulo: 'CONVENIOS',
+    accion: 'DESACTIVAR_BENEFICIO',
+  })
+  desactivarBeneficio(@Param('id') id: string, @Request() req) {
+    return this.conveniosService.setEstadoBeneficio(+id, false, req.user?.id);
+  }
+
+  // =============== CONVENIO BY ID ===============
+  // NOTA: Estas rutas deben estar AL FINAL para no capturar rutas específicas
 
   @Get(':id')
   @ApiOperation({ summary: 'Obtener un convenio por ID' })
@@ -134,7 +330,7 @@ export class ConveniosController {
     @UploadedFile(
       new ParseFilePipe({
         validators: [
-          new MaxFileSizeValidator({ maxSize: 5 * 1024 * 1024 }), // 5MB
+          new MaxFileSizeValidator({ maxSize: 5 * 1024 * 1024 }),
           new FileTypeValidator({ fileType: '.(png|jpeg|jpg|webp)' }),
         ],
         fileIsRequired: false,
@@ -182,100 +378,4 @@ export class ConveniosController {
   desactivar(@Param('id') id: string, @Request() req) {
     return this.conveniosService.setEstado(+id, false, req.user?.id);
   }
-// =============== PACIENTE-CONVENIO ===============
-
-@Post('pacientes')
-@ApiOperation({ summary: 'Asignar un convenio a un paciente' })
-@ApiResponse({ status: 201, description: 'Convenio asignado al paciente exitosamente' })
-@ApiResponse({ status: 409, description: 'El paciente ya tiene este convenio asignado' })
-@Auditable({
-  modulo: 'CONVENIOS',
-  accion: 'ASIGNAR_CONVENIO_PACIENTE',
-})
-asignarConvenioAPaciente(@Body() dto: CreatePacienteConvenioDto, @Request() req) {
-  return this.conveniosService.asignarConvenioAPaciente(dto, req.user?.id);
-}
-
-@Get('paciente/:pacienteId')
-@ApiOperation({ summary: 'Obtener todos los convenios de un paciente' })
-@ApiParam({ name: 'pacienteId', description: 'ID del paciente' })
-@ApiResponse({ status: 200, description: 'Lista de convenios del paciente' })
-findConveniosByPaciente(@Param('pacienteId') pacienteId: string) {
-  return this.conveniosService.findConveniosByPaciente(+pacienteId);
-}
-
-@Get('pacientes/por-convenio/:convenioId')
-@ApiOperation({ summary: 'Obtener todos los pacientes de un convenio' })
-@ApiParam({ name: 'convenioId', description: 'ID del convenio' })
-@ApiQuery({ name: 'activo', required: false, type: Boolean })
-@ApiResponse({ status: 200, description: 'Lista de pacientes del convenio' })
-findPacientesByConvenio(
-  @Param('convenioId') convenioId: string,
-  @Query('activo') activo?: string,
-) {
-  const activoBoolean = activo === 'true' ? true : activo === 'false' ? false : undefined;
-  return this.conveniosService.findPacientesByConvenio(+convenioId, activoBoolean);
-}
-
-@Get('pacientes/:id')
-@ApiOperation({ summary: 'Obtener una relación paciente-convenio por ID' })
-@ApiParam({ name: 'id', description: 'ID de la relación paciente-convenio' })
-@ApiResponse({ status: 200, description: 'Relación encontrada' })
-@ApiResponse({ status: 404, description: 'Relación no encontrada' })
-findOnePacienteConvenio(@Param('id') id: string) {
-  return this.conveniosService.findOnePacienteConvenio(+id);
-}
-
-@Patch('pacientes/:id')
-@ApiOperation({ summary: 'Actualizar una relación paciente-convenio' })
-@ApiParam({ name: 'id', description: 'ID de la relación' })
-@ApiResponse({ status: 200, description: 'Relación actualizada exitosamente' })
-@Auditable({
-  modulo: 'CONVENIOS',
-  accion: 'EDITAR_PACIENTE_CONVENIO',
-})
-updatePacienteConvenio(
-  @Param('id') id: string,
-  @Body() dto: UpdatePacienteConvenioDto,
-  @Request() req,
-) {
-  return this.conveniosService.updatePacienteConvenio(+id, dto, req.user?.id);
-}
-
-@Delete('pacientes/:id')
-@ApiOperation({ summary: 'Eliminar una relación paciente-convenio' })
-@ApiParam({ name: 'id', description: 'ID de la relación' })
-@ApiResponse({ status: 200, description: 'Relación eliminada exitosamente' })
-@Auditable({
-  modulo: 'CONVENIOS',
-  accion: 'ELIMINAR_PACIENTE_CONVENIO',
-})
-removePacienteConvenio(@Param('id') id: string) {
-  return this.conveniosService.removePacienteConvenio(+id);
-}
-
-@Put('pacientes/:id/activar')
-@ApiOperation({ summary: 'Activar una relación paciente-convenio' })
-@ApiParam({ name: 'id', description: 'ID de la relación' })
-@ApiResponse({ status: 200, description: 'Relación activada exitosamente' })
-@Auditable({
-  modulo: 'CONVENIOS',
-  accion: 'ACTIVAR_PACIENTE_CONVENIO',
-})
-activarPacienteConvenio(@Param('id') id: string, @Request() req) {
-  return this.conveniosService.setEstadoPacienteConvenio(+id, true, req.user?.id);
-}
-
-@Put('pacientes/:id/desactivar')
-@ApiOperation({ summary: 'Desactivar una relación paciente-convenio' })
-@ApiParam({ name: 'id', description: 'ID de la relación' })
-@ApiResponse({ status: 200, description: 'Relación desactivada exitosamente' })
-@Auditable({
-  modulo: 'CONVENIOS',
-  accion: 'DESACTIVAR_PACIENTE_CONVENIO',
-})
-desactivarPacienteConvenio(@Param('id') id: string, @Request() req) {
-  return this.conveniosService.setEstadoPacienteConvenio(+id, false, req.user?.id);
-}
-  // ... (el resto del código permanece igual)
 }

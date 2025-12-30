@@ -4,10 +4,14 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Convenio } from './entities/convenio.entity';
 import { PacienteConvenio } from './entities/paciente-convenio.entity';
+import { Beneficio } from './entities/beneficio.entity';
+import { CategoriaBeneficio } from './entities/categoria-beneficio.entity';
 import { CreateConvenioDto } from './dto/create-convenio.dto';
 import { UpdateConvenioDto } from './dto/update-convenio.dto';
 import { CreatePacienteConvenioDto } from './dto/create-paciente-convenio.dto';
 import { UpdatePacienteConvenioDto } from './dto/update-paciente-convenio.dto';
+import { CreateBeneficioDto } from './dto/create-beneficio.dto';
+import { UpdateBeneficioDto } from './dto/update-beneficio.dto';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -20,6 +24,10 @@ export class ConveniosService {
     private readonly convenioRepo: Repository<Convenio>,
     @InjectRepository(PacienteConvenio)
     private readonly pacienteConvenioRepo: Repository<PacienteConvenio>,
+    @InjectRepository(Beneficio)
+    private readonly beneficioRepo: Repository<Beneficio>,
+    @InjectRepository(CategoriaBeneficio)
+    private readonly categoriaBeneficioRepo: Repository<CategoriaBeneficio>,
   ) {
     // Crear carpeta de uploads si no existe
     if (!fs.existsSync(this.uploadPath)) {
@@ -56,7 +64,7 @@ export class ConveniosService {
 
     return await this.convenioRepo.find({
       where,
-      order: { nombre: 'ASC' },
+      order: { empresa: 'ASC' },
     });
   }
 
@@ -220,8 +228,8 @@ export class ConveniosService {
   }
 
   async setEstadoPacienteConvenio(
-    id: number, 
-    activo: boolean, 
+    id: number,
+    activo: boolean,
     userId?: number
   ): Promise<PacienteConvenio> {
     const pacienteConvenio = await this.findOnePacienteConvenio(id);
@@ -229,4 +237,178 @@ export class ConveniosService {
     pacienteConvenio.user_id_actua = userId;
     return await this.pacienteConvenioRepo.save(pacienteConvenio);
   }
+
+  // =============== BENEFICIOS ===============
+
+  async createBeneficio(dto: CreateBeneficioDto, userId?: number): Promise<Beneficio> {
+    // Verificar que el convenio existe
+    const convenio = await this.convenioRepo.findOne({ where: { id: dto.convenio_id } });
+    if (!convenio) {
+      throw new NotFoundException(`Convenio con ID ${dto.convenio_id} no encontrado`);
+    }
+
+    // Crear el beneficio con la relación directa al convenio
+    const beneficio = this.beneficioRepo.create({
+      nombre: dto.nombre,
+      descripcion: dto.descripcion,
+      categoria_id: dto.categoria_id,
+      descuento: dto.descuento,
+      convenio_id: dto.convenio_id,
+      activo: dto.activo !== undefined ? dto.activo : true,
+      user_id_crea: userId,
+      user_id_actua: userId,
+    });
+
+    const beneficioGuardado = await this.beneficioRepo.save(beneficio);
+
+    // Retornar el beneficio con su convenio y categoria
+    return await this.beneficioRepo.findOne({
+      where: { id: beneficioGuardado.id },
+      relations: ['convenio', 'categoria']
+    });
+  }
+
+  async findAllBeneficios(activo?: boolean, convenio_id?: number): Promise<Beneficio[]> {
+    console.log('🔍 findAllBeneficios - activo:', activo, 'convenio_id:', convenio_id);
+
+    try {
+      const where: any = {};
+
+      // Filtrar por estado activo si se especifica
+      if (typeof activo === 'boolean') {
+        where.activo = activo;
+        console.log('📌 Filtrando por activo =', activo);
+      }
+
+      // Filtrar por convenio_id si se especifica
+      if (convenio_id) {
+        where.convenio_id = convenio_id;
+      }
+
+      console.log('🔎 WHERE clause:', JSON.stringify(where));
+
+      const beneficios = await this.beneficioRepo.find({
+        where,
+        relations: ['convenio', 'categoria'],
+        order: { nombre: 'ASC' }
+      });
+
+      console.log('✅ Beneficios encontrados:', beneficios.length);
+      console.log('📋 Detalle de beneficios:', beneficios.map(b => ({
+        id: b.id,
+        nombre: b.nombre,
+        activo: b.activo
+      })));
+      return beneficios;
+    } catch (error) {
+      console.error('❌ Error en findAllBeneficios:', error.message);
+      throw error;
+    }
+  }
+
+  async findOneBeneficio(id: number): Promise<Beneficio> {
+    const beneficio = await this.beneficioRepo.findOne({
+      where: { id },
+      relations: ['convenio', 'categoria']
+    });
+
+    if (!beneficio) {
+      throw new NotFoundException(`Beneficio con ID ${id} no encontrado`);
+    }
+
+    return beneficio;
+  }
+
+  async updateBeneficio(
+    id: number,
+    dto: UpdateBeneficioDto,
+    userId?: number
+  ): Promise<Beneficio> {
+    console.log('🔄 [SERVICE] updateBeneficio - ID:', id);
+    console.log('📦 [SERVICE] DTO recibido:', dto);
+
+    // Verificar que el beneficio existe
+    const beneficioExiste = await this.beneficioRepo.findOne({ where: { id } });
+    if (!beneficioExiste) {
+      throw new NotFoundException(`Beneficio con ID ${id} no encontrado`);
+    }
+
+    // Si se está cambiando el convenio, verificar que existe
+    if (dto.convenio_id) {
+      const convenio = await this.convenioRepo.findOne({ where: { id: dto.convenio_id } });
+      if (!convenio) {
+        throw new NotFoundException(`Convenio con ID ${dto.convenio_id} no encontrado`);
+      }
+      console.log('✅ [SERVICE] Convenio encontrado:', convenio.empresa);
+    }
+
+    // USAR UPDATE DIRECTO en lugar de save() para evitar problemas con relaciones
+    const updateData: any = {};
+    if (dto.nombre !== undefined) updateData.nombre = dto.nombre;
+    if (dto.descripcion !== undefined) updateData.descripcion = dto.descripcion;
+    if (dto.descuento !== undefined) updateData.descuento = dto.descuento;
+    if (dto.categoria_id !== undefined) updateData.categoria_id = dto.categoria_id;
+    if (dto.convenio_id !== undefined) updateData.convenio_id = dto.convenio_id;
+    if (userId !== undefined) updateData.user_id_actua = userId;
+
+    console.log('📝 [SERVICE] Datos a actualizar:', updateData);
+
+    // Ejecutar UPDATE directo
+    await this.beneficioRepo.update(id, updateData);
+
+    console.log('✅ [SERVICE] UPDATE ejecutado');
+
+    // VERIFICAR en la BD con query RAW
+    const rawCheck = await this.beneficioRepo.query(
+      'SELECT id, nombre, convenio_id, categoria_id FROM beneficios WHERE id = ?',
+      [id]
+    );
+    console.log('🔍 [SERVICE] Verificación RAW SQL en BD:', rawCheck[0]);
+
+    // Retornar el beneficio actualizado con relaciones
+    const resultado = await this.beneficioRepo
+      .createQueryBuilder('beneficio')
+      .leftJoinAndSelect('beneficio.convenio', 'convenio')
+      .leftJoinAndSelect('beneficio.categoria', 'categoria')
+      .where('beneficio.id = :id', { id })
+      .getOne();
+
+    console.log('🎁 [SERVICE] Beneficio final:', {
+      id: resultado.id,
+      nombre: resultado.nombre,
+      convenio_id: resultado.convenio_id,
+      convenio_nombre: resultado.convenio?.empresa
+    });
+
+    return resultado;
+  }
+
+  async removeBeneficio(id: number): Promise<void> {
+    const beneficio = await this.findOneBeneficio(id);
+    await this.beneficioRepo.remove(beneficio);
+  }
+
+  async setEstadoBeneficio(id: number, activo: boolean, userId?: number): Promise<Beneficio> {
+    const beneficio = await this.findOneBeneficio(id);
+    beneficio.activo = activo;
+    beneficio.user_id_actua = userId;
+    return await this.beneficioRepo.save(beneficio);
+  }
+
+  // =============== CATEGORÍAS DE BENEFICIOS ===============
+
+  async findAllCategoriasBeneficios(): Promise<CategoriaBeneficio[]> {
+    return await this.categoriaBeneficioRepo.find({
+      order: { nombre: 'ASC' }
+    });
+  }
+
+  async findOneCategoriaBeneficio(id: number): Promise<CategoriaBeneficio> {
+    const categoria = await this.categoriaBeneficioRepo.findOne({ where: { id } });
+    if (!categoria) {
+      throw new NotFoundException(`Categoría de beneficio con ID ${id} no encontrada`);
+    }
+    return categoria;
+  }
+
 }

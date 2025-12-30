@@ -12,7 +12,7 @@ import { ParejaPacienteService } from './services/pareja-paciente.service';
 import { requierePareja } from '../constants/servicios.constants';
 import { CreatePacienteCompletoDto } from './dto/create-paciente-completo.dto';
 import { UpdateEstadoPacienteDto } from './dto/update-estado-paciente.dto';
-import { BeneficiosService } from 'src/beneficios/beneficios.service';
+import { ConveniosService } from 'src/convenios/convenios.service';
 import { tieneAccesoBeneficios } from '../constants/estados-paciente.constants';
 
 @Injectable()
@@ -23,7 +23,7 @@ export class PacienteService {
   constructor(
     @InjectRepository(Paciente)
     private pacienteRepository: Repository<Paciente>,
-    private readonly beneficiosService: BeneficiosService, 
+    private readonly conveniosService: ConveniosService, 
     @InjectRepository(EstadoPaciente)
     private estadoPacienteRepository: Repository<EstadoPaciente>,
     @InjectRepository(PacienteServicio)
@@ -61,16 +61,26 @@ async verificarPacienteYObtenerBeneficios(numeroDocumento: string) {
   // 3. Validar que el paciente tenga acceso a beneficios según su estado
   const estadoPacienteId = paciente.estado?.id; // Obtener el ID del estado cargado
 
+  console.log('🔍 Verificando paciente:', {
+    id: paciente.id,
+    nombres: paciente.nombres,
+    estado_paciente_id: estadoPacienteId,
+    estado_nombre: paciente.estado?.nombre
+  });
 
-
+  // Estados válidos: 1=Nuevo, 2=Entrevista, 3=Evaluación, 4=Terapia
+  // Estado inválido: 5=Inactivo
   if (!tieneAccesoBeneficios(estadoPacienteId)) {
+    console.log('❌ Paciente INACTIVO (estado_paciente_id=' + estadoPacienteId + ') - Negando acceso a beneficios');
     throw new ForbiddenException(
-      'El paciente no tiene acceso a beneficios en su estado actual. Solo los pacientes en estados activos pueden acceder a beneficios. Por favor, comuníquese con el área de atención al cliente para más información.'
+      'El paciente se encuentra inactivo en el sistema y actualmente no cuenta con acceso a beneficios. Por favor, comuníquese con el área de atención al cliente para más información.'
     );
   }
 
-  // 4. Si cumple las condiciones, obtener los beneficios
-  const beneficios = await this.beneficiosService.findAll();
+  console.log('✅ Paciente ACTIVO (estado_paciente_id=' + estadoPacienteId + ') - Permitiendo acceso a beneficios');
+
+  // 5. Si cumple las condiciones, obtener solo los beneficios ACTIVOS
+  const beneficios = await this.conveniosService.findAllBeneficios(true);
 
   return {
     paciente: {

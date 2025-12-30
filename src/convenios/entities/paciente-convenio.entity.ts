@@ -27,7 +27,7 @@ export class PacienteConvenio {
   @Column({ type: 'date', nullable: true })
   fecha_fin: Date;
 
-  @Column({ default: true })
+  @Column({ name: 'flg_activo', default: true })
   activo: boolean;
 
   @Column({ type: 'text', nullable: true })

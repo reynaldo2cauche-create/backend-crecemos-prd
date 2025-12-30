@@ -3,10 +3,10 @@ import { IsString, IsOptional, IsBoolean, IsUrl, MaxLength } from 'class-validat
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateConvenioDto {
-  @ApiProperty({ description: 'Nombre del convenio', maxLength: 255 })
+  @ApiProperty({ description: 'Nombre de la empresa', maxLength: 100 })
   @IsString()
-  @MaxLength(255)
-  nombre: string;
+  @MaxLength(100)
+  empresa: string;
 
   @ApiPropertyOptional({ description: 'Descripción del convenio' })
   @IsOptional()
