@@ -15,7 +15,7 @@ export class CreateConvenioDto {
 
   @ApiPropertyOptional({ description: 'URL del logo', maxLength: 500 })
   @IsOptional()
-  @IsUrl()
+  @IsString()
   @MaxLength(500)
   logo_url?: string;
 

@@ -329,11 +329,57 @@ export class ArchivosDigitalesController {
     modulo: 'ARCHIVOS_DIGITALES',
     accion: 'ELIMINAR_ARCHIVO',
   })
-  async remove(@Param('id') id: string) {
+  async remove(@Param('id') id: string, @Req() req: any) {
     const numericId = parseInt(id);
     if (isNaN(numericId)) {
       throw new HttpException('ID inválido', HttpStatus.BAD_REQUEST);
     }
-    return await this.archivosDigitalesService.remove(numericId);
+
+    // Obtener información del usuario autenticado
+    const trabajadorId = req?.user?.id;
+    const rolTrabajador = req?.user?.rol?.nombre || req?.user?.rol;
+
+    // Obtener el archivo para verificar quién lo subió
+    const archivo = await this.archivosDigitalesService.findOne(numericId);
+
+    // REGLAS DE PERMISOS:
+    // 1. ADMIN/ADMINISTRADOR: Puede eliminar cualquier archivo
+    const esAdmin = rolTrabajador && ['admin', 'administrador'].includes(rolTrabajador.toLowerCase());
+
+    if (esAdmin) {
+      // Administrador puede eliminar todo
+      return await this.archivosDigitalesService.remove(numericId);
+    }
+
+    // 2. ADMISIÓN: NO puede eliminar NINGÚN archivo (ni los propios)
+    const esAdmision = rolTrabajador && ['admision', 'admisión'].includes(rolTrabajador.toLowerCase());
+
+    if (esAdmision) {
+      throw new HttpException(
+        'El rol de Admisión no tiene permisos para eliminar archivos. Solo el Administrador puede eliminar archivos.',
+        HttpStatus.FORBIDDEN
+      );
+    }
+
+    // 3. TERAPEUTA: Solo puede eliminar archivos que él mismo subió
+    const esTerapeuta = rolTrabajador && rolTrabajador.toLowerCase() === 'terapeuta';
+
+    if (esTerapeuta) {
+      // Verificar si el archivo fue subido por este terapeuta
+      if (archivo.terapeuta.id !== trabajadorId) {
+        throw new HttpException(
+          'No tienes permisos para eliminar este archivo. Solo puedes eliminar archivos que tú mismo has subido.',
+          HttpStatus.FORBIDDEN
+        );
+      }
+      // Si llegó aquí, el terapeuta está eliminando su propio archivo
+      return await this.archivosDigitalesService.remove(numericId);
+    }
+
+    // Si no es ninguno de los roles esperados, denegar por defecto
+    throw new HttpException(
+      'No tienes permisos para eliminar archivos.',
+      HttpStatus.FORBIDDEN
+    );
   }
 }

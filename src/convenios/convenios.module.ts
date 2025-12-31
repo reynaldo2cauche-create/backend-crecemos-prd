@@ -16,23 +16,41 @@ import * as path from 'path';
     TypeOrmModule.forFeature([Convenio, PacienteConvenio, Beneficio, CategoriaBeneficio]),
     MulterModule.register({
       storage: diskStorage({
-        destination: './uploads/convenios',
+        destination: (req, file, callback) => {
+          const uploadPath = path.join(process.cwd(), 'uploads', 'convenios');
+          console.log('📁 [MULTER] Intentando guardar archivo en:', uploadPath);
+          callback(null, uploadPath);
+        },
         filename: (req, file, callback) => {
-          const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
-          const ext = path.extname(file.originalname);
-          const filename = `convenio-${uniqueSuffix}${ext}`;
-          callback(null, filename);
+          try {
+            const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+            const ext = path.extname(file.originalname);
+            const filename = `convenio-${uniqueSuffix}${ext}`;
+            console.log('📝 [MULTER] Nombre de archivo generado:', filename);
+            callback(null, filename);
+          } catch (error) {
+            console.error('❌ [MULTER] Error generando nombre de archivo:', error);
+            callback(error, null);
+          }
         },
       }),
       limits: {
         fileSize: 5 * 1024 * 1024, // 5MB
       },
       fileFilter: (req, file, callback) => {
+        console.log('🔍 [MULTER] Validando archivo:', {
+          originalname: file.originalname,
+          mimetype: file.mimetype,
+          size: file.size
+        });
+
         const allowedMimes = ['image/jpeg', 'image/png', 'image/jpg', 'image/webp'];
         if (allowedMimes.includes(file.mimetype)) {
+          console.log('✅ [MULTER] Archivo aceptado');
           callback(null, true);
         } else {
-          callback(new Error('Tipo de archivo no permitido'), false);
+          console.error('❌ [MULTER] Tipo de archivo rechazado:', file.mimetype);
+          callback(new Error(`Tipo de archivo no permitido: ${file.mimetype}. Solo se permiten: ${allowedMimes.join(', ')}`), false);
         }
       },
     }),
