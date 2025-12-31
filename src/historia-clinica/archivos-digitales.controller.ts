@@ -23,6 +23,7 @@ import { CreateArchivoDigitalDto } from './dto/create-archivo-digital.dto';
 import { UpdateArchivoDigitalDto } from './dto/update-archivo-digital.dto';
 import { Auditable } from 'src/auditoria/decorators/auditable.decorator';
 import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
+import { Public } from 'src/auth/decorators/public.decorator';
 import { AuditoriaService } from 'src/auditoria/auditoria.service';
 
 import * as fs from 'fs';
@@ -156,11 +157,13 @@ export class ArchivosDigitalesController {
 
   // Ruta para obtener todos los tipos de archivo (DEBE IR ANTES que las rutas con :id)
   @Get('tipos')
+  
   async findAllTiposArchivo() {
     return await this.archivosDigitalesService.findAllTiposArchivo();
   }
 
   @Get()
+  
   async findAll(
     @Query('pacienteId') pacienteId?: string,
     @Query('terapeutaId') terapeutaId?: string,
@@ -201,6 +204,7 @@ export class ArchivosDigitalesController {
   }
 
   @Get(':id')
+  
   async findOne(@Param('id') id: string) {
     const numericId = parseInt(id);
     if (isNaN(numericId)) {
@@ -216,6 +220,7 @@ export class ArchivosDigitalesController {
   }
 
   @Get(':id/preview')
+  @Public()
   async preview(@Param('id') id: string, @Res() res: Response, @Req() req: Request) {
     const numericId = parseInt(id);
     if (isNaN(numericId)) {
@@ -266,6 +271,7 @@ export class ArchivosDigitalesController {
   }
 
   @Get(':id/download')
+  
   async download(@Param('id') id: string, @Res() res: Response, @Req() req: Request) {
     const numericId = parseInt(id);
     if (isNaN(numericId)) {
@@ -316,6 +322,7 @@ export class ArchivosDigitalesController {
   }
 
   @Patch(':id')
+  
   async update(@Param('id') id: string, @Body() updateArchivoDigitalDto: UpdateArchivoDigitalDto) {
     const numericId = parseInt(id);
     if (isNaN(numericId)) {
@@ -325,6 +332,7 @@ export class ArchivosDigitalesController {
   }
 
   @Delete(':id')
+  
   @Auditable({
     modulo: 'ARCHIVOS_DIGITALES',
     accion: 'ELIMINAR_ARCHIVO',
