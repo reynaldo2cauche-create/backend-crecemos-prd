@@ -470,25 +470,7 @@ export class NotaEvolucionService {
         return { data: [], total: 0, page, totalPages: 0 };
       }
 
-      // Obtener servicios_ids de las asignaciones activas del terapeuta con este paciente
-      const serviciosQuery = this.asignacionRepository
-        .createQueryBuilder('asig')
-        .innerJoin('asig.pacienteServicio', 'ps')
-        .where('asig.terapeuta_id = :trabajador_id', { trabajador_id })
-        .andWhere('ps.paciente_id = :paciente_id', { paciente_id })
-        .andWhere('asig.estado = :estado', { estado: 'ACTIVO' })
-        .andWhere('ps.activo = :activo', { activo: true })
-        .select('DISTINCT ps.servicio_id', 'id')
-        .getRawMany();
-
-      const servicios = await serviciosQuery;
-      const servicioIds = servicios.map(s => s.id).filter(Boolean);
-
-      if (servicioIds.length === 0) {
-        return { data: [], total: 0, page, totalPages: 0 };
-      }
-
-      // Obtener notas que pertenezcan a esos servicios (compartidas entre especialidades)
+      // Obtener notas que coincidan con las especialidades
       const queryBuilder = this.notaEvolucionRepository
         .createQueryBuilder('nota')
         .leftJoinAndSelect('nota.servicio', 'servicio')
@@ -497,7 +479,7 @@ export class NotaEvolucionService {
         .leftJoinAndSelect('usuario.especialidad', 'usuarioEspecialidad')
         .leftJoinAndSelect('usuario.rol', 'rol')
         .where('nota.paciente_id = :paciente_id', { paciente_id })
-        .andWhere('nota.servicio_id IN (:...servicioIds)', { servicioIds })
+        .andWhere('servicio.especialidad_id IN (:...especialidadIds)', { especialidadIds })
         .orderBy('nota.fecha_crea', 'DESC')
         .take(limit)
         .skip((page - 1) * limit);
