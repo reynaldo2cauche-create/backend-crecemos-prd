@@ -38,22 +38,42 @@ export class ConveniosService {
   // =============== CONVENIOS ===============
 
   async create(dto: CreateConvenioDto, userId?: number, file?: Express.Multer.File): Promise<Convenio> {
-    let logoUrl = null;
+    try {
+      console.log('📝 [CREATE] Iniciando creación de convenio');
+      console.log('📝 [CREATE] DTO recibido:', JSON.stringify(dto));
+      console.log('📝 [CREATE] userId:', userId);
+      console.log('📝 [CREATE] file:', file ? file.filename : 'Sin archivo');
 
-    // Si se subió un archivo, usar la ruta generada por Multer
-    if (file) {
-      logoUrl = `/uploads/convenios/${file.filename}`;
-      console.log('Logo guardado en:', logoUrl);
+      let logoUrl = null;
+
+      // Si se subió un archivo, guardar solo el filename (como el popup)
+      if (file) {
+        logoUrl = file.filename;
+        console.log('✅ [CREATE] Logo guardado:', logoUrl);
+      }
+
+      const convenioData = {
+        ...dto,
+        logo_url: logoUrl,
+        user_id_crea: userId,
+        user_id_actua: userId,
+      };
+
+      console.log('📦 [CREATE] Datos finales para crear:', JSON.stringify(convenioData));
+
+      const convenio = this.convenioRepo.create(convenioData);
+      console.log('🔨 [CREATE] Entidad creada (antes de save):', JSON.stringify(convenio));
+
+      const resultado = await this.convenioRepo.save(convenio);
+      console.log('✅ [CREATE] Convenio guardado exitosamente con ID:', resultado.id);
+
+      return resultado;
+    } catch (error) {
+      console.error('❌ [CREATE] Error al crear convenio:', error);
+      console.error('❌ [CREATE] Error stack:', error.stack);
+      console.error('❌ [CREATE] Error message:', error.message);
+      throw error;
     }
-
-    const convenio = this.convenioRepo.create({
-      ...dto,
-      logo_url: logoUrl,
-      user_id_crea: userId,
-      user_id_actua: userId,
-    });
-
-    return await this.convenioRepo.save(convenio);
   }
 
   async findAll(activo?: boolean): Promise<Convenio[]> {
@@ -95,8 +115,8 @@ export class ConveniosService {
       if (convenio.logo_url) {
         await this.deleteLogo(convenio.logo_url);
       }
-      // Asignar la nueva ruta
-      dto.logo_url = `/uploads/convenios/${file.filename}`;
+      // Asignar solo el filename (como el popup)
+      dto.logo_url = file.filename;
       console.log('Logo actualizado:', dto.logo_url);
     }
 
@@ -158,6 +178,7 @@ export class ConveniosService {
   // =============== PACIENTE-CONVENIO ===============
 
   async asignarConvenioAPaciente(dto: CreatePacienteConvenioDto, userId?: number): Promise<PacienteConvenio> {
+    // Buscar si existe un registro (activo o inactivo)
     const existente = await this.pacienteConvenioRepo.findOne({
       where: {
         paciente_id: dto.paciente_id,
@@ -165,10 +186,33 @@ export class ConveniosService {
       },
     });
 
-    if (existente) {
+    // Si existe y está ACTIVO: error
+    if (existente && existente.activo) {
       throw new ConflictException('El paciente ya está asignado a este convenio');
     }
 
+    // Si existe pero está INACTIVO: REACTIVARLO
+    if (existente && !existente.activo) {
+      existente.activo = true;
+      if (dto.fecha_inicio) {
+        existente.fecha_inicio = typeof dto.fecha_inicio === 'string'
+          ? new Date(dto.fecha_inicio)
+          : dto.fecha_inicio;
+      }
+      if (dto.fecha_fin) {
+        existente.fecha_fin = typeof dto.fecha_fin === 'string'
+          ? new Date(dto.fecha_fin)
+          : dto.fecha_fin;
+      }
+      if (dto.observaciones) {
+        existente.observaciones = dto.observaciones;
+      }
+      existente.user_id_actua = userId;
+
+      return await this.pacienteConvenioRepo.save(existente);
+    }
+
+    // Si NO existe: crear nuevo
     const pacienteConvenio = this.pacienteConvenioRepo.create({
       ...dto,
       user_id_crea: userId,
@@ -180,7 +224,10 @@ export class ConveniosService {
 
   async findConveniosByPaciente(pacienteId: number): Promise<PacienteConvenio[]> {
     return await this.pacienteConvenioRepo.find({
-      where: { paciente_id: pacienteId },
+      where: {
+        paciente_id: pacienteId,
+        activo: true // Solo mostrar convenios activos
+      },
       order: { created_at: 'DESC' },
     });
   }

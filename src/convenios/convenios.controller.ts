@@ -1,12 +1,12 @@
 // src/convenios/convenios.controller.ts
-import { 
-  Controller, 
-  Get, 
-  Post, 
-  Body, 
-  Patch, 
-  Param, 
-  Delete, 
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Delete,
   Query,
   UseGuards,
   Request,
@@ -15,7 +15,9 @@ import {
   UploadedFile,
   ParseFilePipe,
   MaxFileSizeValidator,
-  FileTypeValidator
+  FileTypeValidator,
+  Res,
+  BadRequestException
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ConveniosService } from './convenios.service';
@@ -28,6 +30,11 @@ import { UpdateBeneficioDto } from './dto/update-beneficio.dto';
 import { ApiTags, ApiOperation, ApiResponse, ApiQuery, ApiParam, ApiConsumes, ApiBody } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { Auditable } from '../auditoria/decorators/auditable.decorator';
+import { Public } from '../auth/decorators/public.decorator';
+import { Response } from 'express';
+import { extname } from 'path';
+import * as fs from 'fs';
+import * as path from 'path';
 
 @ApiTags('Convenios')
 @Controller('backend_api/convenios')
@@ -58,27 +65,26 @@ export class ConveniosController {
   })
   @ApiOperation({ summary: 'Crear un nuevo convenio' })
   @ApiResponse({ status: 201, description: 'Convenio creado exitosamente' })
-  @Auditable({
-    modulo: 'CONVENIOS',
-    accion: 'CREAR_CONVENIO',
-  })
+  // @Auditable({
+  //   modulo: 'CONVENIOS',
+  //   accion: 'CREAR_CONVENIO',
+  // })
   async create(
     @Body() dto: CreateConvenioDto,
     @Request() req,
-    @UploadedFile(
-      new ParseFilePipe({
-        validators: [
-          new MaxFileSizeValidator({ maxSize: 5 * 1024 * 1024 }),
-          new FileTypeValidator({ fileType: '.(png|jpeg|jpg|webp)' }),
-        ],
-        fileIsRequired: false,
-      }),
-    )
+    @UploadedFile()
     file?: Express.Multer.File,
   ) {
+    console.log('🎯 [CONTROLLER] Archivo recibido:', file ? {
+      filename: file.filename,
+      mimetype: file.mimetype,
+      size: file.size
+    } : 'Sin archivo');
+
     return this.conveniosService.create(dto, req.user?.id, file);
   }
 
+  @Public()
   @Get()
   @ApiOperation({ summary: 'Obtener todos los convenios' })
   @ApiQuery({ name: 'activo', required: false, type: Boolean })
@@ -86,6 +92,34 @@ export class ConveniosController {
   findAll(@Query('activo') activo?: string) {
     const activoBoolean = activo === 'true' ? true : activo === 'false' ? false : undefined;
     return this.conveniosService.findAll(activoBoolean);
+  }
+
+  @Public()
+  @Get('logo/:filename')
+  @ApiOperation({ summary: 'Obtener logo de convenio' })
+  async getLogo(@Param('filename') filename: string, @Res() res: Response) {
+    const rutaArchivo = path.join(process.cwd(), 'uploads', 'convenios', filename);
+
+    if (!fs.existsSync(rutaArchivo)) {
+      throw new BadRequestException('Logo no encontrado');
+    }
+
+    const ext = extname(filename).toLowerCase();
+    const mimeTypes = {
+      '.jpg': 'image/jpeg',
+      '.jpeg': 'image/jpeg',
+      '.png': 'image/png',
+      '.gif': 'image/gif',
+      '.webp': 'image/webp',
+    };
+
+    const mimeType = mimeTypes[ext] || 'application/octet-stream';
+
+    res.setHeader('Content-Type', mimeType);
+    res.setHeader('Cache-Control', 'public, max-age=31536000');
+
+    const fileStream = fs.createReadStream(rutaArchivo);
+    fileStream.pipe(res);
   }
 
   // =============== PACIENTE-CONVENIO ===============
@@ -324,20 +358,18 @@ export class ConveniosController {
     accion: 'EDITAR_CONVENIO',
   })
   async update(
-    @Param('id') id: string, 
-    @Body() dto: UpdateConvenioDto, 
+    @Param('id') id: string,
+    @Body() dto: UpdateConvenioDto,
     @Request() req,
-    @UploadedFile(
-      new ParseFilePipe({
-        validators: [
-          new MaxFileSizeValidator({ maxSize: 5 * 1024 * 1024 }),
-          new FileTypeValidator({ fileType: '.(png|jpeg|jpg|webp)' }),
-        ],
-        fileIsRequired: false,
-      }),
-    )
+    @UploadedFile()
     file?: Express.Multer.File,
   ) {
+    console.log('🎯 [CONTROLLER UPDATE] Archivo recibido:', file ? {
+      filename: file.filename,
+      mimetype: file.mimetype,
+      size: file.size
+    } : 'Sin archivo');
+
     return this.conveniosService.update(+id, dto, req.user?.id, file);
   }
 

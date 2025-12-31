@@ -420,11 +420,11 @@ export class CitaService {
     if (diaSemana === 0) {
       throw new BadRequestException(
         'Horario no disponible: No se realizan atenciones los domingos. ' +
-        'Por favor, seleccione otro día de la semana para agendar su cita.'
+        'Por favor, seleccione un día de lunes a sábado para agendar su cita.'
       );
     }
 
-    // Validación para sábado (6): solo se trabaja de 8:00 AM a 2:00 PM
+    // Validación para sábado (6): 8:00 AM a 2:00 PM
     if (diaSemana === 6) {
       const inicioSabado = 8 * 60; // 8:00 = 480 minutos
       const finSabado = 14 * 60; // 14:00 = 840 minutos
@@ -435,20 +435,17 @@ export class CitaService {
           'Por favor, seleccione un horario dentro de este rango para continuar con la agenda.'
         );
       }
-
-      // Los sábados no tienen horario de refrigerio, así que retornar aquí
-      return;
     }
 
     // Validación para lunes a viernes (1-5)
     if (diaSemana >= 1 && diaSemana <= 5) {
-      const inicioLaboral = 11 * 60; // 11:00 = 660 minutos
+      const inicioLaboral = 9 * 60; // 9:00 = 540 minutos
       const finLaboral = 20 * 60; // 20:00 = 1200 minutos
 
-      // Validar que esté dentro del horario laboral (11:00 AM - 8:00 PM)
+      // Validar que esté dentro del horario laboral (9:00 AM - 8:00 PM)
       if (horaMinutos < inicioLaboral || horaMinutos >= finLaboral) {
         throw new BadRequestException(
-          'Horario no disponible: De lunes a viernes el horario de atención es de 11:00 AM a 8:00 PM. ' +
+          'Horario no disponible: De lunes a viernes el horario de atención es de 9:00 AM a 8:00 PM. ' +
           'Por favor, seleccione un horario dentro de este rango para continuar con la agenda.'
         );
       }
