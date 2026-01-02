@@ -266,14 +266,31 @@ async findAll(filters?: {
 
   const pacientes = await queryBuilder.getMany();
 
-  // Mapear el servicio activo a cada paciente
-  const resultados = pacientes.map((paciente) => {
-    const servicioActivo = paciente.pacienteServicios?.find(ps => ps.activo === true);
-    (paciente as any).servicio = servicioActivo ? servicioActivo.servicio : null;
-    return paciente;
-  });
+  // Obtener todos los servicios asignados para cada paciente
+  const pacientesConServicios = await Promise.all(
+    pacientes.map(async (paciente) => {
+      const servicios = await this.pacienteServicioRepository
+        .createQueryBuilder('ps')
+        .leftJoinAndSelect('ps.servicio', 'servicio')
+        .where('ps.paciente_id = :pacienteId', { pacienteId: paciente.id })
+        .andWhere('ps.activo = :activo', { activo: true })
+        .andWhere('ps.estado = :estado', { estado: 'ACTIVO' })
+        .getMany();
 
-  return resultados;
+      (paciente as any).servicios = servicios.map(ps => ({
+        servicio_id: ps.servicio.id,
+        servicio_nombre: ps.servicio.nombre
+      }));
+
+      // Mantener compatibilidad con código antiguo que usa .servicio
+      const servicioActivo = paciente.pacienteServicios?.find(ps => ps.activo === true);
+      (paciente as any).servicio = servicioActivo ? servicioActivo.servicio : null;
+
+      return paciente;
+    })
+  );
+
+  return pacientesConServicios;
 }
 
   async findAllIncludingInactive(filters?: {
@@ -654,12 +671,20 @@ async findAll(filters?: {
       throw new NotFoundException(`Estado con ID ${dto.estado_paciente_id} no encontrado`);
     }
 
-    // Actualizar el estado del paciente y los campos de auditoría
-    await this.pacienteRepository.update(id, {
+    // Si el estado es "Inactivo", también actualizar el campo activo a false
+    const updateData: any = {
       estado: { id: dto.estado_paciente_id },
       user_id_actua: dto.user_id_actua,
-      fecha_actua: new Date()
-    });
+      fecha_actua: new Date(),
+      updated_at: new Date() // Forzar actualización de updated_at
+    };
+
+    if (estado.nombre === 'Inactivo') {
+      updateData.activo = false;
+    }
+
+    // Actualizar el estado del paciente y los campos de auditoría
+    await this.pacienteRepository.update(id, updateData);
 
     // Retornar el paciente actualizado con sus relaciones
     return this.pacienteRepository.findOne({
@@ -748,5 +773,54 @@ async findAll(filters?: {
       id: paciente.id,
       nombre_completo: `${paciente.nombres} ${paciente.apellido_paterno} ${paciente.apellido_materno}`.trim()
     }));
+  }
+
+  /**
+   * Obtener estadísticas de pacientes del mes actual
+   */
+  async getEstadisticasMesActual() {
+    const now = new Date(); // Fecha fija para pruebas
+    const primerDiaMes = new Date(now.getFullYear(), now.getMonth(), 1);
+    const ultimoDiaMes = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+
+    // Pacientes activos este mes (created_at en el mes actual y activo = true)
+    const pacientesActivosMes = await this.pacienteRepository
+      .createQueryBuilder('paciente')
+      .where('paciente.activo = :activo', { activo: true })
+      .andWhere('paciente.created_at >= :inicio', { inicio: primerDiaMes })
+      .andWhere('paciente.created_at <= :fin', { fin: ultimoDiaMes })
+      .getCount();
+
+    // Pacientes inactivos este mes (se pusieron activo = false en el mes actual)
+    const pacientesInactivosMes = await this.pacienteRepository
+      .createQueryBuilder('paciente')
+      .where('paciente.activo = :activo', { activo: false })
+      .andWhere('paciente.updated_at >= :inicio', { inicio: primerDiaMes })
+      .andWhere('paciente.updated_at <= :fin', { fin: ultimoDiaMes })
+      .getCount();
+
+    // Estadísticas por estado (excluyendo "Inactivo")
+    const estadisticasPorEstado = await this.pacienteRepository
+      .createQueryBuilder('paciente')
+      .leftJoinAndSelect('paciente.estado', 'estado')
+      .select('estado.id', 'id')
+      .addSelect('estado.nombre', 'nombre')
+      .addSelect('COUNT(paciente.id)', 'total')
+      .where('paciente.activo = :activo', { activo: true })
+      .andWhere('paciente.mostrar_en_listado = :mostrar', { mostrar: true })
+      .andWhere('estado.nombre != :inactivo', { inactivo: 'Inactivo' })
+      .groupBy('estado.id')
+      .addGroupBy('estado.nombre')
+      .getRawMany();
+
+    return {
+      pacientesActivosMes,
+      pacientesInactivosMes,
+      estadisticas: estadisticasPorEstado.map(e => ({
+        estadoId: e.id,
+        estadoNombre: e.nombre,
+        total: parseInt(e.total)
+      }))
+    };
   }
 }
