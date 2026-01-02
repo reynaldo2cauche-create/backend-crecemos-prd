@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException, NotFoundException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Paciente } from './paciente.entity';
@@ -12,6 +12,8 @@ import { ParejaPacienteService } from './services/pareja-paciente.service';
 import { requierePareja } from '../constants/servicios.constants';
 import { CreatePacienteCompletoDto } from './dto/create-paciente-completo.dto';
 import { UpdateEstadoPacienteDto } from './dto/update-estado-paciente.dto';
+import { ConveniosService } from 'src/convenios/convenios.service';
+import { tieneAccesoBeneficios } from '../constants/estados-paciente.constants';
 
 @Injectable()
 export class PacienteService {
@@ -21,6 +23,7 @@ export class PacienteService {
   constructor(
     @InjectRepository(Paciente)
     private pacienteRepository: Repository<Paciente>,
+    private readonly conveniosService: ConveniosService, 
     @InjectRepository(EstadoPaciente)
     private estadoPacienteRepository: Repository<EstadoPaciente>,
     @InjectRepository(PacienteServicio)
@@ -28,8 +31,80 @@ export class PacienteService {
     @InjectRepository(Servicios)
     private serviciosRepository: Repository<Servicios>,
     private parejaPacienteService: ParejaPacienteService,
+    
   ) {}
 
+  /**
+ * Verifica que el paciente exista y esté activo
+ * Si cumple las condiciones, retorna los beneficios disponibles
+ * @param numeroDocumento - Número de documento del paciente
+ */
+async verificarPacienteYObtenerBeneficios(numeroDocumento: string) {
+  // 1. Buscar el paciente por número de documento
+  const paciente = await this.pacienteRepository
+    .createQueryBuilder('paciente')
+    .leftJoinAndSelect('paciente.tipo_documento', 'tipo_documento')
+    .leftJoinAndSelect('paciente.sexo', 'sexo')
+    .leftJoinAndSelect('paciente.distrito', 'distrito')
+    .leftJoinAndSelect('paciente.estado', 'estado')
+    .leftJoinAndSelect('paciente.servicio', 'servicio')
+    .where('paciente.numero_documento = :numeroDocumento', { numeroDocumento })
+    .getOne();
+
+  // 2. Validar que el paciente existe
+  if (!paciente) {
+    throw new NotFoundException(
+      'No se encontró ningún paciente registrado con el número de documento proporcionado.'
+    );
+  }
+
+  // 3. Validar que el paciente tenga acceso a beneficios según su estado
+  const estadoPacienteId = paciente.estado?.id; // Obtener el ID del estado cargado
+
+  console.log('🔍 Verificando paciente:', {
+    id: paciente.id,
+    nombres: paciente.nombres,
+    estado_paciente_id: estadoPacienteId,
+    estado_nombre: paciente.estado?.nombre
+  });
+
+  // Estados válidos: 1=Nuevo, 2=Entrevista, 3=Evaluación, 4=Terapia
+  // Estado inválido: 5=Inactivo
+  if (!tieneAccesoBeneficios(estadoPacienteId)) {
+    console.log('❌ Paciente INACTIVO (estado_paciente_id=' + estadoPacienteId + ') - Negando acceso a beneficios');
+    throw new ForbiddenException(
+      'El paciente se encuentra inactivo en el sistema y actualmente no cuenta con acceso a beneficios. Por favor, comuníquese con el área de atención al cliente para más información.'
+    );
+  }
+
+  console.log('✅ Paciente ACTIVO (estado_paciente_id=' + estadoPacienteId + ') - Permitiendo acceso a beneficios');
+
+  // 5. Si cumple las condiciones, obtener solo los beneficios ACTIVOS
+  const beneficios = await this.conveniosService.findAllBeneficios(true);
+
+  return {
+    paciente: {
+      id: paciente.id,
+      nombres: paciente.nombres,
+      apellido_paterno: paciente.apellido_paterno,
+      apellido_materno: paciente.apellido_materno,
+      numero_documento: paciente.numero_documento,
+      activo: paciente.activo,
+      estado_paciente_id: estadoPacienteId,
+      estado_nombre: paciente.estado?.nombre
+    },
+    total_beneficios: beneficios.length,
+    beneficios: beneficios
+  };
+}
+
+// Función auxiliar para validar acceso a beneficios
+tieneAccesoBeneficios(estadoPacienteId: number): boolean {
+  // Estados activos: 1 (Nuevo), 2 (Entrevista), 3 (Evaluacion), 4 (Terapia)
+  // Estado inactivo: 5 (Inactivo)
+  const estadosActivos = [1, 2, 3, 4];
+  return estadosActivos.includes(estadoPacienteId);
+}
   private async verifyRecaptcha(token: string): Promise<boolean> {
     try {
       const response = await axios.post(
@@ -191,14 +266,31 @@ async findAll(filters?: {
 
   const pacientes = await queryBuilder.getMany();
 
-  // Mapear el servicio activo a cada paciente
-  const resultados = pacientes.map((paciente) => {
-    const servicioActivo = paciente.pacienteServicios?.find(ps => ps.activo === true);
-    (paciente as any).servicio = servicioActivo ? servicioActivo.servicio : null;
-    return paciente;
-  });
+  // Obtener todos los servicios asignados para cada paciente
+  const pacientesConServicios = await Promise.all(
+    pacientes.map(async (paciente) => {
+      const servicios = await this.pacienteServicioRepository
+        .createQueryBuilder('ps')
+        .leftJoinAndSelect('ps.servicio', 'servicio')
+        .where('ps.paciente_id = :pacienteId', { pacienteId: paciente.id })
+        .andWhere('ps.activo = :activo', { activo: true })
+        .andWhere('ps.estado = :estado', { estado: 'ACTIVO' })
+        .getMany();
 
-  return resultados;
+      (paciente as any).servicios = servicios.map(ps => ({
+        servicio_id: ps.servicio.id,
+        servicio_nombre: ps.servicio.nombre
+      }));
+
+      // Mantener compatibilidad con código antiguo que usa .servicio
+      const servicioActivo = paciente.pacienteServicios?.find(ps => ps.activo === true);
+      (paciente as any).servicio = servicioActivo ? servicioActivo.servicio : null;
+
+      return paciente;
+    })
+  );
+
+  return pacientesConServicios;
 }
 
   async findAllIncludingInactive(filters?: {
@@ -579,12 +671,20 @@ async findAll(filters?: {
       throw new NotFoundException(`Estado con ID ${dto.estado_paciente_id} no encontrado`);
     }
 
-    // Actualizar el estado del paciente y los campos de auditoría
-    await this.pacienteRepository.update(id, {
+    // Si el estado es "Inactivo", también actualizar el campo activo a false
+    const updateData: any = {
       estado: { id: dto.estado_paciente_id },
       user_id_actua: dto.user_id_actua,
-      fecha_actua: new Date()
-    });
+      fecha_actua: new Date(),
+      updated_at: new Date() // Forzar actualización de updated_at
+    };
+
+    if (estado.nombre === 'Inactivo') {
+      updateData.activo = false;
+    }
+
+    // Actualizar el estado del paciente y los campos de auditoría
+    await this.pacienteRepository.update(id, updateData);
 
     // Retornar el paciente actualizado con sus relaciones
     return this.pacienteRepository.findOne({
@@ -673,5 +773,54 @@ async findAll(filters?: {
       id: paciente.id,
       nombre_completo: `${paciente.nombres} ${paciente.apellido_paterno} ${paciente.apellido_materno}`.trim()
     }));
+  }
+
+  /**
+   * Obtener estadísticas de pacientes del mes actual
+   */
+  async getEstadisticasMesActual() {
+    const now = new Date(); // Fecha fija para pruebas
+    const primerDiaMes = new Date(now.getFullYear(), now.getMonth(), 1);
+    const ultimoDiaMes = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+
+    // Pacientes activos este mes (created_at en el mes actual y activo = true)
+    const pacientesActivosMes = await this.pacienteRepository
+      .createQueryBuilder('paciente')
+      .where('paciente.activo = :activo', { activo: true })
+      .andWhere('paciente.created_at >= :inicio', { inicio: primerDiaMes })
+      .andWhere('paciente.created_at <= :fin', { fin: ultimoDiaMes })
+      .getCount();
+
+    // Pacientes inactivos este mes (se pusieron activo = false en el mes actual)
+    const pacientesInactivosMes = await this.pacienteRepository
+      .createQueryBuilder('paciente')
+      .where('paciente.activo = :activo', { activo: false })
+      .andWhere('paciente.updated_at >= :inicio', { inicio: primerDiaMes })
+      .andWhere('paciente.updated_at <= :fin', { fin: ultimoDiaMes })
+      .getCount();
+
+    // Estadísticas por estado (excluyendo "Inactivo")
+    const estadisticasPorEstado = await this.pacienteRepository
+      .createQueryBuilder('paciente')
+      .leftJoinAndSelect('paciente.estado', 'estado')
+      .select('estado.id', 'id')
+      .addSelect('estado.nombre', 'nombre')
+      .addSelect('COUNT(paciente.id)', 'total')
+      .where('paciente.activo = :activo', { activo: true })
+      .andWhere('paciente.mostrar_en_listado = :mostrar', { mostrar: true })
+      .andWhere('estado.nombre != :inactivo', { inactivo: 'Inactivo' })
+      .groupBy('estado.id')
+      .addGroupBy('estado.nombre')
+      .getRawMany();
+
+    return {
+      pacientesActivosMes,
+      pacientesInactivosMes,
+      estadisticas: estadisticasPorEstado.map(e => ({
+        estadoId: e.id,
+        estadoNombre: e.nombre,
+        total: parseInt(e.total)
+      }))
+    };
   }
 }

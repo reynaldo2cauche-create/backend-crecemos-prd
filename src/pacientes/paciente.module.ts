@@ -23,11 +23,13 @@ import { Servicios } from '../catalogos/servicios.entity';
 import { NotaEvolucion } from './entities/nota-evolucion.entity';
 import { NotaEvolucionService } from './services/nota-evolucion.service';
 import { NotaEvolucionController } from './controllers/nota-evolucion.controller';
+import { TransferenciaNotas } from './entities/transferencia-notas.entity';
 import { TrabajadorCentro } from '../usuarios/trabajador-centro.entity';
 import { ParejaPaciente } from './entities/pareja-paciente.entity';
 import { ParejaPacienteService } from './services/pareja-paciente.service';
 import { EstadoPacienteService } from './estado-paciente.service';
 import { EstadoPacienteController } from './estado-paciente.controller';
+import { ConveniosModule } from 'src/convenios/convenios.module';
 
 @Module({
   imports: [
@@ -40,9 +42,12 @@ import { EstadoPacienteController } from './estado-paciente.controller';
       EstadoPaciente,
       Servicios,
       NotaEvolucion,
+      TransferenciaNotas,
       TrabajadorCentro,
-      ParejaPaciente
-    ])
+      ParejaPaciente,
+
+    ]),
+    ConveniosModule
   ],
   providers: [
     PacienteService,

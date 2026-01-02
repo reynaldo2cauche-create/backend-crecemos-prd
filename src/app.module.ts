@@ -68,6 +68,7 @@ import { Comentario } from './postulaciones/comentario.entity';
 import { EvaluacionTerapiaOcupacional } from './historia-clinica/entities/evaluacion-terapia-ocupacional.entity';
 import { ArchivoOficial } from './historia-clinica/entities/archivo-oficial.entity';
 import { ArchivoTerapia } from './historia-clinica/entities/archivo-terapia.entity';
+import { Beneficio } from './convenios/entities/beneficio.entity';
 import { CargoPostulacion } from './postulaciones/cargo-postulacion.entity';
 import { EstadoPostulacion } from './postulaciones/estado-postulacion.entity';
 import { PopupModule } from './popup/popup.module';
@@ -81,26 +82,60 @@ import { Mes } from './rrhh/mes.entity';
 import { PeriodoGratificacion } from './rrhh/periodo-gratificacion.entity';
 import { AuditoriaModule } from './auditoria/auditoria.module';
 import { AuditoriaAccion } from './auditoria/auditoria-accion.entity';
-import { AlertaSistema } from './auditoria/alerta-sistema.entity';
-import { ConfiguracionAlerta } from './auditoria/configuracion-alerta.entity';
 import { APP_INTERCEPTOR } from '@nestjs/core';
 import { AuditoriaInterceptor } from './auditoria/auditoria.interceptor';
+import { Cargo } from './usuarios/cargo.entity';
+import { TransferenciaNotas } from './pacientes/entities/transferencia-notas.entity';
+import { NotificacionesModule } from './notificaciones/notificaciones.module';
+import { Notificacion } from './notificaciones/notificacion.entity';
+import { ConfiguracionNotificacion } from './notificaciones/configuracion-notificacion.entity';
+import { Convenio } from './convenios/entities/convenio.entity';
+import { PacienteConvenio } from './convenios/entities/paciente-convenio.entity';
+import { ConveniosModule } from './convenios/convenios.module';
+import { CategoriaBeneficio } from './convenios/entities/categoria-beneficio.entity';
+// import { ScheduleModule } from '@nestjs/schedule';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true, // Hace las variables accesibles en toda la aplicación
     }),
+    // ScheduleModule.forRoot(),
     ServeStaticModule.forRoot({
       rootPath: join(__dirname, '..', 'uploads'),  // Ruta de la carpeta de archivos
       serveRoot: '/uploads',  // URL base para acceder a los archivos
+      serveStaticOptions: {
+        index: false,
+        setHeaders: (res, path) => {
+          // Configurar headers para diferentes tipos de archivo
+          if (path.endsWith('.pdf')) {
+            res.set('Content-Type', 'application/pdf');
+          } else if (path.endsWith('.doc')) {
+            res.set('Content-Type', 'application/msword');
+          } else if (path.endsWith('.docx')) {
+            res.set('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+          } else if (path.endsWith('.xls')) {
+            res.set('Content-Type', 'application/vnd.ms-excel');
+          } else if (path.endsWith('.xlsx')) {
+            res.set('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+          } else if (path.endsWith('.ppt')) {
+            res.set('Content-Type', 'application/vnd.ms-powerpoint');
+          } else if (path.endsWith('.pptx')) {
+            res.set('Content-Type', 'application/vnd.openxmlformats-officedocument.presentationml.presentation');
+          } else if (path.endsWith('.svg')) {
+            res.set('Content-Type', 'image/svg+xml');
+          }
+          // Permitir que los archivos se puedan visualizar en el navegador
+          res.set('Access-Control-Allow-Origin', '*');
+        },
+      },
     }),
     TypeOrmModule.forRoot({
-      type: 'mysql',
+       type: 'mysql',
       host: 'localhost',
       port: 3306,
-      username: 'root',  // Asegúrate de poner el nombre de usuario correcto
-      password: 'admin',  // Asegúrate de poner la contraseña correcta
+      username: 'root',
+      password: 'admin',
       database: 'crecemos_website',
       entities: [
         Postulacion,
@@ -128,6 +163,7 @@ import { AuditoriaInterceptor } from './auditoria/auditoria.interceptor';
         Institucion,
         Seccion,
         TrabajadorCentro,
+        Cargo,
         NotaEvolucion,
         TrabajadorCentroUsuario,
         Rol,
@@ -157,6 +193,7 @@ import { AuditoriaInterceptor } from './auditoria/auditoria.interceptor';
         EvaluacionTerapiaOcupacional,
         ArchivoOficial,
         ArchivoTerapia,
+        Beneficio,
         CargoPostulacion,
         EstadoPostulacion,
         PopupProgramado,
@@ -168,8 +205,12 @@ import { AuditoriaInterceptor } from './auditoria/auditoria.interceptor';
         PeriodoGratificacion,
         TrabajadorServicio,
         AuditoriaAccion,
-        AlertaSistema,
-        ConfiguracionAlerta
+        TransferenciaNotas,
+        Notificacion,
+        ConfiguracionNotificacion,
+        Convenio,
+        PacienteConvenio,
+        CategoriaBeneficio
       ],
         synchronize: false,   // true en desarrollo, false en producción
           // Activar logs de SQL para debug
@@ -198,8 +239,10 @@ import { AuditoriaInterceptor } from './auditoria/auditoria.interceptor';
     PopupModule,
     RrhhModule,
     AuditoriaModule,
+    NotificacionesModule,
     AuthModule,
-    Comentario
+    Comentario,
+    ConveniosModule
   ],
   controllers: [AppController],
   providers: [

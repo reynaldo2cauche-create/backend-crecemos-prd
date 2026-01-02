@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, Brackets } from 'typeorm';
 import { ArchivoDigital } from './entities/archivo-digital.entity';
 import { TipoArchivo } from './entities/tipo-archivo.entity';
 import { CreateArchivoDigitalDto } from './dto/create-archivo-digital.dto';
@@ -75,12 +75,34 @@ export class ArchivosDigitalesService {
     });
   }
 
-  async findByPaciente(pacienteId: number): Promise<ArchivoDigital[]> {
-    return await this.archivoDigitalRepository.find({
-      relations: ['paciente', 'terapeuta', 'tipoArchivo'],
-      where: { paciente: { id: pacienteId }, activo: true },
-      order: { fechaCreacion: 'DESC' }
-    });
+  async findByPaciente(
+    pacienteId: number,
+    trabajadorId?: number,
+    rolTrabajador?: string
+  ): Promise<ArchivoDigital[]> {
+    const query = this.archivoDigitalRepository
+      .createQueryBuilder('archivo')
+      .leftJoinAndSelect('archivo.paciente', 'paciente')
+      .leftJoinAndSelect('archivo.terapeuta', 'terapeuta')
+      .leftJoinAndSelect('terapeuta.rol', 'rol') // JOIN con la tabla rol
+      .leftJoinAndSelect('archivo.tipoArchivo', 'tipoArchivo')
+      .where('archivo.paciente_id = :pacienteId', { pacienteId })
+      .andWhere('archivo.activo = :activo', { activo: true });
+
+    // Si es TERAPEUTA: solo ve archivos que subió él mismo O archivos que subió admisión/admin
+    if (rolTrabajador && rolTrabajador.toLowerCase() === 'terapeuta' && trabajadorId) {
+      query.andWhere(
+        new Brackets((qb) => {
+          qb.where('archivo.terapeuta_id = :trabajadorId', { trabajadorId })
+            .orWhere('LOWER(rol.nombre) IN (:...rolesAdmision)', {
+              rolesAdmision: ['admin', 'admision', 'administrador', 'admisión']
+            });
+        }),
+      );
+    }
+    // Si es ADMIN o ADMISIÓN: ven TODO
+
+    return await query.orderBy('archivo.fecha_creacion', 'DESC').getMany();
   }
 
   async findByTerapeuta(terapeutaId: number): Promise<ArchivoDigital[]> {

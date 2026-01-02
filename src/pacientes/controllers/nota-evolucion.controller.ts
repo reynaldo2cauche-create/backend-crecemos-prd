@@ -27,5 +27,22 @@ export class NotaEvolucionController {
     return this.service.findByPaciente(+id, trabajadorIdNumber);
   }
 
-  
+  @Post('migrar-notas-antiguas')
+  @Auditable({
+    modulo: 'PACIENTES',
+    accion: 'MIGRAR_NOTAS_ANTIGUAS',
+  })
+  migrarNotasAntiguas() {
+    return this.service.migrarNotasAntiguas();
+  }
+
+  @Get('migrar-notas-antiguas/prueba/:paciente_id')
+  @Auditable({
+    modulo: 'PACIENTES',
+    accion: 'PRUEBA_MIGRAR_NOTAS_ANTIGUAS',
+  })
+  probarMigracionPorPaciente(@Param('paciente_id') paciente_id: string) {
+    return this.service.migrarNotasAntiguasPorPaciente(+paciente_id);
+  }
+
 } 
