@@ -1,8 +1,9 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, Inject, forwardRef } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { TrabajadorCentro } from '../usuarios/trabajador-centro.entity';
+// import { NotificacionesService } from '../notificaciones/notificaciones.service';
 import * as bcrypt from 'bcrypt';
 
 @Injectable()
@@ -11,6 +12,8 @@ export class AuthService {
     @InjectRepository(TrabajadorCentro)
     private trabajadorRepository: Repository<TrabajadorCentro>,
     private jwtService: JwtService,
+    // @Inject(forwardRef(() => NotificacionesService))
+    // private notificacionesService: NotificacionesService,
   ) {}
 
   async validateUser(username: string, password: string): Promise<any> {
@@ -29,9 +32,9 @@ export class AuthService {
     return null;
   }
 
-  async login(username: string, password: string) {
+  async login(username: string, password: string, ip: string, userAgent: string) {
     const user = await this.validateUser(username, password);
-    
+
     if (!user) {
       throw new UnauthorizedException('Credenciales inválidas');
     }
@@ -48,11 +51,18 @@ export class AuthService {
       rol: user.rol,                // ✅ Cambió de solo nombre a objeto completo
       institucion_id: user.institucion?.id
     };
-    
+
     // Actualizar último acceso
     await this.trabajadorRepository.update(user.id, {
       ultimo_acceso: new Date()
     });
+
+    // Notificar login fuera de horario
+    try {
+      // await this.notificacionesService.notificarLoginFueraHorario(user.id, ip, userAgent);
+    } catch (error) {
+      console.error('Error al notificar login fuera de horario:', error);
+    }
 
     return {
       access_token: this.jwtService.sign(payload),

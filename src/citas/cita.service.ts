@@ -1,4 +1,4 @@
-import { Injectable, ConflictException, BadRequestException } from '@nestjs/common';
+import { Injectable, ConflictException, BadRequestException, Inject, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Cita } from './cita.entity';
@@ -8,6 +8,7 @@ import { CitaReunionClinicaServicios } from './cita-reunion-clinica-servicios.en
 import { VisitaEscolar } from './visita-escolar.entity';
 import { CreateCitaDto } from './dto/create-cita.dto';
 import { UpdateCitaDto } from './dto/update-cita.dto';
+// import { NotificacionesService } from '../notificaciones/notificaciones.service';
 
 @Injectable()
 export class CitaService {
@@ -126,7 +127,7 @@ export class CitaService {
 
   private async createMultiple(citasDto: CreateCitaDto[]): Promise<any> {
     const citasCreadas = [];
-    const errores = [];
+    const erroresConflicto = [];
 
     for (let i = 0; i < citasDto.length; i++) {
       const citaDto = citasDto[i];
@@ -144,7 +145,14 @@ export class CitaService {
           );
         }
       } catch (error) {
-        errores.push({
+        // Si es un error de BadRequest (horarios bloqueados), lanzarlo inmediatamente
+        // No continuar con las demás validaciones
+        if (error instanceof BadRequestException) {
+          throw error;
+        }
+
+        // Si es un error de Conflict (otra cita en ese horario), agregarlo a la lista
+        erroresConflicto.push({
           index: i,
           fecha: citaDto.fecha,
           hora_inicio: citaDto.hora_inicio,
@@ -153,10 +161,11 @@ export class CitaService {
       }
     }
 
-    if (errores.length > 0) {
+    // Si hay errores de conflicto con otras citas, devolver todos los errores
+    if (erroresConflicto.length > 0) {
       throw new ConflictException({
-        message: 'Conflictos encontrados',
-        errores
+        message: 'Hay conflictos de horarios en algunas citas',
+        errores: erroresConflicto
       });
     }
 
@@ -401,6 +410,15 @@ export class CitaService {
 
     await this.citaRepository.delete(id);
 
+    // Notificar eliminación de cita
+    if (userId) {
+      try {
+        // await this.notificacionesService.notificarCitaEliminada(id, citaInfo, userId);
+      } catch (error) {
+        console.error('Error al notificar eliminación de cita:', error);
+      }
+    }
+
     return {
       success: true,
       message: 'Cita eliminada exitosamente',
@@ -413,6 +431,72 @@ export class CitaService {
     };
   }
 
+  /**
+   * Validar si una hora está en horario bloqueado
+   */
+  private validarHorarioBloqueado(fecha: string, horaInicio: string): void {
+    // Convertir fecha a objeto Date para obtener el día de la semana
+    const fechaObj = new Date(fecha + 'T00:00:00');
+    const diaSemana = fechaObj.getDay(); // 0 = Domingo, 1 = Lunes, ..., 6 = Sábado
+
+    // Convertir hora a minutos desde medianoche
+    const convertirAMinutos = (tiempo: string): number => {
+      const [horas, minutos] = tiempo.split(':').map(Number);
+      return horas * 60 + minutos;
+    };
+
+    const horaMinutos = convertirAMinutos(horaInicio);
+
+    // Validación para domingo (0): completamente bloqueado
+    if (diaSemana === 0) {
+      throw new BadRequestException(
+        'Horario no disponible: No se realizan atenciones los domingos. ' +
+        'Por favor, seleccione un día de lunes a sábado para agendar su cita.'
+      );
+    }
+
+    // Validación para sábado (6): 8:00 AM a 2:00 PM
+    if (diaSemana === 6) {
+      const inicioSabado = 8 * 60; // 8:00 = 480 minutos
+      const finSabado = 14 * 60; // 14:00 = 840 minutos
+
+      if (horaMinutos < inicioSabado || horaMinutos >= finSabado) {
+        throw new BadRequestException(
+          'Horario no disponible: Los sábados el horario de atención es de 8:00 AM a 2:00 PM. ' +
+          'Por favor, seleccione un horario dentro de este rango para continuar con la agenda.'
+        );
+      }
+    }
+
+    // Validación para lunes a viernes (1-5)
+    if (diaSemana >= 1 && diaSemana <= 5) {
+      const inicioLaboral = 9 * 60; // 9:00 = 540 minutos
+      const finLaboral = 20 * 60; // 20:00 = 1200 minutos
+
+      // Validar que esté dentro del horario laboral (9:00 AM - 8:00 PM)
+      if (horaMinutos < inicioLaboral || horaMinutos >= finLaboral) {
+        throw new BadRequestException(
+          'Horario no disponible: De lunes a viernes el horario de atención es de 9:00 AM a 8:00 PM. ' +
+          'Por favor, seleccione un horario dentro de este rango para continuar con la agenda.'
+        );
+      }
+
+      // Horario de refrigerio: 13:00 (1 PM) a 14:00 (2 PM)
+      const inicioRefrigerio = 13 * 60; // 780 minutos
+      const finRefrigerio = 14 * 60; // 840 minutos
+
+      if (horaMinutos >= inicioRefrigerio && horaMinutos < finRefrigerio) {
+        throw new BadRequestException(
+          'Horario no disponible: El horario seleccionado corresponde al periodo de refrigerio (1:00 PM - 2:00 PM). ' +
+          'Por favor, seleccione un horario fuera de este rango para continuar con la agenda.'
+        );
+      }
+    }
+  }
+
+  /**
+   * Validar disponibilidad del terapeuta en el horario solicitado
+   */
   private async validarDisponibilidadTerapeuta(
     doctorId: number,
     fecha: string,
@@ -420,8 +504,11 @@ export class CitaService {
     horaFin: string,
     citaIdExcluir?: number
   ): Promise<void> {
-    const queryBuilder = this.citaRepository.createQueryBuilder('cita')
-      .leftJoinAndSelect('cita.paciente', 'paciente')
+    // Primero validar que no sea un horario bloqueado
+    this.validarHorarioBloqueado(fecha, horaInicio);
+    // Buscar citas del mismo terapeuta en la misma fecha
+    const queryBuilder = this.citaRepository
+      .createQueryBuilder('cita')
       .where('cita.doctor_id = :doctorId', { doctorId })
       .andWhere('cita.fecha = :fecha', { fecha });
 
@@ -431,14 +518,16 @@ export class CitaService {
 
     const citasExistentes = await queryBuilder.getMany();
 
-    for (const citaExistente of citasExistentes) {
-      if (this.hayConflictoHorario(horaInicio, horaFin, citaExistente.hora_inicio, citaExistente.hora_fin)) {
-        throw new ConflictException(
-          `El terapeuta ya tiene una cita de ${citaExistente.hora_inicio} a ${citaExistente.hora_fin} ` +
-          `con ${citaExistente.paciente.nombres} ${citaExistente.paciente.apellido_paterno}`
-        );
-      }
-    }
+    // for (const citaExistente of citasExistentes) {
+    //   if (this.hayConflictoHorario(horaInicio, horaFin, citaExistente.hora_inicio, citaExistente.hora_fin)) {
+    //     throw new ConflictException(
+    //       `Conflicto de horario: El terapeuta ${citaConRelaciones.doctor.nombres} ${citaConRelaciones.doctor.apellidos} ` +
+    //       `ya tiene una cita programada de ${citaExistente.hora_inicio.substring(0, 5)} a ${citaExistente.hora_fin.substring(0, 5)} ` +
+    //       `con el paciente ${citaConRelaciones.paciente.nombres} ${citaConRelaciones.paciente.apellido_paterno}. ` +
+    //       `Por favor, seleccione otro horario disponible para continuar con la agenda.`
+    //     );
+    //   }
+    // }
   }
 
   private hayConflictoHorario(inicio1: string, fin1: string, inicio2: string, fin2: string): boolean {

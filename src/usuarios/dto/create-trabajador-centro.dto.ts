@@ -41,6 +41,14 @@ export class CreateTrabajadorCentroDto {
   especialidad_id?: number;
 
   @IsOptional()
+  @IsNumber()
+  cargo_id?: number;
+
+  @IsOptional()
+  @IsNumber()
+  jefe_id?: number;
+
+  @IsOptional()
   @IsString()
   telefono?: string;
 

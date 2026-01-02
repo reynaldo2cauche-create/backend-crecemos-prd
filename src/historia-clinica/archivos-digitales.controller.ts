@@ -23,6 +23,7 @@ import { CreateArchivoDigitalDto } from './dto/create-archivo-digital.dto';
 import { UpdateArchivoDigitalDto } from './dto/update-archivo-digital.dto';
 import { Auditable } from 'src/auditoria/decorators/auditable.decorator';
 import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
+import { Public } from 'src/auth/decorators/public.decorator';
 import { AuditoriaService } from 'src/auditoria/auditoria.service';
 
 import * as fs from 'fs';
@@ -156,21 +157,35 @@ export class ArchivosDigitalesController {
 
   // Ruta para obtener todos los tipos de archivo (DEBE IR ANTES que las rutas con :id)
   @Get('tipos')
+  
   async findAllTiposArchivo() {
     return await this.archivosDigitalesService.findAllTiposArchivo();
   }
 
   @Get()
-  async findAll(@Query('pacienteId') pacienteId?: string, @Query('terapeutaId') terapeutaId?: string) {
+  
+  async findAll(
+    @Query('pacienteId') pacienteId?: string,
+    @Query('terapeutaId') terapeutaId?: string,
+    @Req() req?: any
+  ) {
     let archivos;
-    
+
+    // Obtener información del usuario autenticado
+    const trabajadorId = req?.user?.id;
+    const rolTrabajador = req?.user?.rol?.nombre || req?.user?.rol; // Obtener el nombre del rol
+
     // Si se proporcionan ambos parámetros, buscar por terapeuta Y paciente
     if (pacienteId && terapeutaId && !isNaN(parseInt(pacienteId)) && !isNaN(parseInt(terapeutaId))) {
       archivos = await this.archivosDigitalesService.findByTerapeutaAndPaciente(parseInt(terapeutaId), parseInt(pacienteId));
     }
     // Si solo se proporciona pacienteId
     else if (pacienteId && !isNaN(parseInt(pacienteId))) {
-      archivos = await this.archivosDigitalesService.findByPaciente(parseInt(pacienteId));
+      archivos = await this.archivosDigitalesService.findByPaciente(
+        parseInt(pacienteId),
+        trabajadorId,
+        rolTrabajador
+      );
     }
     // Si solo se proporciona terapeutaId
     else if (terapeutaId && !isNaN(parseInt(terapeutaId))) {
@@ -189,6 +204,7 @@ export class ArchivosDigitalesController {
   }
 
   @Get(':id')
+  
   async findOne(@Param('id') id: string) {
     const numericId = parseInt(id);
     if (isNaN(numericId)) {
@@ -204,6 +220,7 @@ export class ArchivosDigitalesController {
   }
 
   @Get(':id/preview')
+  @Public()
   async preview(@Param('id') id: string, @Res() res: Response, @Req() req: Request) {
     const numericId = parseInt(id);
     if (isNaN(numericId)) {
@@ -254,6 +271,7 @@ export class ArchivosDigitalesController {
   }
 
   @Get(':id/download')
+  
   async download(@Param('id') id: string, @Res() res: Response, @Req() req: Request) {
     const numericId = parseInt(id);
     if (isNaN(numericId)) {
@@ -304,6 +322,7 @@ export class ArchivosDigitalesController {
   }
 
   @Patch(':id')
+  
   async update(@Param('id') id: string, @Body() updateArchivoDigitalDto: UpdateArchivoDigitalDto) {
     const numericId = parseInt(id);
     if (isNaN(numericId)) {
@@ -313,15 +332,62 @@ export class ArchivosDigitalesController {
   }
 
   @Delete(':id')
+  
   @Auditable({
     modulo: 'ARCHIVOS_DIGITALES',
     accion: 'ELIMINAR_ARCHIVO',
   })
-  async remove(@Param('id') id: string) {
+  async remove(@Param('id') id: string, @Req() req: any) {
     const numericId = parseInt(id);
     if (isNaN(numericId)) {
       throw new HttpException('ID inválido', HttpStatus.BAD_REQUEST);
     }
-    return await this.archivosDigitalesService.remove(numericId);
+
+    // Obtener información del usuario autenticado
+    const trabajadorId = req?.user?.id;
+    const rolTrabajador = req?.user?.rol?.nombre || req?.user?.rol;
+
+    // Obtener el archivo para verificar quién lo subió
+    const archivo = await this.archivosDigitalesService.findOne(numericId);
+
+    // REGLAS DE PERMISOS:
+    // 1. ADMIN/ADMINISTRADOR: Puede eliminar cualquier archivo
+    const esAdmin = rolTrabajador && ['admin', 'administrador'].includes(rolTrabajador.toLowerCase());
+
+    if (esAdmin) {
+      // Administrador puede eliminar todo
+      return await this.archivosDigitalesService.remove(numericId);
+    }
+
+    // 2. ADMISIÓN: NO puede eliminar NINGÚN archivo (ni los propios)
+    const esAdmision = rolTrabajador && ['admision', 'admisión'].includes(rolTrabajador.toLowerCase());
+
+    if (esAdmision) {
+      throw new HttpException(
+        'El rol de Admisión no tiene permisos para eliminar archivos. Solo el Administrador puede eliminar archivos.',
+        HttpStatus.FORBIDDEN
+      );
+    }
+
+    // 3. TERAPEUTA: Solo puede eliminar archivos que él mismo subió
+    const esTerapeuta = rolTrabajador && rolTrabajador.toLowerCase() === 'terapeuta';
+
+    if (esTerapeuta) {
+      // Verificar si el archivo fue subido por este terapeuta
+      if (archivo.terapeuta.id !== trabajadorId) {
+        throw new HttpException(
+          'No tienes permisos para eliminar este archivo. Solo puedes eliminar archivos que tú mismo has subido.',
+          HttpStatus.FORBIDDEN
+        );
+      }
+      // Si llegó aquí, el terapeuta está eliminando su propio archivo
+      return await this.archivosDigitalesService.remove(numericId);
+    }
+
+    // Si no es ninguno de los roles esperados, denegar por defecto
+    throw new HttpException(
+      'No tienes permisos para eliminar archivos.',
+      HttpStatus.FORBIDDEN
+    );
   }
 }

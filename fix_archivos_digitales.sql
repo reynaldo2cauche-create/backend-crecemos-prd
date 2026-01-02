@@ -1,0 +1,3 @@
+-- Arreglar el campo id como PRIMARY KEY y AUTO_INCREMENT
+ALTER TABLE archivos_digitales 
+MODIFY COLUMN id INT NOT NULL AUTO_INCREMENT PRIMARY KEY;
