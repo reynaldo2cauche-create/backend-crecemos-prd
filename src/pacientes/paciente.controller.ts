@@ -32,6 +32,12 @@ export class PacienteController {
     return this.pacienteService.createCompleto(dto);
   }
 
+  @Get('estadisticas')
+  @ApiOperation({ summary: 'Obtener estadísticas de pacientes del mes actual' })
+  getEstadisticas() {
+    return this.pacienteService.getEstadisticasMesActual();
+  }
+
   @Get()
   findAll(
     @Query('terapeutaId') terapeutaId?: string,
@@ -49,7 +55,7 @@ export class PacienteController {
       estadoId: estadoId && !isNaN(Number(estadoId)) ? parseInt(estadoId, 10) : undefined,
       servicioId: servicioId && !isNaN(Number(servicioId)) ? parseInt(servicioId, 10) : undefined,
     };
-    
+
     return this.pacienteService.findAll(parsedFilters);
   }
 
