@@ -5,32 +5,20 @@ export class TipoCita {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @Column({ type: 'varchar', length: 50, unique: true })
-  codigo: string;
-
-  @Column({ type: 'varchar', length: 100 })
+  @Column({ unique: true })
   nombre: string;
+
+  @Column({ unique: true })
+  codigo: string; // 'NORMAL', 'REUNION_CLINICA', 'VISITA_ESCOLAR'
 
   @Column({ type: 'text', nullable: true })
   descripcion: string;
 
   @Column({ type: 'boolean', default: true })
-  requiere_terapeuta: boolean;
-
-  @Column({ type: 'boolean', default: false })
-  permite_multiples_terapeutas: boolean;
-
-  @Column({ type: 'boolean', default: false })
-  permite_multiples_servicios: boolean;
-
-  @Column({ type: 'boolean', default: true })
   activo: boolean;
 
-  @Column({ type: 'int', nullable: true })
-  user_crea_id: number;
 
-  @Column({ type: 'int', nullable: true })
-  user_actua_id: number;
+
 
   @Column({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' })
   created_at: Date;

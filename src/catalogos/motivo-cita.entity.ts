@@ -1,4 +1,5 @@
-import { Entity, PrimaryGeneratedColumn, Column } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn } from 'typeorm';
+import { TipoCita } from './tipo-cita.entity';
 
 @Entity('motivo_cita')
 export class MotivoCita {
@@ -13,6 +14,13 @@ export class MotivoCita {
 
   @Column({ default: true })
   activo: boolean;
+
+  @Column({ type: 'int' })
+  tipo_cita_id: number;
+
+  @ManyToOne(() => TipoCita, { eager: false })
+  @JoinColumn({ name: 'tipo_cita_id' })
+  tipoCita: TipoCita;
 
   @Column({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' })
   created_at: Date;

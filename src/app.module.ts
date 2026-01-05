@@ -58,9 +58,9 @@ import { CitaReunionClinica } from './citas/entities/cita-reunion-clinica.entity
 import { CitaReunionClinicaTerapeutas } from './citas/entities/cita-reunion-clinica-terapeutas.entity';
 import { CitaReunionClinicaServicios } from './citas/entities/cita-reunion-clinica-servicios.entity';
 import { CitaVisitaEscolar } from './citas/entities/cita-visita-escolar.entity';
-import { MotivoCita } from './citas/entities/motivo-cita.entity';
-import { EstadoCita } from './citas/entities/estado-cita.entity';
-import { TipoCita } from './citas/entities/tipo-cita.entity';
+import { MotivoCita } from './catalogos/motivo-cita.entity';
+import { EstadoCita } from './catalogos/estado-cita.entity';
+import { TipoCita } from './catalogos/tipo-cita.entity';
 import { HermanoEntrevista } from './historia-clinica/entities/hermano-entrevista.entity';
 import { FamiliarEntrevista } from './historia-clinica/entities/familiar-entrevista.entity';
 
