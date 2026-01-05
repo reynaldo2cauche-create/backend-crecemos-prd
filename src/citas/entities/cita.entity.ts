@@ -2,8 +2,8 @@ import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn } from 't
 import { Paciente } from '../../pacientes/paciente.entity';
 import { TrabajadorCentro } from '../../usuarios/trabajador-centro.entity';
 import { Servicios as Servicio } from '../../catalogos/servicios.entity';
-import { MotivoCita } from './motivo-cita.entity';
-import { EstadoCita } from './estado-cita.entity';
+import { MotivoCita } from '../../catalogos/motivo-cita.entity';
+import { EstadoCita } from '../../catalogos/estado-cita.entity';
 
 /**
  * Entidad para CITAS NORMALES

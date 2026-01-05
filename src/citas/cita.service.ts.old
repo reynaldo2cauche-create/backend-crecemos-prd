@@ -187,8 +187,8 @@ export class CitaService {
       .leftJoinAndSelect('cita.doctor', 'doctor')
       .leftJoinAndSelect('cita.servicio', 'servicio')
       .leftJoinAndSelect('cita.motivo', 'motivo')
+      .leftJoinAndSelect('motivo.tipoCita', 'tipoCita')
       .leftJoinAndSelect('cita.estado', 'estado')
-      .leftJoinAndSelect('cita.tipo_cita', 'tipo_cita')
       .orderBy('cita.fecha', 'ASC')
       .addOrderBy('cita.hora_inicio', 'ASC');
 

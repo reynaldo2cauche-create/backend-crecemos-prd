@@ -4,19 +4,11 @@ import { TrabajadorCentro } from '../usuarios/trabajador-centro.entity';
 import { Servicios } from '../catalogos/servicios.entity';
 import { MotivoCita } from '../catalogos/motivo-cita.entity';
 import { EstadoCita } from '../catalogos/estado-cita.entity';
-import { TipoCita } from '../catalogos/tipo-cita.entity';
 
 @Entity('citas')
 export class Cita {
   @PrimaryGeneratedColumn()
   id: number;
-
-  @Column({ type: 'int' })
-  tipo_cita_id: number;
-
-  @ManyToOne(() => TipoCita, { eager: true })
-  @JoinColumn({ name: 'tipo_cita_id' })
-  tipo_cita: TipoCita;
 
   @Column({ type: 'int' })
   paciente_id: number;
