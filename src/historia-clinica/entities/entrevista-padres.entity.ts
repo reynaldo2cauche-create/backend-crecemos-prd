@@ -3,6 +3,7 @@ import { Paciente } from '../../pacientes/paciente.entity';
 import { TrabajadorCentro } from '../../usuarios/trabajador-centro.entity';
 import { Atenciones } from '../../catalogos/atenciones.entity';
 import { RelacionPadres } from '../../catalogos/relacion-padres.entity';
+import { GradoEscolar } from '../../catalogos/grado-escolar.entity';
 import { HermanoEntrevista } from './hermano-entrevista.entity';
 import { FamiliarEntrevista } from './familiar-entrevista.entity';
 
@@ -130,6 +131,10 @@ export class EntrevistaPadres {
   @ManyToOne(() => RelacionPadres)
   @JoinColumn({ name: 'relacion_entre_padres' })
   relacionPadres: RelacionPadres;
+
+  @ManyToOne(() => GradoEscolar)
+  @JoinColumn({ name: 'escolaridad' })
+  gradoEscolar: GradoEscolar;
 
   // Relaciones OneToMany
   @OneToMany(() => HermanoEntrevista, hermano => hermano.entrevista)
