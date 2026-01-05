@@ -94,25 +94,25 @@ export class CitasService {
       throw new BadRequestException('Se requiere al menos un servicio para reunión clínica');
     }
 
-    // Crear cita base
+    // Crear cita base SIN doctor_id ni servicio_id (porque son múltiples)
     const cita = this.citaRepo.create({
       paciente_id: dto.paciente_id,
-      doctor_id: dto.terapeutas_ids[0],
-      servicio_id: dto.servicios_ids[0],
+      doctor_id: null as any, // Se pondrá NULL en BD
+      servicio_id: null as any, // Se pondrá NULL en BD
       motivo_id: dto.motivo_id,
       estado_id: dto.estado_id,
       fecha: dto.fecha,
       hora_inicio: dto.hora_inicio,
       duracion_minutos: dto.duracion_minutos,
       nota: dto.nota,
-      firma_documento: false,
+      firma_documento: dto.firma_documento || false,
       user_id_crea: dto.user_id_crea,
     });
 
     const citaGuardada = await this.citaRepo.save(cita);
     console.log(`✅ Cita base para reunión clínica creada: ID ${citaGuardada.id}`);
 
-    // Crear registro de reunión clínica
+    // Crear registro de reunión clínica con el MISMO ID
     const reunion = this.reunionRepo.create({
       id: citaGuardada.id,
       estado_cita_id: dto.estado_id,
@@ -124,8 +124,8 @@ export class CitasService {
     // Agregar terapeutas
     for (const terapeuta_id of dto.terapeutas_ids) {
       await this.reunionTerapeutasRepo.save({
-        reunion_id: citaGuardada.id,
-        terapeuta_id: terapeuta_id,
+        id_reunion: citaGuardada.id,
+        id_terapeuta: terapeuta_id,
         user_id_crea: dto.user_id_crea,
       });
     }
@@ -134,8 +134,8 @@ export class CitasService {
     // Agregar servicios
     for (const servicio_id of dto.servicios_ids) {
       await this.reunionServiciosRepo.save({
-        reunion_id: citaGuardada.id,
-        servicio_id: servicio_id,
+        id_reunion: citaGuardada.id,
+        id_servicio: servicio_id,
         user_id_crea: dto.user_id_crea,
       });
     }
@@ -185,75 +185,110 @@ export class CitasService {
     return citaGuardada;
   }
 
-  async listar(filtros: any = {}): Promise<any[]> {
-    // Obtener todas las citas normales
-    const citasNormales = await this.citaRepo.find({
-      relations: ['paciente', 'doctor', 'servicio', 'motivo', 'estado'],
-      order: { fecha: 'ASC', hora_inicio: 'ASC' },
-    });
+async listar(filtros: any = {}): Promise<any[]> {
+  const terapeutaId = filtros.terapeuta_id ? parseInt(filtros.terapeuta_id) : null;
+  console.log(`🔍 Listando citas. Filtro terapeuta_id: ${terapeutaId}`);
 
-    // Obtener IDs de reuniones clínicas
-    const reunionesIds = await this.reunionRepo.find({
-      select: ['id'],
-    });
-
-    // Obtener citas que son reuniones clínicas
-    const reuniones = await Promise.all(
-      reunionesIds.map(async (r) => {
-        const cita = await this.citaRepo.findOne({
-          where: { id: r.id },
-          relations: ['paciente', 'doctor', 'servicio', 'motivo', 'estado'],
-        });
-
-        const reunion = await this.reunionRepo.findOne({
-          where: { id: r.id },
-          relations: ['terapeutas', 'terapeutas.terapeuta', 'servicios', 'servicios.servicio'],
-        });
-
-        return { ...cita, ...reunion, tipo_cita: 'REUNION_CLINICA' };
-      })
-    );
-
-    // Obtener IDs de visitas escolares
-    const visitasIds = await this.visitaEscolarRepo.find({
-      select: ['id_cita'],
-    });
-
-    // Obtener citas que son visitas escolares
-    const visitas = await Promise.all(
-      visitasIds.map(async (v) => {
-        const cita = await this.citaRepo.findOne({
-          where: { id: v.id_cita },
-          relations: ['paciente', 'doctor', 'servicio', 'motivo', 'estado'],
-        });
-
-        const visita = await this.visitaEscolarRepo.findOne({
-          where: { id_cita: v.id_cita },
-        });
-
-        return { ...cita, ...visita, tipo_cita: 'VISITA_ESCOLAR' };
-      })
-    );
-
-    // Filtrar citas normales (excluir las que son reuniones o visitas)
-    const idsReuniones = new Set(reunionesIds.map(r => r.id));
-    const idsVisitas = new Set(visitasIds.map(v => v.id_cita));
-    
-    const citasNormalesFiltered = citasNormales
-      .filter(c => !idsReuniones.has(c.id) && !idsVisitas.has(c.id))
-      .map(c => ({ ...c, tipo_cita: 'NORMAL' }));
-
-    // Unificar y ordenar
-    const todasLasCitas = [...citasNormalesFiltered, ...reuniones, ...visitas];
-    
-    return todasLasCitas.sort((a, b) => {
-      const fechaA = new Date(`${a.fecha} ${a.hora_inicio}`);
-      const fechaB = new Date(`${b.fecha} ${b.hora_inicio}`);
-      return fechaA.getTime() - fechaB.getTime();
-    });
+  // 1. Obtener CITAS NORMALES
+  const whereNormales: any = {};
+  if (terapeutaId) {
+    whereNormales.doctor_id = terapeutaId;
   }
 
+  const citasNormales = await this.citaRepo.find({
+    where: whereNormales,
+    relations: ['paciente', 'doctor', 'servicio', 'motivo', 'estado'],
+    order: { fecha: 'ASC', hora_inicio: 'ASC' },
+  });
+
+  // 2. Obtener REUNIONES CLÍNICAS
+  let reuniones = [];
+  const reunionesIds = await this.reunionRepo.find({ select: ['id'] });
+
+  for (const r of reunionesIds) {
+    const reunion = await this.reunionRepo.findOne({
+      where: { id: r.id },
+      relations: ['terapeutas', 'terapeutas.terapeuta', 'servicios', 'servicios.servicio'],
+    });
+
+    if (!reunion) continue;
+
+    if (terapeutaId) {
+      const tieneTerapeuta = reunion.terapeutas.some(t => t.id_terapeuta === terapeutaId);
+      if (!tieneTerapeuta) continue;
+    }
+
+    const cita = await this.citaRepo.findOne({
+      where: { id: r.id },
+      relations: ['paciente', 'motivo', 'estado'],
+    });
+
+    if (cita) {
+      reuniones.push({
+        ...cita,
+        terapeutas: reunion.terapeutas,
+        servicios: reunion.servicios,
+        tipo_cita: 'REUNION_CLINICA'
+      });
+    }
+  }
+
+  // 3. Obtener VISITAS ESCOLARES
+  let visitas = [];
+  const visitasIds = await this.visitaEscolarRepo.find({ select: ['id_cita'] });
+
+  for (const v of visitasIds) {
+    const whereVisita: any = { id: v.id_cita };
+    if (terapeutaId) {
+      whereVisita.doctor_id = terapeutaId;
+    }
+
+    const cita = await this.citaRepo.findOne({
+      where: whereVisita,
+      relations: ['paciente', 'doctor', 'servicio', 'motivo', 'estado'],
+    });
+
+    if (cita) {
+      const visita = await this.visitaEscolarRepo.findOne({
+        where: { id_cita: v.id_cita },
+      });
+
+      // ✅ SOLUCIÓN: Primero el spread de cita, luego los datos de visita
+      // Y al final, VOLVER A PONER el id de cita para asegurar que no se sobrescriba
+      visitas.push({ 
+        ...cita,
+        nombre_colegio: visita.nombre_colegio,
+        nombre_intermediario: visita.nombre_intermediario,
+        telefono: visita.telefono,
+        observaciones: visita.observaciones,
+        tipo_cita: 'VISITA_ESCOLAR',
+        id: cita.id  // ✅ FORZAR que id sea el de la tabla citas (861, NO 3)
+      });
+    }
+  }
+
+  // 4. Filtrar citas normales
+  const idsReuniones = new Set(reunionesIds.map(r => r.id));
+  const idsVisitas = new Set(visitasIds.map(v => v.id_cita));
+
+  const citasNormalesFiltered = citasNormales
+    .filter(c => !idsReuniones.has(c.id) && !idsVisitas.has(c.id))
+    .map(c => ({ ...c, tipo_cita: 'NORMAL' }));
+
+  // 5. Unificar y ordenar
+  const todasLasCitas = [...citasNormalesFiltered, ...reuniones, ...visitas];
+
+  console.log(`✅ Total citas: ${todasLasCitas.length} (Normales: ${citasNormalesFiltered.length}, Reuniones: ${reuniones.length}, Visitas: ${visitas.length})`);
+
+  return todasLasCitas.sort((a, b) => {
+    const fechaA = new Date(`${a.fecha} ${a.hora_inicio}`);
+    const fechaB = new Date(`${b.fecha} ${b.hora_inicio}`);
+    return fechaA.getTime() - fechaB.getTime();
+  });
+}
   async obtenerPorId(id: number): Promise<any> {
+    console.log(`🔍 Buscando cita con ID: ${id}`);
+
     // Buscar en citas base
     const cita = await this.citaRepo.findOne({
       where: { id },
@@ -261,8 +296,11 @@ export class CitasService {
     });
 
     if (!cita) {
+      console.log(`❌ Cita con ID ${id} NO encontrada en tabla citas`);
       throw new NotFoundException(`Cita con ID ${id} no encontrada`);
     }
+
+    console.log(`✅ Cita encontrada. Paciente: ${cita.paciente?.nombres || 'N/A'}`);
 
     // Verificar si es reunión clínica
     const reunion = await this.reunionRepo.findOne({
@@ -271,7 +309,13 @@ export class CitasService {
     });
 
     if (reunion) {
-      return { ...cita, ...reunion, tipo_cita: 'REUNION_CLINICA' };
+      console.log(`📋 Es REUNIÓN CLÍNICA con ${reunion.terapeutas?.length || 0} terapeutas`);
+      return {
+        ...cita,
+        terapeutas: reunion.terapeutas,
+        servicios: reunion.servicios,
+        tipo_cita: 'REUNION_CLINICA'
+      };
     }
 
     // Verificar si es visita escolar
@@ -280,9 +324,18 @@ export class CitasService {
     });
 
     if (visita) {
-      return { ...cita, ...visita, tipo_cita: 'VISITA_ESCOLAR' };
+      console.log(`🏫 Es VISITA ESCOLAR a ${visita.nombre_colegio}`);
+      return {
+        ...cita,
+        nombre_colegio: visita.nombre_colegio,
+        nombre_intermediario: visita.nombre_intermediario,
+        telefono: visita.telefono,
+        observaciones: visita.observaciones,
+        tipo_cita: 'VISITA_ESCOLAR'
+      };
     }
 
+    console.log(`📝 Es CITA NORMAL`);
     return { ...cita, tipo_cita: 'NORMAL' };
   }
 
