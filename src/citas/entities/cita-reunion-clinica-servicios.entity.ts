@@ -7,23 +7,32 @@ export class CitaReunionClinicaServicios {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @Column({ type: 'int' })
-  reunion_id: number;
+  @Column({ type: 'int', name: 'id_reunion' })
+  id_reunion: number;
 
   @ManyToOne(() => CitaReunionClinica, reunion => reunion.servicios, { onDelete: 'CASCADE' })
-  @JoinColumn({ name: 'reunion_id' })
+  @JoinColumn({ name: 'id_reunion' })
   reunion: CitaReunionClinica;
 
-  @Column({ type: 'int' })
-  servicio_id: number;
+  @Column({ type: 'int', name: 'id_servicio' })
+  id_servicio: number;
 
   @ManyToOne(() => Servicio)
-  @JoinColumn({ name: 'servicio_id' })
+  @JoinColumn({ name: 'id_servicio' })
   servicio: Servicio;
 
   @Column({ type: 'int', nullable: true })
   user_id_crea: number;
 
+  @Column({ type: 'int', nullable: true })
+  user_id_actua: number;
+
+  @Column({ type: 'timestamp', nullable: true })
+  fecha_actua: Date;
+
   @Column({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' })
   created_at: Date;
+
+  @Column({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP', onUpdate: 'CURRENT_TIMESTAMP' })
+  updated_at: Date;
 }

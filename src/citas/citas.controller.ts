@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Delete, Body, Param, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Delete, Body, Param, Query, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CitasService } from './citas.service';
 import { CrearCitaDto } from './dto/crear-cita.dto';
@@ -8,66 +8,47 @@ import { CrearCitaDto } from './dto/crear-cita.dto';
 export class CitasController {
   constructor(private readonly citasService: CitasService) {}
 
-  /**
-   * GET /backend_api/citas/catalogos/motivos
-   * Obtener todos los motivos de cita
-   */
+  // ✅ RUTAS ESPECÍFICAS PRIMERO
   @Get('catalogos/motivos')
   async getMotivosCita() {
     return this.citasService.getMotivosCita();
   }
 
-  /**
-   * GET /backend_api/citas/catalogos/estados
-   * Obtener todos los estados de cita
-   */
   @Get('catalogos/estados')
   async getEstadosCita() {
     return this.citasService.getEstadosCita();
   }
 
-  /**
-   * GET /backend_api/citas/catalogos/tipos
-   * Obtener todos los tipos de cita
-   */
   @Get('catalogos/tipos')
   async getTiposCita() {
     return this.citasService.getTiposCita();
   }
 
-  /**
-   * POST /backend_api/citas
-   * Crear una nueva cita (detecta automáticamente el tipo)
-   */
-  @Post()
-  async crear(@Body() dto: CrearCitaDto) {
-    return this.citasService.crear(dto);
+  // ✅ RUTAS CON PARÁMETROS AL FINAL
+  @Get(':id/historial')
+  async obtenerHistorial(@Param('id') id: string) {
+    return [];
   }
 
-  /**
-   * GET /backend_api/citas
-   * Listar todas las citas
-   */
+  @Get(':id')
+  async obtenerPorId(@Param('id') id: string) {
+    console.log(`🔍 Obteniendo cita ID: ${id}`);
+    return this.citasService.obtenerPorId(+id);
+  }
+
+  // ✅ GET sin parámetros va antes de GET con parámetros
   @Get()
   async listar(@Query() filtros: any) {
     return this.citasService.listar(filtros);
   }
 
-  /**
-   * GET /backend_api/citas/:id
-   * Obtener una cita por ID
-   */
-  @Get(':id')
-  async obtenerPorId(@Param('id') id: number) {
-    return this.citasService.obtenerPorId(id);
+  @Post()
+  async crear(@Body() dto: CrearCitaDto) {
+    return this.citasService.crear(dto);
   }
 
-  /**
-   * DELETE /backend_api/citas/:id
-   * Eliminar una cita
-   */
   @Delete(':id')
-  async eliminar(@Param('id') id: number) {
-    return this.citasService.eliminar(id);
+  async eliminar(@Param('id') id: string) {
+    return this.citasService.eliminar(+id);
   }
 }

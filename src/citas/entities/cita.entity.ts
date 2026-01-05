@@ -21,14 +21,14 @@ export class Cita {
   @JoinColumn({ name: 'paciente_id' })
   paciente: Paciente;
 
-  @Column({ type: 'int' })
+  @Column({ type: 'int', nullable: true })
   doctor_id: number;
 
   @ManyToOne(() => TrabajadorCentro)
   @JoinColumn({ name: 'doctor_id' })
   doctor: TrabajadorCentro;
 
-  @Column({ type: 'int' })
+  @Column({ type: 'int', nullable: true })
   servicio_id: number;
 
   @ManyToOne(() => Servicio)
