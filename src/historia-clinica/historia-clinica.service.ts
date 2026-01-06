@@ -134,10 +134,20 @@ export class HistoriaClinicaService {
       }
     }
 
-    // Retornar la entrevista con la relación del paciente para auditoría
+    // Retornar la entrevista con todas las relaciones para auditoría
     return await this.entrevistaPadresRepository.findOne({
       where: { id: entrevistaGuardada.id },
-      relations: ['paciente']
+      relations: [
+        'paciente',
+        'usuario',
+        'atenciones',
+        'relacionPadres',
+        'gradoEscolar',
+        'hermanos',
+        'hermanos.sexo',
+        'familiares',
+        'familiares.ocupacion'
+      ]
     });
   }
 
@@ -293,15 +303,16 @@ export class HistoriaClinicaService {
 
     // Obtener todas las entrevistas a padres del paciente
     const entrevistas = await this.entrevistaPadresRepository.find({
-      where: { 
+      where: {
         pacienteId: pacienteId,
-        activo: true 
+        activo: true
       },
       relations: [
-        'usuario', 
-        'usuarioActua', 
-        'atenciones', 
+        'usuario',
+        'usuarioActua',
+        'atenciones',
         'relacionPadres',
+        'gradoEscolar',
         'hermanos',
         'hermanos.sexo',
         'familiares',
@@ -318,16 +329,17 @@ export class HistoriaClinicaService {
 
   async getEntrevistaPadresById(entrevistaId: number): Promise<EntrevistaPadres> {
     const entrevista = await this.entrevistaPadresRepository.findOne({
-      where: { 
+      where: {
         id: entrevistaId,
-        activo: true 
+        activo: true
       },
       relations: [
-        'paciente', 
-        'usuario', 
-        'usuarioActua', 
-        'atenciones', 
+        'paciente',
+        'usuario',
+        'usuarioActua',
+        'atenciones',
         'relacionPadres',
+        'gradoEscolar',
         'hermanos',
         'hermanos.sexo',
         'familiares',
