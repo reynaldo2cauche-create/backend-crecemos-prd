@@ -1,12 +1,16 @@
-import { Controller, Get, Post, Delete, Body, Param, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Delete, Body, Param, Query, UseGuards, Put } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CitasService } from './citas.service';
+import { HistorialCitasService } from './historial-citas.service';
 import { CrearCitaDto } from './dto/crear-cita.dto';
 
 @Controller('backend_api/citas')
 @UseGuards(JwtAuthGuard)
 export class CitasController {
-  constructor(private readonly citasService: CitasService) {}
+  constructor(
+    private readonly citasService: CitasService,
+    private readonly historialService: HistorialCitasService,
+  ) {}
 
   // ✅ RUTAS ESPECÍFICAS PRIMERO
   @Get('catalogos/motivos')
@@ -27,7 +31,8 @@ export class CitasController {
   // ✅ RUTAS CON PARÁMETROS AL FINAL
   @Get(':id/historial')
   async obtenerHistorial(@Param('id') id: string) {
-    return [];
+    console.log(`🔍 Obteniendo historial de cita ID: ${id}`);
+    return this.historialService.obtenerHistorial(+id);
   }
 
   @Get(':id')
@@ -45,6 +50,13 @@ export class CitasController {
   @Post()
   async crear(@Body() dto: CrearCitaDto) {
     return this.citasService.crear(dto);
+  }
+  @Put(':id')
+  async actualizar(
+    @Param('id') id: string,
+    @Body() dto: CrearCitaDto
+  ): Promise<any> {
+    return this.citasService.actualizar(+id, dto);
   }
 
   @Delete(':id')

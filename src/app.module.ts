@@ -17,6 +17,7 @@ import { EstadoPaciente } from './pacientes/estado-paciente.entity';
 
 import { AreaServicio } from './catalogos/area-servicio.entity';
 import { RelacionResponsable } from './catalogos/relacion-responsable.entity';
+
 import { Distrito } from './catalogos/distrito.entity';
 import { Sexo } from './catalogos/sexo.entity';
 import { TipoDocumento } from './catalogos/tipo-documento.entity';
@@ -58,6 +59,10 @@ import { CitaReunionClinica } from './citas/entities/cita-reunion-clinica.entity
 import { CitaReunionClinicaTerapeutas } from './citas/entities/cita-reunion-clinica-terapeutas.entity';
 import { CitaReunionClinicaServicios } from './citas/entities/cita-reunion-clinica-servicios.entity';
 import { CitaVisitaEscolar } from './citas/entities/cita-visita-escolar.entity';
+import { HistorialCita } from './citas/entities/historial-cita.entity';
+import { HistorialCitaReunionTerapeutas } from './citas/entities/historial-cita-reunion-terapeutas.entity';
+import { HistorialCitaReunionServicios } from './citas/entities/historial-cita-reunion-servicios.entity';
+import { HistorialCitaVisitaEscolar } from './citas/entities/historial-cita-visita-escolar.entity';
 import { MotivoCita } from './catalogos/motivo-cita.entity';
 import { EstadoCita } from './catalogos/estado-cita.entity';
 import { TipoCita } from './catalogos/tipo-cita.entity';
@@ -185,6 +190,10 @@ import { CategoriaBeneficio } from './convenios/entities/categoria-beneficio.ent
         CitaReunionClinicaTerapeutas,
         CitaReunionClinicaServicios,
         CitaVisitaEscolar,
+        HistorialCita,
+        HistorialCitaReunionTerapeutas,
+        HistorialCitaReunionServicios,
+        HistorialCitaVisitaEscolar,
         HermanoEntrevista,
         FamiliarEntrevista,
 
@@ -210,7 +219,8 @@ import { CategoriaBeneficio } from './convenios/entities/categoria-beneficio.ent
         ConfiguracionNotificacion,
         Convenio,
         PacienteConvenio,
-        CategoriaBeneficio
+        CategoriaBeneficio,
+        TipoCita
       ],
         synchronize: false,   // true en desarrollo, false en producción
           // Activar logs de SQL para debug
