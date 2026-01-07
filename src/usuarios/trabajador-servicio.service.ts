@@ -1,9 +1,9 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { TrabajadorServicio } from './trabajador-servicio.entity';
 import { PacienteServicio } from '../pacientes/paciente-servicio.entity';
-
+import { TrabajadorCentro } from '../usuarios/trabajador-centro.entity';
 @Injectable()
 export class TrabajadorServicioService {
   constructor(
@@ -11,6 +11,8 @@ export class TrabajadorServicioService {
     private trabajadorServicioRepository: Repository<TrabajadorServicio>,
     @InjectRepository(PacienteServicio)
     private pacienteServicioRepository: Repository<PacienteServicio>,
+    @InjectRepository(TrabajadorCentro)
+    private trabajadorCentroRepository: Repository<any>,
   ) {}
 
   /**
@@ -42,6 +44,70 @@ export class TrabajadorServicioService {
     return trabajadoresUnicos;
   }
 
+   async getStaffActivos() {
+    // 1. Primero obtenemos los IDs de trabajadores que tienen servicios activos
+    const asignacionesActivas = await this.trabajadorServicioRepository.find({
+      where: { activo: true },
+      select: ['trabajador'],
+      relations: ['trabajador'],
+    });
+
+    // Si no hay asignaciones activas, retornar array vacío
+    if (asignacionesActivas.length === 0) {
+      return [];
+    }
+
+    // Extraemos IDs únicos de trabajadores
+    const trabajadorIds = [...new Set(asignacionesActivas.map(a => a.trabajador.id))];
+
+    // 2. Obtenemos los trabajadores que son terapeutas y están activos
+    const trabajadores = await this.trabajadorCentroRepository.find({
+      where: {
+        id: In(trabajadorIds),
+        estado: true,
+        rol: { nombre: 'Terapeuta' }
+      },
+      relations: [
+        'rol', 
+        'especialidad', 
+        'cargo',
+        'trabajadorServicios',
+        'trabajadorServicios.servicio',
+        'trabajadorServicios.servicio.area'
+      ],
+    });
+
+    // 3. Formateamos la respuesta
+    const staffFormateado = trabajadores.map(trabajador => {
+      // Solo servicios activos
+      const serviciosActivos = trabajador.trabajadorServicios
+        .filter(ts => ts.activo)
+        .map(ts => ts.servicio);
+
+      // Extraer nombres de servicios
+      const nombresServicios = serviciosActivos.map(s => s.nombre);
+      
+      // Extraer áreas únicas
+      const areas = [...new Set(serviciosActivos.map(s => s.area?.nombre).filter(Boolean))];
+
+      return {
+        id: trabajador.id,
+        nombres: trabajador.nombres,
+        apellidos: trabajador.apellidos,
+        foto: trabajador.foto,
+        especialidad: trabajador.especialidad?.nombre,
+        cargo: trabajador.cargo?.nombre,
+        descripcion_especialidad: trabajador.descripcion_especialidad || 
+          'Profesional especializado en terapias de bienestar',
+        servicios: nombresServicios,
+        areas: areas.length > 0 ? areas : ['Sin área asignada'],
+        totalServicios: serviciosActivos.length
+      };
+    });
+
+    return staffFormateado;
+  }
+
   /**
    * Obtiene todos los servicios asignados a un trabajador específico
    * @param trabajadorId ID del trabajador
@@ -63,6 +129,26 @@ export class TrabajadorServicioService {
    * Asignar un servicio a un trabajador
    */
   async asignarServicio(trabajadorId: number, servicioId: number, observaciones?: string, userId?: number) {
+    // ✅ PRIMERO: Verificar si ya existe una asignación (activa o inactiva)
+    const asignacionExistente = await this.trabajadorServicioRepository.findOne({
+      where: {
+        trabajador: { id: trabajadorId },
+        servicio: { id: servicioId },
+      },
+    });
+
+    // ✅ Si existe y está inactiva, REACTIVARLA en lugar de crear un duplicado
+    if (asignacionExistente) {
+      if (!asignacionExistente.activo) {
+        asignacionExistente.activo = true;
+        asignacionExistente.observaciones = observaciones || asignacionExistente.observaciones;
+        asignacionExistente.userIdActua = userId;
+        return await this.trabajadorServicioRepository.save(asignacionExistente);
+      }
+      // Si ya está activa, retornarla sin cambios
+      return asignacionExistente;
+    }
+
     // ✅ VALIDACIÓN: Verificar si el trabajador ya está asignado a otro servicio del mismo paciente
 
     // 1. Obtener el paciente del servicio al que se quiere asignar
@@ -111,7 +197,7 @@ export class TrabajadorServicioService {
       );
     }
 
-    // 4. Si no hay conflicto, proceder con la asignación
+    // 4. Si no hay conflicto y no existía antes, proceder con la asignación (CREAR NUEVO REGISTRO)
     const nuevaAsignacion = this.trabajadorServicioRepository.create({
       trabajador: { id: trabajadorId } as any,
       servicio: { id: servicioId } as any,

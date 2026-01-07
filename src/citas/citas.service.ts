@@ -63,6 +63,7 @@ export class CitasService {
     throw new BadRequestException('Tipo de cita no soportado');
   }
 
+  
   private async crearCitaNormal(dto: CrearCitaDto): Promise<Cita> {
     if (!dto.doctor_id || !dto.servicio_id) {
       throw new BadRequestException('Se requiere doctor_id y servicio_id para cita normal');
@@ -94,6 +95,44 @@ export class CitasService {
 
     return guardada;
   }
+
+// Agrega este método a tu CitasService (citas.service.ts)
+
+async crearMultiples(citas: CrearCitaDto[]): Promise<any> {
+  console.log(`🔍 Creando ${citas.length} citas...`);
+  
+  const resultados = [];
+  const errores = [];
+
+  for (let i = 0; i < citas.length; i++) {
+    try {
+      const citaCreada = await this.crear(citas[i]);
+      resultados.push({
+        index: i,
+        cita: citaCreada,
+        exito: true
+      });
+      console.log(`✅ Cita ${i + 1}/${citas.length} creada con éxito`);
+    } catch (error) {
+      errores.push({
+        index: i,
+        error: error.message,
+        cita: citas[i]
+      });
+      console.log(`❌ Error al crear cita ${i + 1}/${citas.length}: ${error.message}`);
+    }
+  }
+
+  console.log(`✅ Proceso completado: ${resultados.length} exitosas, ${errores.length} fallidas`);
+
+  return {
+    total: citas.length,
+    exitosas: resultados.length,
+    fallidas: errores.length,
+    resultados,
+    errores
+  };
+}
 
   private async crearReunionClinica(dto: CrearCitaDto): Promise<any> {
     if (!dto.terapeutas_ids || dto.terapeutas_ids.length === 0) {

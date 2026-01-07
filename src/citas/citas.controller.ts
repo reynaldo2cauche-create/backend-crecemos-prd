@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Delete, Body, Param, Query, UseGuards, Put } from '@nestjs/common';
+import { Controller, Get, Post, Delete, Body, Param, Query, UseGuards, Put, BadRequestException } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CitasService } from './citas.service';
 import { HistorialCitasService } from './historial-citas.service';
@@ -46,11 +46,22 @@ export class CitasController {
   async listar(@Query() filtros: any) {
     return this.citasService.listar(filtros);
   }
-
+  @Post('multiples')
+  async crearMultiples(@Body() body: { citas: CrearCitaDto[] }) {
+    console.log(`📝 Solicitud de crear ${body.citas?.length || 0} citas`);
+    
+    if (!body.citas || !Array.isArray(body.citas) || body.citas.length === 0) {
+      throw new BadRequestException('Debe enviar un array de citas');
+    }
+    
+    return this.citasService.crearMultiples(body.citas);
+  }
   @Post()
   async crear(@Body() dto: CrearCitaDto) {
     return this.citasService.crear(dto);
   }
+
+
   @Put(':id')
   async actualizar(
     @Param('id') id: string,

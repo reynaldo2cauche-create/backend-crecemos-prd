@@ -98,6 +98,8 @@ import { Convenio } from './convenios/entities/convenio.entity';
 import { PacienteConvenio } from './convenios/entities/paciente-convenio.entity';
 import { ConveniosModule } from './convenios/convenios.module';
 import { CategoriaBeneficio } from './convenios/entities/categoria-beneficio.entity';
+import { StaffModule } from './staff/staff.module';
+import { Staff } from './staff/entities/staff.entity';
 // import { ScheduleModule } from '@nestjs/schedule';
 
 @Module({
@@ -136,11 +138,17 @@ import { CategoriaBeneficio } from './convenios/entities/categoria-beneficio.ent
       },
     }),
     TypeOrmModule.forRoot({
-       type: 'mysql',
+      //  type: 'mysql',
+      // host: 'localhost',
+      // port: 3306,
+      // username: 'crecemos',
+      // password: 'DB_PASSWORD_REMOVED',
+      // database: 'crecemos_website',
+      type: 'mysql',
       host: 'localhost',
       port: 3306,
-      username: 'root',
-      password: 'admin',
+      username: 'root',  // Asegúrate de poner el nombre de usuario correcto
+      password: 'admin',  // Asegúrate de poner la contraseña correcta
       database: 'crecemos_website',
       entities: [
         Postulacion,
@@ -220,7 +228,8 @@ import { CategoriaBeneficio } from './convenios/entities/categoria-beneficio.ent
         Convenio,
         PacienteConvenio,
         CategoriaBeneficio,
-        TipoCita
+        TipoCita,
+        Staff
       ],
         synchronize: false,   // true en desarrollo, false en producción
           // Activar logs de SQL para debug
@@ -252,7 +261,8 @@ import { CategoriaBeneficio } from './convenios/entities/categoria-beneficio.ent
     NotificacionesModule,
     AuthModule,
     Comentario,
-    ConveniosModule
+    ConveniosModule,
+    StaffModule
   ],
   controllers: [AppController],
   providers: [

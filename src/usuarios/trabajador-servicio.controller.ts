@@ -22,7 +22,11 @@ export class TrabajadorServicioController {
   getServiciosByTrabajador(@Param('trabajadorId') trabajadorId: string) {
     return this.service.getServiciosByTrabajador(+trabajadorId);
   }
-
+  // ✅ AGREGAR ESTE ENDPOINT NUEVO
+  @Get('activos')
+  getStaffActivos() {
+    return this.service.getStaffActivos();
+  }
   /**
    * POST /backend_api/trabajador-servicio
    * Asignar un servicio a un trabajador
