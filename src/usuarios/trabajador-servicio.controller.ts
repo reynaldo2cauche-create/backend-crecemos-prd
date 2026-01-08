@@ -33,9 +33,9 @@ export class TrabajadorServicioController {
    */
   @Post()
   asignarServicio(
-    @Body() data: { trabajadorId: number; servicioId: number; observaciones?: string; userId: number }
+    @Body() data: { trabajadorId: number; servicioId: number; observaciones?: string; userId: number; validarPaciente?: boolean }
   ) {
-    return this.service.asignarServicio(data.trabajadorId, data.servicioId, data.observaciones, data.userId);
+    return this.service.asignarServicio(data.trabajadorId, data.servicioId, data.observaciones, data.userId, data.validarPaciente || false);
   }
 
   /**

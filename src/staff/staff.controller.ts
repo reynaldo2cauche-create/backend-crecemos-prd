@@ -59,6 +59,12 @@ export class StaffController {
     return this.staffService.obtenerPorId(+id);
   }
 
+  @Public()
+  @Get(':id/detalle-completo')
+  async obtenerDetalleCompleto(@Param('id') id: string) {
+    return this.staffService.obtenerDetalleCompleto(+id);
+  }
+
   @Post()
   async crear(@Body() dto: CrearStaffDto) {
     return this.staffService.crear(dto);

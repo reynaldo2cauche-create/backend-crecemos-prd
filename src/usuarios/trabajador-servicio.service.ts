@@ -128,7 +128,7 @@ export class TrabajadorServicioService {
   /**
    * Asignar un servicio a un trabajador
    */
-  async asignarServicio(trabajadorId: number, servicioId: number, observaciones?: string, userId?: number) {
+  async asignarServicio(trabajadorId: number, servicioId: number, observaciones?: string, userId?: number, validarPaciente: boolean = false) {
     // ✅ PRIMERO: Verificar si ya existe una asignación (activa o inactiva)
     const asignacionExistente = await this.trabajadorServicioRepository.findOne({
       where: {
@@ -149,52 +149,53 @@ export class TrabajadorServicioService {
       return asignacionExistente;
     }
 
-    // ✅ VALIDACIÓN: Verificar si el trabajador ya está asignado a otro servicio del mismo paciente
+    // ✅ VALIDACIÓN: Solo validar paciente si se especifica (cuando se asigna terapeuta a paciente específico)
+    if (validarPaciente) {
+      // 1. Obtener el paciente del servicio al que se quiere asignar
+      const pacienteServicio = await this.pacienteServicioRepository.findOne({
+        where: {
+          servicio: { id: servicioId },
+          activo: true
+        },
+        relations: ['paciente']
+      });
 
-    // 1. Obtener el paciente del servicio al que se quiere asignar
-    const pacienteServicio = await this.pacienteServicioRepository.findOne({
-      where: {
-        servicio: { id: servicioId },
-        activo: true
-      },
-      relations: ['paciente']
-    });
+      if (!pacienteServicio) {
+        throw new BadRequestException('El servicio no está asociado a ningún paciente activo');
+      }
 
-    if (!pacienteServicio) {
-      throw new BadRequestException('El servicio no está asociado a ningún paciente activo');
-    }
+      const pacienteId = pacienteServicio.paciente.id;
 
-    const pacienteId = pacienteServicio.paciente.id;
+      // 2. Buscar todos los servicios activos del mismo paciente
+      const serviciosPaciente = await this.pacienteServicioRepository.find({
+        where: {
+          paciente: { id: pacienteId },
+          activo: true
+        },
+        relations: ['servicio']
+      });
 
-    // 2. Buscar todos los servicios activos del mismo paciente
-    const serviciosPaciente = await this.pacienteServicioRepository.find({
-      where: {
-        paciente: { id: pacienteId },
-        activo: true
-      },
-      relations: ['servicio']
-    });
+      const servicioIds = serviciosPaciente.map(ps => ps.servicio.id);
 
-    const servicioIds = serviciosPaciente.map(ps => ps.servicio.id);
+      // 3. Verificar si el trabajador ya está asignado a ALGÚN servicio de este paciente
+      const asignacionesDelTrabajador = await this.trabajadorServicioRepository.find({
+        where: {
+          trabajador: { id: trabajadorId },
+          activo: true
+        },
+        relations: ['servicio', 'trabajador']
+      });
 
-    // 3. Verificar si el trabajador ya está asignado a ALGÚN servicio de este paciente
-    const asignacionesDelTrabajador = await this.trabajadorServicioRepository.find({
-      where: {
-        trabajador: { id: trabajadorId },
-        activo: true
-      },
-      relations: ['servicio', 'trabajador']
-    });
-
-    // Buscar si alguna asignación del trabajador coincide con los servicios del paciente
-    const asignacionDuplicada = asignacionesDelTrabajador.find(asig =>
-      servicioIds.includes(asig.servicio.id)
-    );
-
-    if (asignacionDuplicada) {
-      throw new BadRequestException(
-        `La terapeuta ${asignacionDuplicada.trabajador.nombres} ${asignacionDuplicada.trabajador.apellidos} ya está asignada al servicio "${asignacionDuplicada.servicio.nombre}" de este paciente. No se puede asignar a más de un servicio del mismo paciente.`
+      // Buscar si alguna asignación del trabajador coincide con los servicios del paciente
+      const asignacionDuplicada = asignacionesDelTrabajador.find(asig =>
+        servicioIds.includes(asig.servicio.id)
       );
+
+      if (asignacionDuplicada) {
+        throw new BadRequestException(
+          `La terapeuta ${asignacionDuplicada.trabajador.nombres} ${asignacionDuplicada.trabajador.apellidos} ya está asignada al servicio "${asignacionDuplicada.servicio.nombre}" de este paciente. No se puede asignar a más de un servicio del mismo paciente.`
+        );
+      }
     }
 
     // 4. Si no hay conflicto y no existía antes, proceder con la asignación (CREAR NUEVO REGISTRO)
