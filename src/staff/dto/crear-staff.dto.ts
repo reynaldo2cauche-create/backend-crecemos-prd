@@ -1,4 +1,19 @@
-import { IsNotEmpty, IsInt, IsString, IsBoolean, IsOptional } from 'class-validator';
+import { IsNotEmpty, IsInt, IsString, IsBoolean, IsOptional, IsArray, ValidateNested } from 'class-validator';
+import { Type } from 'class-transformer';
+
+export class CrearCursoDto {
+  @IsOptional()
+  @IsInt()
+  id?: number;
+
+  @IsNotEmpty()
+  @IsString()
+  descripcion: string;
+
+  @IsOptional()
+  @IsInt()
+  orden?: number;
+}
 
 export class CrearStaffDto {
   @IsNotEmpty()
@@ -28,4 +43,10 @@ export class CrearStaffDto {
   @IsOptional()
   @IsInt()
   user_id_actualiza?: number;
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => CrearCursoDto)
+  cursos?: CrearCursoDto[];
 }

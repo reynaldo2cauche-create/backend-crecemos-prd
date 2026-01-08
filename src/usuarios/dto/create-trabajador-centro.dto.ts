@@ -88,6 +88,10 @@ export class CreateTrabajadorCentroDto {
   @IsString()
   talla_zapatos?: string;
 
+  @IsOptional()
+  @IsString()
+  numero_colegiatura?: string;
+
   // Campos de RRHH
   @IsOptional()
   @IsNumber()

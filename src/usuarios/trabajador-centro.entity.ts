@@ -63,6 +63,9 @@ export class TrabajadorCentro {
   @Column({ nullable: true })
   talla_zapatos?: string;
 
+  @Column({ type: 'varchar', length: 50, nullable: true })
+  numero_colegiatura?: string;
+
   @ManyToOne(() => Rol, { eager: true, nullable: true })
   @JoinColumn({ name: 'rol_id' })
   rol: Rol;

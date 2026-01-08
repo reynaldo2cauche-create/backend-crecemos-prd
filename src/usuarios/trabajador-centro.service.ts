@@ -156,6 +156,7 @@ export class TrabajadorCentroService {
     if (dto.fecha_ingreso !== undefined) trabajador.fecha_ingreso = dto.fecha_ingreso as any;
     if (dto.numero_cuenta !== undefined) trabajador.numero_cuenta = dto.numero_cuenta;
     if (dto.banco !== undefined) trabajador.banco = dto.banco;
+    if (dto.numero_colegiatura !== undefined) trabajador.numero_colegiatura = dto.numero_colegiatura;
 
     if (dto.password !== undefined && dto.password !== null && dto.password.trim() !== '') {
       trabajador.password = await bcrypt.hash(dto.password, 10);
