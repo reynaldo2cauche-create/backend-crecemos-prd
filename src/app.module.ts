@@ -139,18 +139,18 @@ import { StaffCursos } from './staff/entities/staff-cursos.entity';
       },
     }),
     TypeOrmModule.forRoot({
-       type: 'mysql',
-      host: 'localhost',
-      port: 3306,
-      username: 'crecemos',
-      password: 'KiJg8ns629',
-      database: 'crecemos_website',
-      // type: 'mysql',
+      //  type: 'mysql',
       // host: 'localhost',
       // port: 3306,
-      // username: 'root',  // Asegúrate de poner el nombre de usuario correcto
-      // password: 'admin',  // Asegúrate de poner la contraseña correcta
+      // username: 'crecemos',
+      // password: 'KiJg8ns629',
       // database: 'crecemos_website',
+      type: 'mysql',
+      host: 'localhost',
+      port: 3306,
+      username: 'root',  // Asegúrate de poner el nombre de usuario correcto
+      password: 'admin',  // Asegúrate de poner la contraseña correcta
+      database: 'crecemos_website',
       entities: [
         Postulacion,
         Paciente,
