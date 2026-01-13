@@ -671,17 +671,14 @@ async findAll(filters?: {
       throw new NotFoundException(`Estado con ID ${dto.estado_paciente_id} no encontrado`);
     }
 
-    // Si el estado es "Inactivo", también actualizar el campo activo a false
+    // Actualizar solo el estado, NO el campo activo
+    // El campo activo solo debe cambiar cuando se oculta/muestra el paciente
     const updateData: any = {
       estado: { id: dto.estado_paciente_id },
       user_id_actua: dto.user_id_actua,
       fecha_actua: new Date(),
       updated_at: new Date() // Forzar actualización de updated_at
     };
-
-    if (estado.nombre === 'Inactivo') {
-      updateData.activo = false;
-    }
 
     // Actualizar el estado del paciente y los campos de auditoría
     await this.pacienteRepository.update(id, updateData);
@@ -791,12 +788,17 @@ async findAll(filters?: {
       .andWhere('paciente.created_at <= :fin', { fin: ultimoDiaMes })
       .getCount();
 
-    // Pacientes inactivos este mes (se pusieron activo = false en el mes actual)
+    // Pacientes dados de baja este mes (cambiados a estado "Inactivo" en el mes actual)
+    // Solo cuenta si el último cambio de estado en el mes fue a "Inactivo"
+    const estadoInactivo = await this.estadoPacienteRepository.findOne({
+      where: { nombre: 'Inactivo' }
+    });
+
     const pacientesInactivosMes = await this.pacienteRepository
       .createQueryBuilder('paciente')
-      .where('paciente.activo = :activo', { activo: false })
-      .andWhere('paciente.updated_at >= :inicio', { inicio: primerDiaMes })
-      .andWhere('paciente.updated_at <= :fin', { fin: ultimoDiaMes })
+      .where('paciente.estado_paciente_id = :estadoInactivo', { estadoInactivo: estadoInactivo?.id })
+      .andWhere('paciente.fecha_actua >= :inicio', { inicio: primerDiaMes })
+      .andWhere('paciente.fecha_actua <= :fin', { fin: ultimoDiaMes })
       .getCount();
 
     // Estadísticas por estado (excluyendo "Inactivo")

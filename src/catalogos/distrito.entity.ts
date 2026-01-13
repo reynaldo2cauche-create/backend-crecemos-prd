@@ -1,13 +1,21 @@
-import { Entity, PrimaryGeneratedColumn, Column } from 'typeorm';
+import { Entity, PrimaryColumn, Column, ManyToOne, JoinColumn } from 'typeorm';
+import { Provincia } from './provincia.entity';
 
-@Entity()
+@Entity('distritos')
 export class Distrito {
-  @PrimaryGeneratedColumn()
+  @PrimaryColumn()
   id: number;
 
-  @Column()
+  @Column({ length: 100 })
   nombre: string;
 
   @Column({ default: true })
   activo: boolean;
+
+  @ManyToOne(() => Provincia, provincia => provincia.distritos)
+  @JoinColumn({ name: 'id_provincia' })
+  provincia: Provincia;
+
+  @Column()
+  id_provincia: number;
 }

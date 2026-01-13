@@ -77,6 +77,7 @@ export class CitasService {
       estado_id: dto.estado_id,
       fecha: dto.fecha,
       hora_inicio: dto.hora_inicio,
+      hora_fin: dto.hora_fin,
       duracion_minutos: dto.duracion_minutos,
       nota: dto.nota,
       firma_documento: false,
@@ -152,6 +153,7 @@ async crearMultiples(citas: CrearCitaDto[]): Promise<any> {
       estado_id: dto.estado_id,
       fecha: dto.fecha,
       hora_inicio: dto.hora_inicio,
+      hora_fin: dto.hora_fin,
       duracion_minutos: dto.duracion_minutos,
       nota: dto.nota,
       firma_documento: dto.firma_documento || false,
@@ -218,6 +220,7 @@ async crearMultiples(citas: CrearCitaDto[]): Promise<any> {
       estado_id: dto.estado_id,
       fecha: dto.fecha,
       hora_inicio: dto.hora_inicio,
+      hora_fin: dto.hora_fin,
       duracion_minutos: dto.duracion_minutos,
       nota: dto.nota,
       firma_documento: dto.firma_documento || false,
@@ -252,11 +255,6 @@ async listar(filtros: any = {}): Promise<any[]> {
   const terapeutaId = filtros.terapeuta_id ? parseInt(filtros.terapeuta_id) : null;
   console.log(`🔍 Listando citas. Filtro terapeuta_id: ${terapeutaId}`);
 
-  // 🚀 FILTRO POR MES ACTUAL para evitar cargar 1000+ citas
-  const hoy = new Date();
-  const primerDiaMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
-  const ultimoDiaMes = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0);
-
   // Formatear fechas como YYYY-MM-DD
   const formatearFecha = (fecha: Date) => {
     const year = fecha.getFullYear();
@@ -265,10 +263,25 @@ async listar(filtros: any = {}): Promise<any[]> {
     return `${year}-${month}-${day}`;
   };
 
-  const fechaDesde = formatearFecha(primerDiaMes);
-  const fechaHasta = formatearFecha(ultimoDiaMes);
+  // 🚀 FILTRO POR RANGO DE FECHAS
+  // Si no se envían fechas, usar el mes actual para evitar cargar 1000+ citas
+  let fechaDesde: string;
+  let fechaHasta: string;
 
-  console.log(`📅 Filtrando citas del mes: ${fechaDesde} al ${fechaHasta}`);
+  if (filtros.fecha_desde && filtros.fecha_hasta) {
+    // Usar las fechas enviadas desde el frontend
+    fechaDesde = filtros.fecha_desde;
+    fechaHasta = filtros.fecha_hasta;
+    console.log(`📅 Usando rango de fechas del frontend: ${fechaDesde} al ${fechaHasta}`);
+  } else {
+    // Fallback: usar mes actual
+    const hoy = new Date();
+    const primerDiaMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+    const ultimoDiaMes = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0);
+    fechaDesde = formatearFecha(primerDiaMes);
+    fechaHasta = formatearFecha(ultimoDiaMes);
+    console.log(`📅 Usando mes actual por defecto: ${fechaDesde} al ${fechaHasta}`);
+  }
 
   // 1. Obtener CITAS NORMALES del mes actual
   const whereNormales: any = {
@@ -478,6 +491,7 @@ private async actualizarCitaNormal(id: number, dto: CrearCitaDto): Promise<Cita>
     estado_id: dto.estado_id,
     fecha: dto.fecha,
     hora_inicio: dto.hora_inicio,
+    hora_fin: dto.hora_fin,
     duracion_minutos: dto.duracion_minutos,
     nota: dto.nota,
     user_id_actua: dto.user_id_crea,
@@ -511,6 +525,7 @@ private async actualizarReunionClinica(id: number, dto: CrearCitaDto): Promise<a
     estado_id: dto.estado_id,
     fecha: dto.fecha,
     hora_inicio: dto.hora_inicio,
+    hora_fin: dto.hora_fin,
     duracion_minutos: dto.duracion_minutos,
     nota: dto.nota,
     user_id_actua: dto.user_id_crea,
@@ -578,6 +593,7 @@ private async actualizarVisitaEscolar(id: number, dto: CrearCitaDto): Promise<Ci
     estado_id: dto.estado_id,
     fecha: dto.fecha,
     hora_inicio: dto.hora_inicio,
+    hora_fin: dto.hora_fin,
     duracion_minutos: dto.duracion_minutos,
     nota: dto.nota,
     firma_documento: dto.firma_documento || false,

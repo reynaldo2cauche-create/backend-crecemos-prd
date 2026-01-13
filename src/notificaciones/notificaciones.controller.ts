@@ -133,7 +133,6 @@ export class NotificacionesController {
   sseNotificaciones(@Req() req): Observable<MessageEvent> {
     const usuarioId = req.user.userId;
 
-    console.log(`📡 SSE: Usuario ${usuarioId} conectado`);
 
     // Escuchar eventos de nuevas notificaciones desde el Subject
     const notificacionEvent$ = this.eventsService.notificacionNueva$.pipe(

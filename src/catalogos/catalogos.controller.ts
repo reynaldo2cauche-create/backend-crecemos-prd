@@ -1,4 +1,4 @@
-import { Controller, Get } from '@nestjs/common';
+import { Controller, Get, Param } from '@nestjs/common';
 import { CatalogosService } from './catalogos.service';
 
 @Controller('backend_api/catalogos')
@@ -15,9 +15,19 @@ export class CatalogosController {
     return this.catalogosService.getSexo();
   }
 
+  @Get('provincias')
+  getProvincias() {
+    return this.catalogosService.getProvincias();
+  }
+
   @Get('distrito')
   getDistrito() {
     return this.catalogosService.getDistrito();
+  }
+
+  @Get('distritos/provincia/:provinciaId')
+  getDistritosByProvincia(@Param('provinciaId') provinciaId: string) {
+    return this.catalogosService.getDistritosByProvincia(+provinciaId);
   }
 
   @Get('relacion-responsable')
@@ -58,5 +68,20 @@ export class CatalogosController {
   @Get('ocupaciones')
   getOcupaciones() {
     return this.catalogosService.getOcupaciones();
+  }
+
+  @Get('estado-civil')
+  getEstadoCivil() {
+    return this.catalogosService.getEstadoCivil();
+  }
+
+  @Get('parentesco')
+  getParentesco() {
+    return this.catalogosService.getParentesco();
+  }
+
+  @Get('nivel-educacion')
+  getNivelEducacion() {
+    return this.catalogosService.getNivelEducacion();
   }
 }
