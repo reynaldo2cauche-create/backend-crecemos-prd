@@ -17,6 +17,10 @@ export class CrearCitaDto {
   @IsString()
   hora_inicio: string;
 
+  @IsOptional()
+  @IsString()
+  hora_fin?: string;
+
   @IsInt()
   duracion_minutos: number;
 

@@ -19,6 +19,7 @@ import { AreaServicio } from './catalogos/area-servicio.entity';
 import { RelacionResponsable } from './catalogos/relacion-responsable.entity';
 
 import { Distrito } from './catalogos/distrito.entity';
+import { Provincia } from './catalogos/provincia.entity';
 import { Sexo } from './catalogos/sexo.entity';
 import { TipoDocumento } from './catalogos/tipo-documento.entity';
 import { CatalogosModule } from './catalogos/catalogos.module';
@@ -101,6 +102,10 @@ import { CategoriaBeneficio } from './convenios/entities/categoria-beneficio.ent
 import { StaffModule } from './staff/staff.module';
 import { Staff } from './staff/entities/staff.entity';
 import { StaffCursos } from './staff/entities/staff-cursos.entity';
+import { EstadoCivil } from './catalogos/estado-civil.entity';
+import { Parentesco } from './catalogos/parentesco.entity';
+import { DatosAcademicos } from './usuarios/datos-academicos.entity';
+import { NivelEducacion } from './catalogos/nivel-educacion.entity';
 // import { ScheduleModule } from '@nestjs/schedule';
 
 @Module({
@@ -139,18 +144,18 @@ import { StaffCursos } from './staff/entities/staff-cursos.entity';
       },
     }),
     TypeOrmModule.forRoot({
-      //  type: 'mysql',
-      // host: 'localhost',
-      // port: 3306,
-      // username: 'crecemos',
-      // password: 'DB_PASSWORD_REMOVED',
-      // database: 'crecemos_website',
-      type: 'mysql',
+       type: 'mysql',
       host: 'localhost',
       port: 3306,
-      username: 'root',  // Asegúrate de poner el nombre de usuario correcto
-      password: 'admin',  // Asegúrate de poner la contraseña correcta
+      username: 'crecemos',
+      password: 'DB_PASSWORD_REMOVED',
       database: 'crecemos_website',
+      // type: 'mysql',
+      // host: 'localhost',
+      // port: 3306,
+      // username: 'root',  // Asegúrate de poner el nombre de usuario correcto
+      // password: 'admin',  // Asegúrate de poner la contraseña correcta
+      // database: 'crecemos_website',
       entities: [
         Postulacion,
         Paciente,
@@ -162,6 +167,7 @@ import { StaffCursos } from './staff/entities/staff-cursos.entity';
         TipoDocumento,
         Sexo,
         Distrito,
+        Provincia,
         RelacionResponsable,
         AreaServicio,
         Servicios,
@@ -231,9 +237,13 @@ import { StaffCursos } from './staff/entities/staff-cursos.entity';
         CategoriaBeneficio,
         TipoCita,
         Staff,
-        StaffCursos
+        StaffCursos,
+        EstadoCivil,
+        Parentesco,
+        DatosAcademicos,
+        NivelEducacion
       ],
-        synchronize: false,   // true en desarrollo, false en producción
+        synchronize: false,   // true en desarrollo, false en producción - DESHABILITADO para evitar conflictos con foreign keys
           // Activar logs de SQL para debug
 
     }),
