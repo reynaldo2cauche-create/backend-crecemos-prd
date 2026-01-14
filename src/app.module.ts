@@ -144,18 +144,18 @@ import { NivelEducacion } from './catalogos/nivel-educacion.entity';
       },
     }),
     TypeOrmModule.forRoot({
-       type: 'mysql',
-      host: 'localhost',
-      port: 3306,
-      username: 'crecemos',
-      password: 'DB_PASSWORD_REMOVED',
-      database: 'crecemos_website',
-      // type: 'mysql',
+      //  type: 'mysql',
       // host: 'localhost',
       // port: 3306,
-      // username: 'root',  // Asegúrate de poner el nombre de usuario correcto
-      // password: 'admin',  // Asegúrate de poner la contraseña correcta
+      // username: 'crecemos',
+      // password: 'DB_PASSWORD_REMOVED',
       // database: 'crecemos_website',
+      type: 'mysql',
+      host: 'localhost',
+      port: 3306,
+      username: 'root',  // Asegúrate de poner el nombre de usuario correcto
+      password: 'admin',  // Asegúrate de poner la contraseña correcta
+      database: 'crecemos_website',
       entities: [
         Postulacion,
         Paciente,

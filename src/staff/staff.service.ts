@@ -87,8 +87,7 @@ export class StaffService {
       .leftJoinAndSelect('trabajador.cargo', 'cargo')
       .leftJoinAndSelect('trabajador.rol', 'rol')
       .where('staff.flg_activo = :activo', { activo: true })
-      .orderBy('staff.trabajador_id', 'ASC')
-      .addOrderBy('staff.orden', 'ASC')
+      .orderBy('staff.orden', 'ASC')
       .addOrderBy('staff.created_at', 'DESC')
       .getMany();
 
@@ -316,6 +315,27 @@ export class StaffService {
 
       // Manejar cursos (formaciones, diplomados, especializaciones, todo)
       if (dto.cursos && Array.isArray(dto.cursos)) {
+        // ✅ Obtener todos los cursos actuales del staff
+        const cursosActuales = await this.staffCursosRepo.find({
+          where: { staff_id: id, activo: true }
+        });
+
+        // ✅ Obtener los IDs de los cursos que vienen en el DTO
+        const idsEnDTO = dto.cursos
+          .filter(c => c.id && typeof c.id === 'number' && c.id < 1000000)
+          .map(c => c.id);
+
+        // ✅ Marcar como inactivos los cursos que ya NO están en el DTO (fueron eliminados)
+        for (const cursoActual of cursosActuales) {
+          if (!idsEnDTO.includes(cursoActual.id)) {
+            cursoActual.activo = false;
+            cursoActual.updated_at = new Date();
+            cursoActual.user_id_actua = dto.user_id_actualiza || cursoActual.user_id_actua;
+            await this.staffCursosRepo.save(cursoActual);
+          }
+        }
+
+        // ✅ Actualizar o crear los cursos del DTO
         for (const [index, cursoData] of dto.cursos.entries()) {
           const cursoId = cursoData.id;
 
@@ -329,6 +349,7 @@ export class StaffService {
               Object.assign(cursoExistente, {
                 descripcion: cursoData.descripcion || cursoExistente.descripcion,
                 orden: cursoData.orden || (index + 1),
+                activo: true, // ✅ Asegurar que esté activo
                 updated_at: new Date(),
                 user_id_actua: dto.user_id_actualiza || cursoExistente.user_id_actua,
               });
