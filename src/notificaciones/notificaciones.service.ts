@@ -55,7 +55,7 @@ export class NotificacionesService {
 
       const notificacionGuardada = await this.notificacionesRepo.save(notificacion);
 
-      // Crear las relaciones con los roles destino
+      // Crear las relaciones con los roles destino en notificaciones_destino
       const destinos = dto.roles_destino.map(rol_id => {
         return this.destinosRepo.create({
           notificacion_id: notificacionGuardada.id,
@@ -76,8 +76,7 @@ export class NotificacionesService {
 
   /**
    * Obtiene todas las notificaciones para un rol específico
-   * @param rolId ID del rol
-   * @param limite Cantidad de notificaciones a devolver (por defecto 50)
+   * CORREGIDO: Ahora usa notificaciones_destino correctamente
    */
   async obtenerNotificacionesPorRol(rolId: number, limite: number = 50): Promise<any[]> {
     try {
@@ -115,6 +114,7 @@ export class NotificacionesService {
 
   /**
    * Obtiene notificaciones recientes (últimas 24 horas) para un rol
+   * CORREGIDO: Ahora usa notificaciones_destino correctamente
    */
   async obtenerNotificacionesRecientes(rolId: number): Promise<any[]> {
     try {
@@ -151,6 +151,7 @@ export class NotificacionesService {
 
   /**
    * Cuenta las notificaciones para un rol
+   * CORREGIDO: Ahora usa notificaciones_destino correctamente
    */
   async contarNotificacionesPorRol(rolId: number): Promise<number> {
     try {
@@ -173,7 +174,7 @@ export class NotificacionesService {
    * Formatea el tiempo transcurrido en un formato legible
    */
   private formatearTiempoRelativo(minutos: number): string {
-    if (minutos < 1) return 'Hace 30 min';
+    if (minutos < 1) return 'Hace menos de 1 min';
     if (minutos < 60) return `Hace ${Math.floor(minutos)} min`;
 
     const horas = Math.floor(minutos / 60);
@@ -188,9 +189,18 @@ export class NotificacionesService {
   // ========================================
 
   /**
-   * Crea notificación de Aniversario Laboral
+   * A) Aniversario Laboral de Empleado
+   * Roles: ADMINISTRADOR (rol_id = 1)
+   * Anticipación: 7 días antes
    */
-  async notificarAniversarioLaboral(empleadoId: number, nombreEmpleado: string, fechaIngreso: string, anosServicio: number, cargo: string, usuarioCreador: number) {
+  async notificarAniversarioLaboral(
+    empleadoId: number,
+    nombreEmpleado: string,
+    fechaIngreso: string,
+    anosServicio: number,
+    cargo: string,
+    usuarioCreador: number
+  ) {
     const evento = await this.crearEvento({
       tipo_evento: 'ANIVERSARIO_LABORAL',
       descripcion: `${nombreEmpleado} cumple ${anosServicio} años de servicio`,
@@ -209,14 +219,22 @@ export class NotificacionesService {
       titulo: 'Aniversario Laboral',
       mensaje: `${nombreEmpleado} cumplirá ${anosServicio} años en la empresa el ${fechaIngreso}. Cargo: ${cargo}.`,
       evento_id: evento.id,
-      roles_destino: [1], // Solo ADMINISTRADOR (rol_id = 1)
+      roles_destino: [1], // Solo ADMINISTRADOR
     });
   }
 
   /**
-   * Crea notificación de Cumpleaños de Paciente
+   * B) Cumpleaños de Paciente
+   * Roles: ADMINISTRADOR (2 días antes) y ADMISIÓN (1 día antes)
    */
-  async notificarCumpleanospPaciente(pacienteId: number, nombrePaciente: string, fechaNacimiento: string, edad: number, usuarioCreador: number, rolesDestino: number[]) {
+  async notificarCumpleanospPaciente(
+    pacienteId: number,
+    nombrePaciente: string,
+    fechaNacimiento: string,
+    edad: number,
+    usuarioCreador: number,
+    rolesDestino: number[]
+  ) {
     const evento = await this.crearEvento({
       tipo_evento: 'CUMPLEANOS_PACIENTE',
       descripcion: `${nombrePaciente} cumplirá ${edad} años`,
@@ -234,14 +252,55 @@ export class NotificacionesService {
       titulo: 'Cumpleaños de Paciente',
       mensaje: `${nombrePaciente} cumplirá ${edad} años el ${fechaNacimiento}.`,
       evento_id: evento.id,
-      roles_destino: rolesDestino, // ADMINISTRADOR y/o ADMISIÓN
+      roles_destino: rolesDestino, // [1] para ADMIN (2 días antes) o [2] para ADMISIÓN (1 día antes)
     });
   }
 
+
+ async notificarCumpleanosEmpleado(
+    empleadoId: number,
+    nombreEmpleado: string,
+    fechaNacimiento: string,
+    edad: number,
+    cargo: string,
+    usuarioCreador: number,
+  ) {
+    const evento = await this.crearEvento({
+      tipo_evento: 'CUMPLEANOS_EMPLEADO',
+      descripcion: `${nombreEmpleado} cumplirá ${edad} años`,
+      usuario_id: usuarioCreador,
+      datos_adicionales: {
+        empleado_id: empleadoId,
+        nombre_empleado: nombreEmpleado,
+        fecha_nacimiento: fechaNacimiento,
+        edad: edad,
+        cargo: cargo,
+      },
+    });
+
+    await this.crearNotificacion({
+      tipo_notificacion: 'CUMPLEANOS',
+      titulo: 'Cumpleaños de Empleado',
+      mensaje: `${nombreEmpleado} cumplirá ${edad} años el ${fechaNacimiento}. Cargo: ${cargo}.`,
+      evento_id: evento.id,
+      roles_destino: [1], // Solo ADMINISTRADOR
+    });
+  }
+
+  
   /**
-   * Crea notificación de Acceso Fuera de Horario
+   * C) Acceso Fuera de Horario Laboral
+   * Roles: ADMINISTRADOR (rol_id = 1)
+   * Anticipación: Inmediata
    */
-  async notificarAccesoFueraHorario(empleadoId: number, nombreEmpleado: string, horaIngreso: string, ip: string, dispositivo: string, usuarioCreador: number) {
+  async notificarAccesoFueraHorario(
+    empleadoId: number,
+    nombreEmpleado: string,
+    horaIngreso: string,
+    ip: string,
+    dispositivo: string,
+    usuarioCreador: number
+  ) {
     const evento = await this.crearEvento({
       tipo_evento: 'ACCESO_FUERA_HORARIO',
       descripcion: `${nombreEmpleado} accedió fuera del horario laboral`,
@@ -258,14 +317,16 @@ export class NotificacionesService {
     await this.crearNotificacion({
       tipo_notificacion: 'ACCESO',
       titulo: 'Acceso Fuera de Horario',
-      mensaje: `${nombreEmpleado} accedió al sistema el ${new Date().toLocaleDateString()} a las ${horaIngreso}. Hora de conexión: ${horaIngreso}.`,
+      mensaje: `${nombreEmpleado} accedió al sistema el ${new Date().toLocaleDateString('es-ES')} a las ${horaIngreso}. IP: ${ip}`,
       evento_id: evento.id,
       roles_destino: [1], // Solo ADMINISTRADOR
     });
   }
 
   /**
-   * Crea notificación de Cita Eliminada
+   * D) Cita Eliminada
+   * Roles: ADMINISTRADOR (rol_id = 1)
+   * Anticipación: Inmediata
    */
   async notificarCitaEliminada(
     citaId: number,
@@ -301,7 +362,9 @@ export class NotificacionesService {
   }
 
   /**
-   * Crea notificación de Cita Modificada
+   * E) Modificación de Cita
+   * Roles: ADMINISTRADOR (rol_id = 1)
+   * Anticipación: Inmediata
    */
   async notificarCitaModificada(
     citaId: number,
@@ -335,23 +398,27 @@ export class NotificacionesService {
 
     const cambios = [];
     if (fechaAnterior !== fechaNueva || horaAnterior !== horaNueva) {
-      cambios.push(`reprogramó de ${fechaAnterior} ${horaAnterior} al ${fechaNueva} ${horaNueva}`);
+      cambios.push(`reprogramó de ${fechaAnterior} ${horaAnterior} a ${fechaNueva} ${horaNueva}`);
     }
     if (terapeutaAnterior !== terapeutaNuevo) {
       cambios.push(`cambió terapeuta de ${terapeutaAnterior} a ${terapeutaNuevo}`);
     }
 
+    const mensajeCambios = cambios.length > 0 ? cambios.join(' y ') : 'modificó la cita';
+
     await this.crearNotificacion({
       tipo_notificacion: 'CITA_MODIFICADA',
       titulo: 'Cita Modificada',
-      mensaje: `${nombreUsuarioModificador} ${cambios.join(' y ')} modificó la cita de ${pacienteNombre}. Terapeuta: Dra. ${terapeutaNuevo}. Motivo: ${motivoModificacion}`,
+      mensaje: `${nombreUsuarioModificador} ${mensajeCambios} de ${pacienteNombre}. Motivo: ${motivoModificacion}`,
       evento_id: evento.id,
       roles_destino: [1], // Solo ADMINISTRADOR
     });
   }
 
   /**
-   * Crea notificación de Nota de Evolución Registrada
+   * F) Nota de Evolución Registrada
+   * Roles: ADMINISTRADOR (rol_id = 1)
+   * Anticipación: Inmediata
    */
   async notificarNotaEvolucion(
     terapeutaId: number,

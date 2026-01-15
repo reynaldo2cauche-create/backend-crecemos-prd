@@ -40,6 +40,7 @@ export class NotificacionesScheduler {
       await Promise.all([
         this.verificarAniversariosLaborales(),
         this.verificarCumpleaniosPacientes(),
+        this.verificarCumpleanosEmpleados(),
       ]);
 
       this.logger.log('✅ Verificación completada');
@@ -102,7 +103,7 @@ export class NotificacionesScheduler {
   private async verificarCumpleaniosPacientes() {
     try {
       await this.verificarCumpleaniosEnDias(2, [1]); // 2 días antes para ADMIN
-      await this.verificarCumpleaniosEnDias(1, [2]); // 1 día antes para ADMISIÓN
+      await this.verificarCumpleaniosEnDias(2, [2]); // 1 día antes para ADMISIÓN
     } catch (error) {
       this.logger.error(`Error al verificar cumpleaños: ${error.message}`);
     }
@@ -117,7 +118,7 @@ export class NotificacionesScheduler {
           apellido_paterno,
           apellido_materno,
           fecha_nacimiento,
-          YEAR(CURDATE()) - YEAR(fecha_nacimiento) + 1 as edad_cumplira
+          YEAR(CURDATE()) - YEAR(fecha_nacimiento)  as edad_cumplira
         FROM paciente
         WHERE fecha_nacimiento IS NOT NULL
           AND DATEDIFF(
@@ -155,6 +156,8 @@ export class NotificacionesScheduler {
       this.logger.error(`Error al verificar cumpleaños en ${dias} días: ${error.message}`);
     }
   }
+
+  
 
   /**
    * Verifica si ya existe una notificación de ANIVERSARIO para un empleado en una fecha
@@ -221,4 +224,121 @@ export class NotificacionesScheduler {
       return false;
     }
   }
+
+ 
+  private async verificarCumpleanosEmpleados() {
+    try {
+      const query = `
+        SELECT
+          tc.id,
+          tc.nombres,
+          tc.apellidos,
+          tc.fecha_nacimiento,
+          c.nombre as cargo_nombre,
+          YEAR(CURDATE()) - YEAR(tc.fecha_nacimiento) as edad_cumplira
+        FROM trabajador_centro tc
+        LEFT JOIN cargos c ON c.id = tc.cargo_id
+        WHERE tc.estado = 1
+          AND tc.fecha_nacimiento IS NOT NULL
+          AND DATEDIFF(
+            DATE_ADD(tc.fecha_nacimiento, INTERVAL YEAR(CURDATE()) - YEAR(tc.fecha_nacimiento) YEAR),
+            CURDATE()
+          ) = 2
+      `;
+
+      const empleados = await this.trabajadoresRepo.query(query);
+
+      this.logger.log(`📋 Encontrados ${empleados.length} cumpleaños de empleados en 2 días`);
+
+      for (const empleado of empleados) {
+        const existeNotificacion = await this.verificarNotificacionExistente(
+          'CUMPLEANOS_EMPLEADO',
+          empleado.id,
+          new Date().toISOString().split('T')[0]
+        );
+
+        if (!existeNotificacion) {
+          const nombreCompleto = `${empleado.nombres} ${empleado.apellidos}`;
+          const fechaNacimiento = new Date(empleado.fecha_nacimiento).toLocaleDateString('es-ES');
+
+          await this.notificacionesService.notificarCumpleanosEmpleado(
+            empleado.id,
+            nombreCompleto,
+            fechaNacimiento,
+            empleado.edad_cumplira,
+            empleado.cargo_nombre || 'No especificado',
+            1, // Usuario sistema
+          );
+
+          this.logger.log(`🎂 ✅ Notificación de cumpleaños creada para empleado ${nombreCompleto} (${empleado.edad_cumplira} años)`);
+        }
+      }
+    } catch (error) {
+      this.logger.error(`Error al verificar cumpleaños de empleados: ${error.message}`);
+    }
+  }
+
+  /**
+   * Verifica si ya existe una notificación del tipo especificado
+   */
+  private async verificarNotificacionExistente(
+    tipoEvento: string,
+    entidadId: number,
+    fecha: string,
+    roles?: number[]
+  ): Promise<boolean> {
+    try {
+      let query: string;
+      let params: any[];
+
+      if (tipoEvento === 'ANIVERSARIO_LABORAL') {
+        query = `
+          SELECT COUNT(*) as total
+          FROM eventos_sistema e
+          INNER JOIN notificaciones n ON n.evento_id = e.id
+          WHERE e.tipo_evento = ?
+            AND JSON_EXTRACT(e.datos_adicionales, '$.empleado_id') = ?
+            AND DATE(e.fecha_evento) = ?
+        `;
+        params = [tipoEvento, entidadId, fecha];
+      } else if (tipoEvento === 'CUMPLEANOS_PACIENTE' && roles) {
+        query = `
+          SELECT COUNT(DISTINCT e.id) as total
+          FROM eventos_sistema e
+          INNER JOIN notificaciones n ON n.evento_id = e.id
+          INNER JOIN notificaciones_destino nd ON nd.notificacion_id = n.id
+          WHERE e.tipo_evento = ?
+            AND JSON_EXTRACT(e.datos_adicionales, '$.paciente_id') = ?
+            AND DATE(e.fecha_evento) = ?
+            AND nd.rol_id IN (${roles.join(',')})
+        `;
+        params = [tipoEvento, entidadId, fecha];
+      } else if (tipoEvento === 'CUMPLEANOS_EMPLEADO') {
+        query = `
+          SELECT COUNT(*) as total
+          FROM eventos_sistema e
+          INNER JOIN notificaciones n ON n.evento_id = e.id
+          WHERE e.tipo_evento = ?
+            AND JSON_EXTRACT(e.datos_adicionales, '$.empleado_id') = ?
+            AND DATE(e.fecha_evento) = ?
+        `;
+        params = [tipoEvento, entidadId, fecha];
+      } else {
+        return false;
+      }
+
+      const result = await this.trabajadoresRepo.query(query, params);
+      const existe = parseInt(result[0].total) > 0;
+      
+      if (existe) {
+        this.logger.debug(`Ya existe notificación ${tipoEvento} para entidad ${entidadId} en ${fecha}`);
+      }
+      
+      return existe;
+    } catch (error) {
+      this.logger.error(`Error al verificar notificación existente: ${error.message}`);
+      return false;
+    }
+  }
+
 }
