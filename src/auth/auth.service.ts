@@ -62,20 +62,24 @@ export class AuthService {
       ultimo_acceso: new Date(),
     });
 
-    // Si es admin, generar notificaciones diarias (solo 1 vez al día)
-    if (user.rol?.id === 1) {
-      try {
-        await this.notificacionesService.generarNotificacionesDiarias();
-      } catch (error) {
-        console.error('Error al generar notificaciones diarias:', error);
-      }
-    }
-
-    // Notificar login fuera de horario
+    // Notificar acceso fuera de horario
     try {
-      await this.notificacionesService.notificarLoginFueraHorario(user.id, ip, userAgent);
+      const nombreCompleto = `${user.nombres} ${user.apellidos}`;
+      const horaActual = new Date().toLocaleTimeString('es-ES', {
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+
+      await this.notificacionesService.notificarAccesoFueraHorario(
+        user.id,
+        nombreCompleto,
+        horaActual,
+        ip,
+        userAgent,
+        user.id
+      );
     } catch (error) {
-      console.error('Error al notificar login fuera de horario:', error);
+      console.error('Error al notificar acceso fuera de horario:', error);
     }
 
     return {

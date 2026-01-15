@@ -93,8 +93,9 @@ import { AuditoriaInterceptor } from './auditoria/auditoria.interceptor';
 import { Cargo } from './usuarios/cargo.entity';
 import { TransferenciaNotas } from './pacientes/entities/transferencia-notas.entity';
 import { NotificacionesModule } from './notificaciones/notificaciones.module';
-import { Notificacion } from './notificaciones/notificacion.entity';
-import { ConfiguracionNotificacion } from './notificaciones/configuracion-notificacion.entity';
+import { EventoSistema } from './notificaciones/entities/evento-sistema.entity';
+import { Notificacion } from './notificaciones/entities/notificacion.entity';
+import { NotificacionDestino } from './notificaciones/entities/notificacion-destino.entity';
 import { Convenio } from './convenios/entities/convenio.entity';
 import { PacienteConvenio } from './convenios/entities/paciente-convenio.entity';
 import { ConveniosModule } from './convenios/convenios.module';
@@ -230,8 +231,9 @@ import { NivelEducacion } from './catalogos/nivel-educacion.entity';
         TrabajadorServicio,
         AuditoriaAccion,
         TransferenciaNotas,
+        EventoSistema,
         Notificacion,
-        ConfiguracionNotificacion,
+        NotificacionDestino,
         Convenio,
         PacienteConvenio,
         CategoriaBeneficio,
