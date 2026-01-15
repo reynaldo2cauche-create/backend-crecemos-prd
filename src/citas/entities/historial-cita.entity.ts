@@ -87,6 +87,9 @@ export class HistorialCita {
   @Column({ type: 'text', name: 'descripcion_cambios', nullable: true })
   descripcion_cambios: string;
 
+  @Column({ type: 'text', name: 'motivo_accion', nullable: true })
+  motivo_accion: string;
+
   // Relaciones con tablas auxiliares de historial
   @OneToMany(() => HistorialCitaReunionTerapeutas, t => t.historialCita, { cascade: true })
   terapeutas: HistorialCitaReunionTerapeutas[];
