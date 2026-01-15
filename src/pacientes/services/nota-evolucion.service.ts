@@ -7,6 +7,7 @@ import { Paciente } from '../paciente.entity';
 import { TrabajadorCentro } from '../../usuarios/trabajador-centro.entity';
 import { AsignacionTerapeuta } from '../asignacion-terapeuta.entity';
 import { Servicios } from '../../catalogos/servicios.entity';
+import { NotificacionesService } from 'src/notificaciones/notificaciones.service';
 
 @Injectable()
 export class NotaEvolucionService {
@@ -21,6 +22,7 @@ export class NotaEvolucionService {
     private asignacionRepository: Repository<AsignacionTerapeuta>,
     @InjectRepository(Servicios)
     private serviciosRepository: Repository<Servicios>,
+    private notificacionesService: NotificacionesService,
   ) {}
 
   private async detectarServicioAutomatico(terapeuta_id: number, paciente_id: number): Promise<number | null> {
@@ -116,6 +118,27 @@ export class NotaEvolucionService {
 
     try {
       const notaGuardada = await this.notaEvolucionRepository.save(nota);
+
+      // ✅ ============================================
+      // ✅ CREAR NOTIFICACIÓN DESPUÉS DE GUARDAR
+      // ✅ ============================================
+      try {
+        const terapeutaNombre = `${trabajador.nombres} ${trabajador.apellidos}`;
+        const pacienteNombre = `${paciente.nombres} ${paciente.apellido_paterno} ${paciente.apellido_materno || ''}`.trim();
+        const tipoSesion = servicio?.nombre || 'No especificado';
+
+        await this.notificacionesService.notificarNotaEvolucion(
+          trabajador.id,
+          terapeutaNombre,
+          pacienteNombre,
+          tipoSesion,
+        );
+
+        console.log(`✅ Notificación de nota de evolución creada para ${pacienteNombre}`);
+      } catch (errorNotif) {
+        // No fallar si hay error en notificación, solo logear
+        console.error('⚠️ Error al crear notificación (no crítico):', errorNotif.message);
+      }
 
       // Obtener la nota con todas las relaciones para la respuesta
       const notaCompleta = await this.notaEvolucionRepository.findOne({

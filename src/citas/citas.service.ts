@@ -11,6 +11,7 @@ import { EstadoCita } from './entities/estado-cita.entity';
 import { TipoCita } from './entities/tipo-cita.entity';
 import { CrearCitaDto } from './dto/crear-cita.dto';
 import { HistorialCitasService } from './historial-citas.service';
+import { NotificacionesService } from '../notificaciones/notificaciones.service';
 
 @Injectable()
 export class CitasService {
@@ -33,6 +34,8 @@ export class CitasService {
     private tipoRepo: Repository<TipoCita>,
     @Inject(forwardRef(() => HistorialCitasService))
     private historialService: HistorialCitasService,
+    @Inject(forwardRef(() => NotificacionesService))
+    private notificacionesService: NotificacionesService,
   ) {}
 
   private async determinarTipoCita(motivo_id: number): Promise<string> {
@@ -467,21 +470,81 @@ async listar(filtros: any = {}): Promise<any[]> {
   console.log(`🔍 Actualizando cita ID ${id}, tipo: ${tipoCita}`);
   console.log(`📝 Motivo de modificación: ${dto.motivo_accion}`);
 
-  // Verificar que la cita existe
-  const citaExistente = await this.citaRepo.findOne({ where: { id } });
-  if (!citaExistente) {
+  // Obtener la cita existente con todas sus relaciones ANTES de actualizar
+  const citaAntigua = await this.citaRepo.findOne({
+    where: { id },
+    relations: ['paciente', 'doctor'],
+  });
+
+  if (!citaAntigua) {
     throw new NotFoundException(`Cita con ID ${id} no encontrada`);
   }
 
+  // Guardar datos antiguos para la notificación
+  const datosAntiguos = {
+    fecha: citaAntigua.fecha,
+    hora_inicio: citaAntigua.hora_inicio,
+    doctor_id: citaAntigua.doctor_id,
+    doctor_nombre: citaAntigua.doctor
+      ? `${citaAntigua.doctor.nombres} ${citaAntigua.doctor.apellidos}`
+      : 'No asignado',
+  };
+
+  // Actualizar según tipo
+  let resultado;
   if (tipoCita === 'NORMAL') {
-    return this.actualizarCitaNormal(id, dto);
+    resultado = await this.actualizarCitaNormal(id, dto);
   } else if (tipoCita === 'REUNION_CLINICA') {
-    return this.actualizarReunionClinica(id, dto);
+    resultado = await this.actualizarReunionClinica(id, dto);
   } else if (tipoCita === 'VISITA_ESCOLAR') {
-    return this.actualizarVisitaEscolar(id, dto);
+    resultado = await this.actualizarVisitaEscolar(id, dto);
+  } else {
+    throw new BadRequestException('Tipo de cita no soportado');
   }
 
-  throw new BadRequestException('Tipo de cita no soportado');
+  // 🔔 Disparar notificación de cita modificada
+  try {
+    // Obtener información del usuario que modifica
+    const queryUsuario = `SELECT nombres, apellidos FROM trabajador_centro WHERE id = ?`;
+    const usuario = await this.citaRepo.query(queryUsuario, [dto.user_id_crea]);
+    const nombreUsuario = usuario && usuario.length > 0
+      ? `${usuario[0].nombres} ${usuario[0].apellidos}`
+      : 'Usuario desconocido';
+
+    // Obtener nombre del paciente
+    const pacienteNombre = citaAntigua.paciente
+      ? `${citaAntigua.paciente.nombres} ${citaAntigua.paciente.apellido_paterno} ${citaAntigua.paciente.apellido_materno || ''}`.trim()
+      : 'Paciente desconocido';
+
+    // Obtener nombre del nuevo terapeuta si cambió
+    let nuevoTerapeutaNombre = datosAntiguos.doctor_nombre;
+    if (dto.doctor_id && dto.doctor_id !== datosAntiguos.doctor_id) {
+      const queryTerapeuta = `SELECT nombres, apellidos FROM trabajador_centro WHERE id = ?`;
+      const terapeuta = await this.citaRepo.query(queryTerapeuta, [dto.doctor_id]);
+      nuevoTerapeutaNombre = terapeuta && terapeuta.length > 0
+        ? `${terapeuta[0].nombres} ${terapeuta[0].apellidos}`
+        : 'Terapeuta desconocido';
+    }
+
+    await this.notificacionesService.notificarCitaModificada(
+      id,
+      dto.user_id_crea,
+      nombreUsuario,
+      pacienteNombre,
+      datosAntiguos.fecha,
+      datosAntiguos.hora_inicio,
+      datosAntiguos.doctor_nombre,
+      dto.fecha,
+      dto.hora_inicio,
+      nuevoTerapeutaNombre,
+      dto.motivo_accion,
+    );
+  } catch (error) {
+    console.error('❌ Error al crear notificación de cita modificada:', error.message);
+    // No detener la actualización si falla la notificación
+  }
+
+  return resultado;
 }
 
 private async actualizarCitaNormal(id: number, dto: CrearCitaDto): Promise<Cita> {
@@ -646,11 +709,23 @@ private async actualizarVisitaEscolar(id: number, dto: CrearCitaDto): Promise<Ci
 
     console.log(`🗑️ Eliminando cita ID ${id}`);
     console.log(`📝 Motivo de eliminación: ${motivoAccion}`);
-    const cita = await this.citaRepo.findOne({ where: { id } });
+
+    // Obtener la cita con todas sus relaciones para la notificación
+    const cita = await this.citaRepo.findOne({
+      where: { id },
+      relations: ['paciente', 'doctor'],
+    });
 
     if (!cita) {
       throw new NotFoundException(`Cita con ID ${id} no encontrada`);
     }
+
+    // Obtener información del usuario que elimina
+    const query = `SELECT nombres, apellidos FROM trabajador_centro WHERE id = ?`;
+    const usuario = await this.citaRepo.query(query, [usuarioId || cita.user_id_crea]);
+    const nombreUsuario = usuario && usuario.length > 0
+      ? `${usuario[0].nombres} ${usuario[0].apellidos}`
+      : 'Usuario desconocido';
 
     // Registrar en historial ANTES de eliminar (con motivo)
     await this.historialService.registrarHistorial(
@@ -660,6 +735,31 @@ private async actualizarVisitaEscolar(id: number, dto: CrearCitaDto): Promise<Ci
       undefined,
       motivoAccion,
     );
+
+    // 🔔 Disparar notificación de cita eliminada
+    try {
+      const pacienteNombre = cita.paciente
+        ? `${cita.paciente.nombres} ${cita.paciente.apellido_paterno} ${cita.paciente.apellido_materno || ''}`.trim()
+        : 'Paciente desconocido';
+
+      const terapeutaNombre = cita.doctor
+        ? `${cita.doctor.nombres} ${cita.doctor.apellidos}`
+        : 'Terapeuta no asignado';
+
+      await this.notificacionesService.notificarCitaEliminada(
+        id,
+        usuarioId || cita.user_id_crea,
+        nombreUsuario,
+        pacienteNombre,
+        cita.fecha,
+        cita.hora_inicio,
+        terapeutaNombre,
+        motivoAccion,
+      );
+    } catch (error) {
+      console.error('❌ Error al crear notificación de cita eliminada:', error.message);
+      // No detener la eliminación si falla la notificación
+    }
 
     // TypeORM manejará las eliminaciones en cascada automáticamente
     await this.citaRepo.delete(id);

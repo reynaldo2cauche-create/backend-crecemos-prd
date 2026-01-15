@@ -1,30 +1,44 @@
-import { Module } from '@nestjs/common';
+import { Module, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { JwtModule } from '@nestjs/jwt';
 import { NotificacionesController } from './notificaciones.controller';
 import { NotificacionesService } from './notificaciones.service';
-import { NotificacionesEventsService } from './notificaciones-events.service';
-import { Notificacion } from './notificacion.entity';
-import { ConfiguracionNotificacion } from './configuracion-notificacion.entity';
-import { Paciente } from '../pacientes/paciente.entity';
+import { NotificacionesScheduler } from './notificaciones.scheduler';
+import { EventoSistema } from './entities/evento-sistema.entity';
+import { Notificacion } from './entities/notificacion.entity';
+import { NotificacionDestino } from './entities/notificacion-destino.entity';
 import { TrabajadorCentro } from '../usuarios/trabajador-centro.entity';
-import { SseAuthGuard } from '../auth/guards/sse-auth.guard';
+import { Paciente } from '../pacientes/paciente.entity';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([
+      EventoSistema,
       Notificacion,
-      ConfiguracionNotificacion,
-      Paciente,
+      NotificacionDestino,
       TrabajadorCentro,
+      Paciente,
     ]),
-    JwtModule.register({
-      secret: process.env.JWT_SECRET || 'tu-secreto-seguro',
-      signOptions: { expiresIn: '24h' },
-    }),
   ],
   controllers: [NotificacionesController],
-  providers: [NotificacionesService, NotificacionesEventsService, SseAuthGuard],
-  exports: [NotificacionesService],
+  providers: [NotificacionesService, NotificacionesScheduler],
+  exports: [NotificacionesService], // Exportar para usar en otros módulos
 })
-export class NotificacionesModule {}
+export class NotificacionesModule implements OnModuleInit, OnModuleDestroy {
+  constructor(private readonly scheduler: NotificacionesScheduler) {}
+
+  /**
+   * Se ejecuta cuando el módulo se inicializa
+   * Aquí iniciamos el scheduler de notificaciones
+   */
+  onModuleInit() {
+    this.scheduler.iniciar();
+  }
+
+  /**
+   * Se ejecuta cuando el módulo se destruye
+   * Aquí detenemos el scheduler
+   */
+  onModuleDestroy() {
+    this.scheduler.detener();
+  }
+}

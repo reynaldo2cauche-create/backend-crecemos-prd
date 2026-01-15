@@ -30,6 +30,8 @@ import { ParejaPacienteService } from './services/pareja-paciente.service';
 import { EstadoPacienteService } from './estado-paciente.service';
 import { EstadoPacienteController } from './estado-paciente.controller';
 import { ConveniosModule } from 'src/convenios/convenios.module';
+import { NotificacionesModule } from 'src/notificaciones/notificaciones.module';
+import { NotificacionesService } from 'src/notificaciones/notificaciones.service';
 
 @Module({
   imports: [
@@ -45,9 +47,12 @@ import { ConveniosModule } from 'src/convenios/convenios.module';
       TransferenciaNotas,
       TrabajadorCentro,
       ParejaPaciente,
+      
+  
 
     ]),
-    ConveniosModule
+    ConveniosModule,
+    NotificacionesModule,
   ],
   providers: [
     PacienteService,
@@ -58,6 +63,7 @@ import { ConveniosModule } from 'src/convenios/convenios.module';
     NotaEvolucionService,
     ParejaPacienteService,
     EstadoPacienteService,
+  
     
   ],
   controllers: [
