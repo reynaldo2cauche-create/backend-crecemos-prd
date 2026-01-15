@@ -458,8 +458,14 @@ async listar(filtros: any = {}): Promise<any[]> {
     return { ...cita, tipo_cita: 'NORMAL' };
   }
   async actualizar(id: number, dto: CrearCitaDto): Promise<any> {
+  // ✅ VALIDAR MOTIVO DE ACCIÓN (OBLIGATORIO PARA UPDATE)
+  if (!dto.motivo_accion || dto.motivo_accion.trim() === '') {
+    throw new BadRequestException('El motivo de la modificación es obligatorio');
+  }
+
   const tipoCita = await this.determinarTipoCita(dto.motivo_id);
   console.log(`🔍 Actualizando cita ID ${id}, tipo: ${tipoCita}`);
+  console.log(`📝 Motivo de modificación: ${dto.motivo_accion}`);
 
   // Verificar que la cita existe
   const citaExistente = await this.citaRepo.findOne({ where: { id } });
@@ -499,11 +505,13 @@ private async actualizarCitaNormal(id: number, dto: CrearCitaDto): Promise<Cita>
 
   console.log(`✅ Cita normal actualizada: ID ${id}`);
 
-  // Registrar en historial
+  // Registrar en historial con motivo
   await this.historialService.registrarHistorial(
     id,
     'UPDATE',
     dto.user_id_crea,
+    undefined,
+    dto.motivo_accion,
   );
 
   return this.citaRepo.findOne({ where: { id } });
@@ -565,11 +573,13 @@ private async actualizarReunionClinica(id: number, dto: CrearCitaDto): Promise<a
   }
   console.log(`✅ ${dto.servicios_ids.length} servicios actualizados`);
 
-  // Registrar en historial
+  // Registrar en historial con motivo
   await this.historialService.registrarHistorial(
     id,
     'UPDATE',
     dto.user_id_crea,
+    undefined,
+    dto.motivo_accion,
   );
 
   return this.citaRepo.findOne({ where: { id } });
@@ -616,28 +626,39 @@ private async actualizarVisitaEscolar(id: number, dto: CrearCitaDto): Promise<Ci
 
   console.log(`✅ Datos de visita escolar actualizados`);
 
-  // Registrar en historial
+  // Registrar en historial con motivo
   await this.historialService.registrarHistorial(
     id,
     'UPDATE',
     dto.user_id_crea,
+    undefined,
+    dto.motivo_accion,
   );
 
   return this.citaRepo.findOne({ where: { id } });
 }
 
-  async eliminar(id: number, usuarioId?: number): Promise<{ mensaje: string }> {
+  async eliminar(id: number, usuarioId?: number, motivoAccion?: string): Promise<{ mensaje: string }> {
+    // ✅ VALIDAR MOTIVO DE ACCIÓN (OBLIGATORIO PARA DELETE)
+    if (!motivoAccion || motivoAccion.trim() === '') {
+      throw new BadRequestException('El motivo de eliminación es obligatorio');
+    }
+
+    console.log(`🗑️ Eliminando cita ID ${id}`);
+    console.log(`📝 Motivo de eliminación: ${motivoAccion}`);
     const cita = await this.citaRepo.findOne({ where: { id } });
 
     if (!cita) {
       throw new NotFoundException(`Cita con ID ${id} no encontrada`);
     }
 
-    // Registrar en historial ANTES de eliminar
+    // Registrar en historial ANTES de eliminar (con motivo)
     await this.historialService.registrarHistorial(
       id,
       'DELETE',
       usuarioId || cita.user_id_crea,
+      undefined,
+      motivoAccion,
     );
 
     // TypeORM manejará las eliminaciones en cascada automáticamente

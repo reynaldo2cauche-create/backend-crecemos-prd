@@ -36,6 +36,7 @@ export class HistorialCitasService {
     tipoOperacion: 'CREATE' | 'UPDATE' | 'DELETE',
     usuarioId: number,
     descripcionCambios?: string,
+    motivoAccion?: string,
   ): Promise<void> {
     try {
       console.log(`📝 [HISTORIAL] Registrando: Cita ${citaId}, Operación ${tipoOperacion}, Usuario ${usuarioId}`);
@@ -69,15 +70,16 @@ export class HistorialCitasService {
       tipo_operacion: tipoOperacion,
       usuario_id: usuarioId,
       descripcion_cambios: descripcionCambios || this.generarDescripcionAutomatica(cita, tipoOperacion),
+      motivo_accion: motivoAccion || null,
     });
 
       const historialGuardado = await this.historialRepo.save(historial);
-      console.log(`✅ [HISTORIAL] Registro base creado con ID ${historialGuardado.id}`);
+     
 
       // 3. Verificar tipo de cita y guardar datos adicionales
       await this.guardarDatosAdicionales(cita.id, historialGuardado.id, usuarioId);
 
-      console.log(`✅ [HISTORIAL] Registro completado exitosamente para cita ${citaId}`);
+
     } catch (error) {
       console.error(`❌ [HISTORIAL] Error al registrar historial:`, error);
       throw error;

@@ -1,5 +1,7 @@
 import { Controller, Get, Post, Delete, Body, Param, Query, UseGuards, Put, BadRequestException } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/roles.guard';
+import { Roles } from '../auth/roles.decorator';
 import { CitasService } from './citas.service';
 import { HistorialCitasService } from './historial-citas.service';
 import { CrearCitaDto } from './dto/crear-cita.dto';
@@ -71,7 +73,12 @@ export class CitasController {
   }
 
   @Delete(':id')
-  async eliminar(@Param('id') id: string) {
-    return this.citasService.eliminar(+id);
+  @UseGuards(RolesGuard)
+  @Roles('Administrador')
+  async eliminar(
+    @Param('id') id: string,
+    @Body() body: { usuario_id: number; motivo_accion: string }
+  ) {
+    return this.citasService.eliminar(+id, body.usuario_id, body.motivo_accion);
   }
 }

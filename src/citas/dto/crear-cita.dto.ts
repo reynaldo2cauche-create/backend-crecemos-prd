@@ -62,4 +62,9 @@ export class CrearCitaDto {
   @IsOptional()
   @IsInt()
   user_id_crea?: number;
+
+  // MOTIVO DE ACCIÓN (obligatorio para UPDATE y DELETE)
+  @IsOptional()
+  @IsString()
+  motivo_accion?: string;
 }
