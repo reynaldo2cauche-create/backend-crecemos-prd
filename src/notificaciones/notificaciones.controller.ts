@@ -1,4 +1,4 @@
-import { Controller, Get, Query, UseGuards, Request } from '@nestjs/common';
+import { Controller, Get, Post, Delete, Query, Param, UseGuards, Request } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { NotificacionesService } from './notificaciones.service';
@@ -20,17 +20,19 @@ export class NotificacionesController {
     @Query('limite') limite?: number,
   ) {
     const rolId = req.user?.rol?.id;
+    const usuarioId = req.user?.id;
 
-    if (!rolId) {
+    if (!rolId || !usuarioId) {
       return { message: 'Usuario sin rol asignado', notificaciones: [] };
     }
 
     const limiteNum = limite ? parseInt(limite.toString()) : 50;
-    const notificaciones = await this.notificacionesService.obtenerNotificacionesPorRol(rolId, limiteNum);
+    const notificaciones = await this.notificacionesService.obtenerNotificacionesPorRol(rolId, usuarioId, limiteNum);
 
     return {
       total: notificaciones.length,
       rol_id: rolId,
+      usuario_id: usuarioId,
       notificaciones,
     };
   }
@@ -42,16 +44,18 @@ export class NotificacionesController {
   @Get('recientes')
   async obtenerNotificacionesRecientes(@Request() req) {
     const rolId = req.user?.rol?.id;
+    const usuarioId = req.user?.id;
 
-    if (!rolId) {
+    if (!rolId || !usuarioId) {
       return { message: 'Usuario sin rol asignado', notificaciones: [] };
     }
 
-    const notificaciones = await this.notificacionesService.obtenerNotificacionesRecientes(rolId);
+    const notificaciones = await this.notificacionesService.obtenerNotificacionesRecientes(rolId, usuarioId);
 
     return {
       total: notificaciones.length,
       rol_id: rolId,
+      usuario_id: usuarioId,
       tiempo_actual: new Date(),
       notificaciones,
     };
@@ -64,16 +68,62 @@ export class NotificacionesController {
   @Get('count')
   async contarNotificaciones(@Request() req) {
     const rolId = req.user?.rol?.id;
+    const usuarioId = req.user?.id;
 
-    if (!rolId) {
+    if (!rolId || !usuarioId) {
       return { message: 'Usuario sin rol asignado', total: 0 };
     }
 
-    const total = await this.notificacionesService.contarNotificacionesPorRol(rolId);
+    const total = await this.notificacionesService.contarNotificacionesPorRol(rolId, usuarioId);
 
     return {
       rol_id: rolId,
+      usuario_id: usuarioId,
       total,
+    };
+  }
+
+  /**
+   * Marca una notificación como leída
+   * POST /backend_api/notificaciones/:id/marcar-leida
+   */
+  @Post(':id/marcar-leida')
+  async marcarComoLeida(
+    @Param('id') notificacionId: string,
+    @Request() req,
+  ) {
+    const usuarioId = req.user?.id;
+
+    if (!usuarioId) {
+      return { message: 'Usuario no autenticado', success: false };
+    }
+
+    await this.notificacionesService.marcarComoLeida(parseInt(notificacionId), usuarioId);
+
+    return {
+      success: true,
+      message: 'Notificación marcada como leída',
+    };
+  }
+
+  /**
+   * Marca todas las notificaciones como leídas
+   * POST /backend_api/notificaciones/marcar-todas-leidas
+   */
+  @Post('marcar-todas-leidas')
+  async marcarTodasComoLeidas(@Request() req) {
+    const rolId = req.user?.rol?.id;
+    const usuarioId = req.user?.id;
+
+    if (!rolId || !usuarioId) {
+      return { message: 'Usuario no autenticado', success: false };
+    }
+
+    await this.notificacionesService.marcarTodasComoLeidas(rolId, usuarioId);
+
+    return {
+      success: true,
+      message: 'Todas las notificaciones marcadas como leídas',
     };
   }
 }

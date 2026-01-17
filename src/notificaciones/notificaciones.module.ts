@@ -6,6 +6,7 @@ import { NotificacionesScheduler } from './notificaciones.scheduler';
 import { EventoSistema } from './entities/evento-sistema.entity';
 import { Notificacion } from './entities/notificacion.entity';
 import { NotificacionDestino } from './entities/notificacion-destino.entity';
+import { NotificacionLeida } from './entities/notificacion-leida.entity';
 import { TrabajadorCentro } from '../usuarios/trabajador-centro.entity';
 import { Paciente } from '../pacientes/paciente.entity';
 
@@ -15,6 +16,7 @@ import { Paciente } from '../pacientes/paciente.entity';
       EventoSistema,
       Notificacion,
       NotificacionDestino,
+      NotificacionLeida,
       TrabajadorCentro,
       Paciente,
     ]),

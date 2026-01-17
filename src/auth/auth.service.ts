@@ -62,25 +62,25 @@ export class AuthService {
       ultimo_acceso: new Date(),
     });
 
-    // Notificar acceso fuera de horario
-    try {
-      const nombreCompleto = `${user.nombres} ${user.apellidos}`;
-      const horaActual = new Date().toLocaleTimeString('es-ES', {
-        hour: '2-digit',
-        minute: '2-digit'
-      });
+    // DESHABILITADO: Notificar acceso fuera de horario
+    // try {
+    //   const nombreCompleto = `${user.nombres} ${user.apellidos}`;
+    //   const horaActual = new Date().toLocaleTimeString('es-ES', {
+    //     hour: '2-digit',
+    //     minute: '2-digit'
+    //   });
 
-      await this.notificacionesService.notificarAccesoFueraHorario(
-        user.id,
-        nombreCompleto,
-        horaActual,
-        ip,
-        userAgent,
-        user.id
-      );
-    } catch (error) {
-      console.error('Error al notificar acceso fuera de horario:', error);
-    }
+    //   await this.notificacionesService.notificarAccesoFueraHorario(
+    //     user.id,
+    //     nombreCompleto,
+    //     horaActual,
+    //     ip,
+    //     userAgent,
+    //     user.id
+    //   );
+    // } catch (error) {
+    //   console.error('Error al notificar acceso fuera de horario:', error);
+    // }
 
     return {
       access_token: this.jwtService.sign(payload),

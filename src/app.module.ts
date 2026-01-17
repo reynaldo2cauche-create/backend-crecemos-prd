@@ -96,6 +96,7 @@ import { NotificacionesModule } from './notificaciones/notificaciones.module';
 import { EventoSistema } from './notificaciones/entities/evento-sistema.entity';
 import { Notificacion } from './notificaciones/entities/notificacion.entity';
 import { NotificacionDestino } from './notificaciones/entities/notificacion-destino.entity';
+import { NotificacionLeida } from './notificaciones/entities/notificacion-leida.entity';
 import { Convenio } from './convenios/entities/convenio.entity';
 import { PacienteConvenio } from './convenios/entities/paciente-convenio.entity';
 import { ConveniosModule } from './convenios/convenios.module';
@@ -234,6 +235,7 @@ import { NivelEducacion } from './catalogos/nivel-educacion.entity';
         EventoSistema,
         Notificacion,
         NotificacionDestino,
+        NotificacionLeida,
         Convenio,
         PacienteConvenio,
         CategoriaBeneficio,
