@@ -104,9 +104,8 @@ export class NotificacionesScheduler {
     this.logger.log('🎂 Sincronizando cumpleaños de pacientes (0, 1, 2 días)...');
 
     for (let dias = 0; dias <= 2; dias++) {
-      // Para 0 y 1 día enviar a ADMIN y ADMISIÓN
-      const roles = dias === 0 || dias === 1 ? [1, 2] : [1];
-      await this.verificarCumpleaniosEnDias(dias, roles);
+      // Para todos los días enviar a ADMIN y ADMISIÓN (2 días antes)
+      await this.verificarCumpleaniosEnDias(dias, [1, 2]);
     }
 
     this.logger.log('✅ Cumpleaños de pacientes sincronizados');
@@ -207,8 +206,7 @@ export class NotificacionesScheduler {
 
   private async verificarCumpleaniosPacientes() {
     try {
-      await this.verificarCumpleaniosEnDias(2, [1]); // 2 días antes para ADMIN
-      await this.verificarCumpleaniosEnDias(2, [2]); // 1 día antes para ADMISIÓN
+      await this.verificarCumpleaniosEnDias(2, [1, 2]); // 2 días antes para ADMIN y ADMISIÓN
     } catch (error) {
       this.logger.error(`Error al verificar cumpleaños: ${error.message}`);
     }
@@ -298,7 +296,7 @@ export class NotificacionesScheduler {
   }
 
   /**
-   * Verifica si ya existe una notificación de CUMPLEAÑOS para un paciente en una fecha y roles
+   * Verifica si ya existe una notificación de CUMPLEAÑOS para un paciente en una fecha
    */
   private async verificarCumpleanosExistente(
     pacienteId: number,
@@ -310,21 +308,18 @@ export class NotificacionesScheduler {
         SELECT COUNT(*) as total
         FROM eventos_sistema e
         INNER JOIN notificaciones n ON n.evento_id = e.id
-        INNER JOIN notificaciones_destino nd ON nd.notificacion_id = n.id
         WHERE e.tipo_evento = 'CUMPLEANOS_PACIENTE'
           AND JSON_EXTRACT(e.datos_adicionales, '$.paciente_id') = ?
           AND DATE(e.fecha_evento) = ?
-          AND nd.rol_id IN (${roles.join(',')})
-        GROUP BY e.id
       `;
 
       const result = await this.trabajadoresRepo.query(query, [pacienteId, fecha]);
-      const existe = result.length > 0;
-      
+      const existe = parseInt(result[0].total) > 0;
+
       if (existe) {
-        this.logger.debug(`Ya existe notificación de cumpleaños para paciente ${pacienteId} en ${fecha} para roles [${roles.join(', ')}]`);
+        this.logger.debug(`Ya existe notificación de cumpleaños para paciente ${pacienteId} en ${fecha}`);
       }
-      
+
       return existe;
     } catch (error) {
       this.logger.error(`Error al verificar cumpleaños existente: ${error.message}`);

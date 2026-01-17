@@ -76,9 +76,9 @@ export class NotificacionesService {
 
   /**
    * Obtiene todas las notificaciones para un rol específico
-   * CORREGIDO: Ahora usa notificaciones_destino correctamente
+   * Excluye las que el usuario ya ha marcado como leídas
    */
-  async obtenerNotificacionesPorRol(rolId: number, limite: number = 50): Promise<any[]> {
+  async obtenerNotificacionesPorRol(rolId: number, usuarioId: number, limite: number = 50): Promise<any[]> {
     try {
       const query = `
         SELECT
@@ -94,12 +94,14 @@ export class NotificacionesService {
         FROM notificaciones n
         INNER JOIN notificaciones_destino nd ON nd.notificacion_id = n.id
         INNER JOIN eventos_sistema e ON e.id = n.evento_id
+        LEFT JOIN notificaciones_leidas nl ON nl.notificacion_id = n.id AND nl.usuario_id = ?
         WHERE nd.rol_id = ?
+          AND nl.id IS NULL
         ORDER BY n.fecha_creacion DESC
         LIMIT ?
       `;
 
-      const notificaciones = await this.notificacionesRepo.query(query, [rolId, limite]);
+      const notificaciones = await this.notificacionesRepo.query(query, [usuarioId, rolId, limite]);
 
       // Parsear datos_adicionales JSON
       return notificaciones.map(notif => ({
@@ -114,9 +116,9 @@ export class NotificacionesService {
 
   /**
    * Obtiene notificaciones recientes (últimas 24 horas) para un rol
-   * CORREGIDO: Ahora usa notificaciones_destino correctamente
+   * Excluye las que el usuario ya ha marcado como leídas
    */
-  async obtenerNotificacionesRecientes(rolId: number): Promise<any[]> {
+  async obtenerNotificacionesRecientes(rolId: number, usuarioId: number): Promise<any[]> {
     try {
       const query = `
         SELECT
@@ -131,12 +133,14 @@ export class NotificacionesService {
         FROM notificaciones n
         INNER JOIN notificaciones_destino nd ON nd.notificacion_id = n.id
         INNER JOIN eventos_sistema e ON e.id = n.evento_id
+        LEFT JOIN notificaciones_leidas nl ON nl.notificacion_id = n.id AND nl.usuario_id = ?
         WHERE nd.rol_id = ?
           AND n.fecha_creacion >= DATE_SUB(NOW(), INTERVAL 24 HOUR)
+          AND nl.id IS NULL
         ORDER BY n.fecha_creacion DESC
       `;
 
-      const notificaciones = await this.notificacionesRepo.query(query, [rolId]);
+      const notificaciones = await this.notificacionesRepo.query(query, [usuarioId, rolId]);
 
       return notificaciones.map(notif => ({
         ...notif,
@@ -151,21 +155,85 @@ export class NotificacionesService {
 
   /**
    * Cuenta las notificaciones para un rol
-   * CORREGIDO: Ahora usa notificaciones_destino correctamente
+   * Excluye las que el usuario ya ha marcado como leídas
    */
-  async contarNotificacionesPorRol(rolId: number): Promise<number> {
+  async contarNotificacionesPorRol(rolId: number, usuarioId: number): Promise<number> {
     try {
       const query = `
         SELECT COUNT(*) as total
         FROM notificaciones n
         INNER JOIN notificaciones_destino nd ON nd.notificacion_id = n.id
+        LEFT JOIN notificaciones_leidas nl ON nl.notificacion_id = n.id AND nl.usuario_id = ?
         WHERE nd.rol_id = ?
+          AND nl.id IS NULL
       `;
 
-      const result = await this.notificacionesRepo.query(query, [rolId]);
+      const result = await this.notificacionesRepo.query(query, [usuarioId, rolId]);
       return parseInt(result[0].total);
     } catch (error) {
       this.logger.error(`Error al contar notificaciones: ${error.message}`);
+      throw error;
+    }
+  }
+
+  /**
+   * Marca una notificación como leída para un usuario específico
+   */
+  async marcarComoLeida(notificacionId: number, usuarioId: number): Promise<void> {
+    try {
+      // Verificar si ya existe el registro usando SQL directo
+      const queryCheck = `
+        SELECT id FROM notificaciones_leidas
+        WHERE notificacion_id = ? AND usuario_id = ?
+        LIMIT 1
+      `;
+
+      const existe = await this.notificacionesRepo.query(queryCheck, [notificacionId, usuarioId]);
+
+      if (existe.length > 0) {
+        this.logger.debug(`Notificación ${notificacionId} ya estaba marcada como leída por usuario ${usuarioId}`);
+        return;
+      }
+
+      // Insertar registro usando SQL directo
+      const queryInsert = `
+        INSERT INTO notificaciones_leidas (notificacion_id, usuario_id, fecha_lectura)
+        VALUES (?, ?, NOW())
+      `;
+
+      await this.notificacionesRepo.query(queryInsert, [notificacionId, usuarioId]);
+      this.logger.log(`Notificación ${notificacionId} marcada como leída por usuario ${usuarioId}`);
+    } catch (error) {
+      this.logger.error(`Error al marcar notificación como leída: ${error.message}`);
+      throw error;
+    }
+  }
+
+  /**
+   * Marca todas las notificaciones como leídas para un usuario
+   */
+  async marcarTodasComoLeidas(rolId: number, usuarioId: number): Promise<void> {
+    try {
+      // Obtener todas las notificaciones no leídas del usuario
+      const query = `
+        SELECT DISTINCT n.id
+        FROM notificaciones n
+        INNER JOIN notificaciones_destino nd ON nd.notificacion_id = n.id
+        LEFT JOIN notificaciones_leidas nl ON nl.notificacion_id = n.id AND nl.usuario_id = ?
+        WHERE nd.rol_id = ?
+          AND nl.id IS NULL
+      `;
+
+      const notificaciones = await this.notificacionesRepo.query(query, [usuarioId, rolId]);
+
+      // Marcar cada una como leída
+      for (const notif of notificaciones) {
+        await this.marcarComoLeida(notif.id, usuarioId);
+      }
+
+      this.logger.log(`${notificaciones.length} notificaciones marcadas como leídas por usuario ${usuarioId}`);
+    } catch (error) {
+      this.logger.error(`Error al marcar todas como leídas: ${error.message}`);
       throw error;
     }
   }
