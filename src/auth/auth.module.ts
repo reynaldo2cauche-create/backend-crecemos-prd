@@ -8,6 +8,7 @@ import { LocalStrategy } from './strategies/local.strategy';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { TrabajadorCentro } from '../usuarios/trabajador-centro.entity';
 import { NotificacionesModule } from '../notificaciones/notificaciones.module';
+import { AuditoriaModule } from '../auditoria/auditoria.module';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { NotificacionesModule } from '../notificaciones/notificaciones.module';
       signOptions: { expiresIn: '24h' },
     }),
     forwardRef(() => NotificacionesModule),
+    forwardRef(() => AuditoriaModule),
   ],
   controllers: [AuthController],
   providers: [AuthService, LocalStrategy, JwtStrategy],

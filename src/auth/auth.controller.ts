@@ -8,11 +8,11 @@ export class AuthController {
     private authService: AuthService,
   ) {}
 
- @Post('login')
-@HttpCode(HttpStatus.OK)
-async login(@Body() body: { username: string; password: string }, @Req() req: Request) {
-  const ip = req.ip || req.headers['x-forwarded-for'] || req.connection.remoteAddress;
-  const userAgent = req.headers['user-agent'] || '';
-  return this.authService.login(body.username, body.password, ip as string, userAgent);
-}
+  @Post('login')
+  @HttpCode(HttpStatus.OK)
+  async login(@Body() body: { username: string; password: string }, @Req() req: Request) {
+    const ip = req.ip || req.headers['x-forwarded-for'] || req.connection.remoteAddress;
+    const userAgent = req.headers['user-agent'] || '';
+    return this.authService.login(body.username, body.password, ip as string, userAgent);
+  }
 } 

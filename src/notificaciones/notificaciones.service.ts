@@ -6,6 +6,7 @@ import { Notificacion } from './entities/notificacion.entity';
 import { NotificacionDestino } from './entities/notificacion-destino.entity';
 import { CrearEventoDto } from './dto/crear-evento.dto';
 import { CrearNotificacionDto } from './dto/crear-notificacion.dto';
+import { NotificacionLeida } from './entities/notificacion-leida.entity';
 
 @Injectable()
 export class NotificacionesService {
@@ -18,6 +19,8 @@ export class NotificacionesService {
     private notificacionesRepo: Repository<Notificacion>,
     @InjectRepository(NotificacionDestino)
     private destinosRepo: Repository<NotificacionDestino>,
+    @InjectRepository(NotificacionLeida) // ⚠️ INYECTAR ESTO
+    private leidasRepo: Repository<NotificacionLeida>,
   ) {}
 
   /**
@@ -76,7 +79,7 @@ export class NotificacionesService {
 
   /**
    * Obtiene todas las notificaciones para un rol específico
-   * Excluye las que el usuario ya ha marcado como leídas
+   * Incluye tanto las leídas como las no leídas (estilo Facebook)
    */
   async obtenerNotificacionesPorRol(rolId: number, usuarioId: number, limite: number = 50): Promise<any[]> {
     try {
@@ -90,23 +93,25 @@ export class NotificacionesService {
           e.tipo_evento,
           e.descripcion as evento_descripcion,
           e.datos_adicionales,
-          e.fecha_evento
+          e.fecha_evento,
+          CASE WHEN nl.id IS NOT NULL THEN 1 ELSE 0 END as leida
         FROM notificaciones n
         INNER JOIN notificaciones_destino nd ON nd.notificacion_id = n.id
         INNER JOIN eventos_sistema e ON e.id = n.evento_id
         LEFT JOIN notificaciones_leidas nl ON nl.notificacion_id = n.id AND nl.usuario_id = ?
         WHERE nd.rol_id = ?
-          AND nl.id IS NULL
+          AND n.fecha_creacion >= DATE_SUB(NOW(), INTERVAL 30 DAY)
         ORDER BY n.fecha_creacion DESC
         LIMIT ?
       `;
 
       const notificaciones = await this.notificacionesRepo.query(query, [usuarioId, rolId, limite]);
 
-      // Parsear datos_adicionales JSON
+      // Parsear datos_adicionales JSON y convertir leida a boolean
       return notificaciones.map(notif => ({
         ...notif,
         datos_adicionales: notif.datos_adicionales ? JSON.parse(notif.datos_adicionales) : null,
+        leida: notif.leida === 1, // Convertir a boolean
       }));
     } catch (error) {
       this.logger.error(`Error al obtener notificaciones: ${error.message}`);
@@ -115,47 +120,97 @@ export class NotificacionesService {
   }
 
   /**
-   * Obtiene notificaciones recientes (últimas 24 horas) para un rol
-   * Excluye las que el usuario ya ha marcado como leídas
+   * Obtiene notificaciones del último mes (leídas y no leídas)
+   * Si existe en notificaciones_leidas → leida = true
+   * Si NO existe en notificaciones_leidas → leida = false
    */
-  async obtenerNotificacionesRecientes(rolId: number, usuarioId: number): Promise<any[]> {
-    try {
-      const query = `
-        SELECT
-          n.id,
-          n.tipo_notificacion,
-          n.titulo,
-          n.mensaje,
-          n.fecha_creacion,
-          e.tipo_evento,
-          e.datos_adicionales,
-          TIMESTAMPDIFF(MINUTE, n.fecha_creacion, NOW()) as minutos_transcurridos
-        FROM notificaciones n
-        INNER JOIN notificaciones_destino nd ON nd.notificacion_id = n.id
-        INNER JOIN eventos_sistema e ON e.id = n.evento_id
-        LEFT JOIN notificaciones_leidas nl ON nl.notificacion_id = n.id AND nl.usuario_id = ?
-        WHERE nd.rol_id = ?
-          AND n.fecha_creacion >= DATE_SUB(NOW(), INTERVAL 24 HOUR)
-          AND nl.id IS NULL
-        ORDER BY n.fecha_creacion DESC
-      `;
+async obtenerNotificacionesRecientes(
+  rolId: number,
+  usuarioId: number,
+  limite: number = 20,
+  offset: number = 0
+): Promise<any[]> {
+  try {
 
-      const notificaciones = await this.notificacionesRepo.query(query, [usuarioId, rolId]);
+    const query = `
+      SELECT 
+        n.id,
+        n.tipo_notificacion,
+        n.titulo,
+        n.mensaje,
+        n.fecha_creacion,
+        e.tipo_evento,
+        e.datos_adicionales,
+        TIMESTAMPDIFF(MINUTE, n.fecha_creacion, NOW()) as minutos_transcurridos,
+        nl.id as notif_leida_id,
+        CASE 
+          WHEN nl.id IS NOT NULL THEN TRUE
+          ELSE FALSE
+        END as leida
+      FROM notificaciones n
+      INNER JOIN notificaciones_destino nd ON nd.notificacion_id = n.id
+      INNER JOIN eventos_sistema e ON e.id = n.evento_id
+      LEFT JOIN notificaciones_leidas nl ON nl.notificacion_id = n.id AND nl.usuario_id = ?
+      WHERE nd.rol_id = ?
+        AND n.fecha_creacion >= DATE_SUB(NOW(), INTERVAL 30 DAY)
+      ORDER BY n.fecha_creacion DESC
+      LIMIT ? OFFSET ?
+    `;
 
-      return notificaciones.map(notif => ({
+
+
+    const notificaciones = await this.notificacionesRepo.query(query, [
+      usuarioId,
+      rolId,
+      limite,
+      offset
+    ]);
+
+
+    // 🔴 DEPURACIÓN CRÍTICA - Verificar el estado leída
+    if (notificaciones.length > 0) {
+   
+      notificaciones.slice(0, 3).forEach(n => {
+   
+      });
+    }
+
+    // 🔴 PROCESAR correctamente los resultados
+    const notificacionesProcesadas = notificaciones.map(notif => {
+      // MySQL puede devolver 1/0, TRUE/FALSE, o números
+      let leidaBoolean = false;
+      
+      if (notif.leida === 1 || notif.leida === true || notif.leida === '1' || notif.leida === 'true') {
+        leidaBoolean = true;
+      }
+      
+      if (notif.notif_leida_id) {
+        leidaBoolean = true;
+      }
+      
+      const resultado = {
         ...notif,
         datos_adicionales: notif.datos_adicionales ? JSON.parse(notif.datos_adicionales) : null,
         tiempo_relativo: this.formatearTiempoRelativo(notif.minutos_transcurridos),
-      }));
-    } catch (error) {
-      this.logger.error(`Error al obtener notificaciones recientes: ${error.message}`);
-      throw error;
-    }
-  }
+        leida: leidaBoolean // Siempre boolean
+      };
+      
+  
+      
+      return resultado;
+    });
 
+    return notificacionesProcesadas;
+    
+  } catch (error) {
+    console.error('❌ [SERVICE] Error al obtener notificaciones recientes:', error);
+    console.error('Stack:', error.stack);
+    throw error;
+  }
+}
   /**
-   * Cuenta las notificaciones para un rol
-   * Excluye las que el usuario ya ha marcado como leídas
+   * Cuenta SOLO las notificaciones NO LEÍDAS
+   * (las que NO están en notificaciones_leidas)
    */
   async contarNotificacionesPorRol(rolId: number, usuarioId: number): Promise<number> {
     try {
@@ -165,6 +220,7 @@ export class NotificacionesService {
         INNER JOIN notificaciones_destino nd ON nd.notificacion_id = n.id
         LEFT JOIN notificaciones_leidas nl ON nl.notificacion_id = n.id AND nl.usuario_id = ?
         WHERE nd.rol_id = ?
+          AND n.fecha_creacion >= DATE_SUB(NOW(), INTERVAL 30 DAY)
           AND nl.id IS NULL
       `;
 
@@ -177,62 +233,126 @@ export class NotificacionesService {
   }
 
   /**
-   * Marca una notificación como leída para un usuario específico
+   * Marca una notificación como leída
    */
-  async marcarComoLeida(notificacionId: number, usuarioId: number): Promise<void> {
-    try {
-      // Verificar si ya existe el registro usando SQL directo
-      const queryCheck = `
-        SELECT id FROM notificaciones_leidas
-        WHERE notificacion_id = ? AND usuario_id = ?
-        LIMIT 1
-      `;
+async marcarComoLeida(notificacionId: number, usuarioId: number): Promise<{ success: boolean, nuevoConteo?: number }> {
+  try {
 
-      const existe = await this.notificacionesRepo.query(queryCheck, [notificacionId, usuarioId]);
 
-      if (existe.length > 0) {
-        this.logger.debug(`Notificación ${notificacionId} ya estaba marcada como leída por usuario ${usuarioId}`);
-        return;
-      }
+    // ✅ VERIFICAR SI LA NOTIFICACIÓN EXISTE
+    const notificacionExiste = await this.notificacionesRepo.findOne({
+      where: { id: notificacionId }
+    });
 
-      // Insertar registro usando SQL directo
-      const queryInsert = `
-        INSERT INTO notificaciones_leidas (notificacion_id, usuario_id, fecha_lectura)
-        VALUES (?, ?, NOW())
-      `;
-
-      await this.notificacionesRepo.query(queryInsert, [notificacionId, usuarioId]);
-      this.logger.log(`Notificación ${notificacionId} marcada como leída por usuario ${usuarioId}`);
-    } catch (error) {
-      this.logger.error(`Error al marcar notificación como leída: ${error.message}`);
-      throw error;
+    if (!notificacionExiste) {
+      console.error('❌ Notificación no existe:', notificacionId);
+      throw new Error(`Notificación ${notificacionId} no encontrada`);
     }
+
+    // ✅ VERIFICAR SI YA ESTÁ MARCADA COMO LEÍDA
+    const yaLeida = await this.leidasRepo.findOne({
+      where: {
+        notificacion_id: notificacionId,
+        usuario_id: usuarioId
+      }
+    });
+
+    if (yaLeida) {
+     
+      
+      // Devolver el conteo actualizado de todas formas
+      const nuevoConteo = await this.contarNotificacionesPorRol(
+        (await this.obtenerRolDelUsuario(usuarioId)), 
+        usuarioId
+      );
+      
+      return { success: true, nuevoConteo };
+    }
+
+    // ✅ CREAR E INSERTAR EL REGISTRO
+    const nuevaLeida = this.leidasRepo.create({
+      notificacion_id: notificacionId,
+      usuario_id: usuarioId,
+      fecha_lectura: new Date()
+    });
+
+    const resultado = await this.leidasRepo.save(nuevaLeida);
+
+
+    // ✅ VERIFICAR QUE SE INSERTÓ CORRECTAMENTE
+    const verificar = await this.leidasRepo.count({
+      where: {
+        notificacion_id: notificacionId,
+        usuario_id: usuarioId
+      }
+    });
+
+
+    if (verificar === 0) {
+      throw new Error('Error: No se pudo insertar en notificaciones_leidas');
+    }
+
+    // ✅ OBTENER NUEVO CONTEO
+    const rolId = await this.obtenerRolDelUsuario(usuarioId);
+    const nuevoConteo = await this.contarNotificacionesPorRol(rolId, usuarioId);
+
+
+    return { success: true, nuevoConteo };
+
+  } catch (error) {
+    console.error('🔴🔴🔴 ERROR EN marcarComoLeida:', error);
+    console.error('Stack:', error.stack);
+    throw error;
   }
+}
+
+// 🔴 AGREGAR ESTE MÉTODO AUXILIAR:
+private async obtenerRolDelUsuario(usuarioId: number): Promise<number> {
+  // Esto es un ejemplo - ajusta según tu estructura
+  const query = `SELECT rol_id FROM trabajador_centro WHERE id = ? LIMIT 1`;
+  const resultado = await this.notificacionesRepo.query(query, [usuarioId]);
+  return resultado[0]?.rol_id || 1; // Default 1 si no encuentra
+}
 
   /**
-   * Marca todas las notificaciones como leídas para un usuario
+   * Marca todas las notificaciones NO LEÍDAS como leídas
    */
   async marcarTodasComoLeidas(rolId: number, usuarioId: number): Promise<void> {
     try {
-      // Obtener todas las notificaciones no leídas del usuario
+   
+
       const query = `
         SELECT DISTINCT n.id
         FROM notificaciones n
         INNER JOIN notificaciones_destino nd ON nd.notificacion_id = n.id
         LEFT JOIN notificaciones_leidas nl ON nl.notificacion_id = n.id AND nl.usuario_id = ?
         WHERE nd.rol_id = ?
+          AND n.fecha_creacion >= DATE_SUB(NOW(), INTERVAL 30 DAY)
           AND nl.id IS NULL
       `;
 
       const notificaciones = await this.notificacionesRepo.query(query, [usuarioId, rolId]);
+   
 
-      // Marcar cada una como leída
-      for (const notif of notificaciones) {
-        await this.marcarComoLeida(notif.id, usuarioId);
+      if (notificaciones.length === 0) {
+       
+        return;
       }
 
-      this.logger.log(`${notificaciones.length} notificaciones marcadas como leídas por usuario ${usuarioId}`);
+      let marcadasExitosamente = 0;
+      for (const notif of notificaciones) {
+        try {
+          await this.marcarComoLeida(notif.id, usuarioId);
+          marcadasExitosamente++;
+        } catch (error) {
+          console.error(`❌ Error al marcar notificación ${notif.id}:`, error.message);
+        }
+      }
+
+
+      this.logger.log(`${marcadasExitosamente} notificaciones marcadas como leídas por usuario ${usuarioId}`);
     } catch (error) {
+      console.error('❌ Error al marcar todas como leídas:', error);
       this.logger.error(`Error al marcar todas como leídas: ${error.message}`);
       throw error;
     }
@@ -256,11 +376,6 @@ export class NotificacionesService {
   // MÉTODOS ESPECÍFICOS POR TIPO DE NOTIFICACIÓN
   // ========================================
 
-  /**
-   * A) Aniversario Laboral de Empleado
-   * Roles: ADMINISTRADOR (rol_id = 1)
-   * Anticipación: 7 días antes
-   */
   async notificarAniversarioLaboral(
     empleadoId: number,
     nombreEmpleado: string,
@@ -287,14 +402,10 @@ export class NotificacionesService {
       titulo: 'Aniversario Laboral',
       mensaje: `${nombreEmpleado} cumplirá ${anosServicio} años en la empresa el ${fechaIngreso}. Cargo: ${cargo}.`,
       evento_id: evento.id,
-      roles_destino: [1], // Solo ADMINISTRADOR
+      roles_destino: [1],
     });
   }
 
-  /**
-   * B) Cumpleaños de Paciente
-   * Roles: ADMINISTRADOR (2 días antes) y ADMISIÓN (1 día antes)
-   */
   async notificarCumpleanospPaciente(
     pacienteId: number,
     nombrePaciente: string,
@@ -320,12 +431,11 @@ export class NotificacionesService {
       titulo: 'Cumpleaños de Paciente',
       mensaje: `${nombrePaciente} cumplirá ${edad} años el ${fechaNacimiento}.`,
       evento_id: evento.id,
-      roles_destino: rolesDestino, // [1] para ADMIN (2 días antes) o [2] para ADMISIÓN (1 día antes)
+      roles_destino: rolesDestino,
     });
   }
 
-
- async notificarCumpleanosEmpleado(
+  async notificarCumpleanosEmpleado(
     empleadoId: number,
     nombreEmpleado: string,
     fechaNacimiento: string,
@@ -351,16 +461,10 @@ export class NotificacionesService {
       titulo: 'Cumpleaños de Empleado',
       mensaje: `${nombreEmpleado} cumplirá ${edad} años el ${fechaNacimiento}. Cargo: ${cargo}.`,
       evento_id: evento.id,
-      roles_destino: [1], // Solo ADMINISTRADOR
+      roles_destino: [1],
     });
   }
 
-  
-  /**
-   * C) Acceso Fuera de Horario Laboral
-   * Roles: ADMINISTRADOR (rol_id = 1)
-   * Anticipación: Inmediata
-   */
   async notificarAccesoFueraHorario(
     empleadoId: number,
     nombreEmpleado: string,
@@ -387,15 +491,10 @@ export class NotificacionesService {
       titulo: 'Acceso Fuera de Horario',
       mensaje: `${nombreEmpleado} accedió al sistema el ${new Date().toLocaleDateString('es-ES')} a las ${horaIngreso}. IP: ${ip}`,
       evento_id: evento.id,
-      roles_destino: [1], // Solo ADMINISTRADOR
+      roles_destino: [1],
     });
   }
 
-  /**
-   * D) Cita Eliminada
-   * Roles: ADMINISTRADOR (rol_id = 1)
-   * Anticipación: Inmediata
-   */
   async notificarCitaEliminada(
     citaId: number,
     usuarioEliminadorId: number,
@@ -425,15 +524,10 @@ export class NotificacionesService {
       titulo: 'Cita Eliminada',
       mensaje: `${nombreUsuarioEliminador} eliminó una cita de ${pacienteNombre} programada para el ${fechaCita} a las ${horaCita} con ${terapeutaNombre}. Motivo: ${motivoEliminacion}`,
       evento_id: evento.id,
-      roles_destino: [1], // Solo ADMINISTRADOR
+      roles_destino: [1],
     });
   }
 
-  /**
-   * E) Modificación de Cita
-   * Roles: ADMINISTRADOR (rol_id = 1)
-   * Anticipación: Inmediata
-   */
   async notificarCitaModificada(
     citaId: number,
     usuarioModificadorId: number,
@@ -479,15 +573,10 @@ export class NotificacionesService {
       titulo: 'Cita Modificada',
       mensaje: `${nombreUsuarioModificador} ${mensajeCambios} de ${pacienteNombre}. Motivo: ${motivoModificacion}`,
       evento_id: evento.id,
-      roles_destino: [1], // Solo ADMINISTRADOR
+      roles_destino: [1],
     });
   }
 
-  /**
-   * F) Nota de Evolución Registrada
-   * Roles: ADMINISTRADOR (rol_id = 1)
-   * Anticipación: Inmediata
-   */
   async notificarNotaEvolucion(
     terapeutaId: number,
     terapeutaNombre: string,
@@ -511,7 +600,7 @@ export class NotificacionesService {
       titulo: 'Nota de Evolución Registrada',
       mensaje: `${terapeutaNombre} registró una nota de evolución para ${pacienteNombre}. Tipo: ${tipoSesion}.`,
       evento_id: evento.id,
-      roles_destino: [1], // Solo ADMINISTRADOR
+      roles_destino: [1],
     });
   }
 }
