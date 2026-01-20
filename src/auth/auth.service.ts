@@ -9,6 +9,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { TrabajadorCentro } from '../usuarios/trabajador-centro.entity';
 import { NotificacionesService } from '../notificaciones/notificaciones.service';
+import { AuditoriaService } from '../auditoria/auditoria.service';
 import * as bcrypt from 'bcrypt';
 
 @Injectable()
@@ -19,6 +20,8 @@ export class AuthService {
     private jwtService: JwtService,
     @Inject(forwardRef(() => NotificacionesService))
     private notificacionesService: NotificacionesService,
+    @Inject(forwardRef(() => AuditoriaService))
+    private auditoriaService: AuditoriaService,
   ) {}
 
   async validateUser(username: string, password: string): Promise<any> {
@@ -61,6 +64,22 @@ export class AuthService {
     await this.trabajadorRepository.update(user.id, {
       ultimo_acceso: new Date(),
     });
+
+    // Registrar login en auditoría
+    try {
+      await this.auditoriaService.registrar({
+        trabajadorId: user.id,
+        modulo: 'AUTH',
+        accion: 'LOGIN',
+        descripcion: `${user.nombres} ${user.apellidos} inició sesión en el sistema`,
+        ipAddress: ip,
+        userAgent: userAgent,
+        datosNuevos: null,
+      });
+    } catch (error) {
+      console.error('Error al registrar auditoría de login:', error);
+      // No lanzar error para no afectar el login
+    }
 
     // DESHABILITADO: Notificar acceso fuera de horario
     // try {
