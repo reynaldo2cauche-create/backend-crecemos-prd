@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsNumber, IsBoolean, IsEmail, ValidateNested, IsObject, ValidateIf } from 'class-validator';
+import { IsString, IsOptional, IsNumber, IsBoolean, IsEmail, ValidateNested, IsObject, ValidateIf, IsArray } from 'class-validator';
 import { Type } from 'class-transformer';
 import { CreateParejaDto } from './create-pareja.dto';
 
@@ -94,6 +94,18 @@ export class ResponsableDataDto {
 
   @IsEmail()
   email: string;
+
+  @IsOptional()
+  @IsString()
+  proceso_legal?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  tiene_proceso_legal?: boolean;
+
+  @IsOptional()
+  @IsNumber()
+  proceso_legal_infantil_id?: number;
 }
 
 export class ConsentimientosDto {
@@ -122,10 +134,18 @@ export class CreatePacienteCompletoDto {
   @Type(() => ServicioDataDto)
   servicio: ServicioDataDto;
 
+  // Soporte para responsable único (legacy) - mantener compatibilidad
   @IsOptional()
   @ValidateNested()
   @Type(() => ResponsableDataDto)
   responsable?: ResponsableDataDto;
+
+  // Soporte para múltiples responsables (nuevo)
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ResponsableDataDto)
+  responsables?: ResponsableDataDto[];
 
   @IsOptional()
   @ValidateNested()

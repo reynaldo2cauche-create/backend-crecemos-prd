@@ -7,6 +7,7 @@ import { Servicios } from '../catalogos/servicios.entity';
 import { EstadoPaciente } from './estado-paciente.entity';
 import { PacienteServicio } from './paciente-servicio.entity';
 import { ParejaPaciente } from './entities/pareja-paciente.entity';
+import { PacienteResponsable } from './entities/paciente-responsable.entity';
 import { ReporteEvolucion } from '../historia-clinica/entities/reporte-evolucion.entity';
 import { EntrevistaPadres } from '../historia-clinica/entities/entrevista-padres.entity';
 
@@ -169,4 +170,7 @@ export class Paciente {
 
   @OneToMany(() => EntrevistaPadres, entrevista => entrevista.paciente)
   entrevistasPadres: EntrevistaPadres[];
+
+  @OneToMany(() => PacienteResponsable, (responsable) => responsable.paciente, { cascade: true })
+  responsables: PacienteResponsable[];
 }

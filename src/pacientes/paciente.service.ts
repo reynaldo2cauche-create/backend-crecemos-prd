@@ -9,6 +9,7 @@ import { EstadoPaciente } from './estado-paciente.entity';
 import { PacienteServicio } from './paciente-servicio.entity';
 import { Servicios } from '../catalogos/servicios.entity';
 import { ParejaPacienteService } from './services/pareja-paciente.service';
+import { PacienteResponsableService } from './services/paciente-responsable.service';
 import { requierePareja } from '../constants/servicios.constants';
 import { CreatePacienteCompletoDto } from './dto/create-paciente-completo.dto';
 import { UpdateEstadoPacienteDto } from './dto/update-estado-paciente.dto';
@@ -23,7 +24,7 @@ export class PacienteService {
   constructor(
     @InjectRepository(Paciente)
     private pacienteRepository: Repository<Paciente>,
-    private readonly conveniosService: ConveniosService, 
+    private readonly conveniosService: ConveniosService,
     @InjectRepository(EstadoPaciente)
     private estadoPacienteRepository: Repository<EstadoPaciente>,
     @InjectRepository(PacienteServicio)
@@ -31,7 +32,7 @@ export class PacienteService {
     @InjectRepository(Servicios)
     private serviciosRepository: Repository<Servicios>,
     private parejaPacienteService: ParejaPacienteService,
-    
+    private pacienteResponsableService: PacienteResponsableService,
   ) {}
 
   /**
@@ -602,15 +603,16 @@ async findAll(filters?: {
       motivo_consulta: dto.servicio.motivo_consulta,
       referido_por: dto.servicio.referido_por,
 
-      // Datos del responsable (si existe)
-      responsable_nombre: dto.responsable?.nombre,
-      responsable_apellido_paterno: dto.responsable?.apellido_paterno,
-      responsable_apellido_materno: dto.responsable?.apellido_materno,
-      responsable_tipo_documento: dto.responsable ? { id: dto.responsable.tipo_documento_id } : null,
-      responsable_numero_documento: dto.responsable?.numero_documento,
-      responsable_relacion: dto.responsable ? { id: dto.responsable.relacion_id } : null,
-      responsable_telefono: dto.responsable?.telefono,
-      responsable_email: dto.responsable?.email,
+      // Datos del responsable único (legacy - mantener compatibilidad)
+      // Solo se guarda en las columnas viejas SI no viene el array de responsables
+      responsable_nombre: (!dto.responsables && dto.responsable) ? dto.responsable.nombre : null,
+      responsable_apellido_paterno: (!dto.responsables && dto.responsable) ? dto.responsable.apellido_paterno : null,
+      responsable_apellido_materno: (!dto.responsables && dto.responsable) ? dto.responsable.apellido_materno : null,
+      responsable_tipo_documento: (!dto.responsables && dto.responsable) ? { id: dto.responsable.tipo_documento_id } : null,
+      responsable_numero_documento: (!dto.responsables && dto.responsable) ? dto.responsable.numero_documento : null,
+      responsable_relacion: (!dto.responsables && dto.responsable) ? { id: dto.responsable.relacion_id } : null,
+      responsable_telefono: (!dto.responsables && dto.responsable) ? dto.responsable.telefono : null,
+      responsable_email: (!dto.responsables && dto.responsable) ? dto.responsable.email : null,
 
       // Consentimientos
       acepta_terminos: dto.consentimientos.acepta_terminos,
@@ -622,6 +624,27 @@ async findAll(filters?: {
     });
 
     const savedPaciente = await this.pacienteRepository.save(paciente);
+
+    // 🆕 Crear múltiples responsables en la tabla nueva si vienen
+    if (dto.responsables && dto.responsables.length > 0) {
+      const responsablesParaCrear = dto.responsables.map(resp => ({
+        nombres: resp.nombre,
+        apellido_paterno: resp.apellido_paterno,
+        apellido_materno: resp.apellido_materno,
+        tipo_documento_id: resp.tipo_documento_id,
+        numero_documento: resp.numero_documento,
+        responsable_relacion_id: resp.relacion_id,
+        telefono: resp.telefono,
+        email: resp.email,
+        tiene_proceso_legal: resp.tiene_proceso_legal ?? false,
+        proceso_legal_infantil_id: resp.proceso_legal_infantil_id ?? null,
+      }));
+
+      await this.pacienteResponsableService.agregarMultiplesResponsables(
+        savedPaciente.id,
+        responsablesParaCrear,
+      );
+    }
 
     // Crear paciente_servicio
     if (dto.servicio.servicio_id) {

@@ -23,10 +23,13 @@ import { Servicios } from '../catalogos/servicios.entity';
 import { NotaEvolucion } from './entities/nota-evolucion.entity';
 import { NotaEvolucionService } from './services/nota-evolucion.service';
 import { NotaEvolucionController } from './controllers/nota-evolucion.controller';
+import { PacienteResponsableController } from './controllers/paciente-responsable.controller';
 import { TransferenciaNotas } from './entities/transferencia-notas.entity';
 import { TrabajadorCentro } from '../usuarios/trabajador-centro.entity';
 import { ParejaPaciente } from './entities/pareja-paciente.entity';
 import { ParejaPacienteService } from './services/pareja-paciente.service';
+import { PacienteResponsable } from './entities/paciente-responsable.entity';
+import { PacienteResponsableService } from './services/paciente-responsable.service';
 import { EstadoPacienteService } from './estado-paciente.service';
 import { EstadoPacienteController } from './estado-paciente.controller';
 import { ConveniosModule } from 'src/convenios/convenios.module';
@@ -47,9 +50,7 @@ import { NotificacionesService } from 'src/notificaciones/notificaciones.service
       TransferenciaNotas,
       TrabajadorCentro,
       ParejaPaciente,
-      
-  
-
+      PacienteResponsable,
     ]),
     ConveniosModule,
     NotificacionesModule,
@@ -62,9 +63,8 @@ import { NotificacionesService } from 'src/notificaciones/notificaciones.service
     ComentarioTerapiaService,
     NotaEvolucionService,
     ParejaPacienteService,
+    PacienteResponsableService,
     EstadoPacienteService,
-  
-    
   ],
   controllers: [
     PacienteController,
@@ -75,6 +75,7 @@ import { NotificacionesService } from 'src/notificaciones/notificaciones.service
     RecepcionController,
     TerapeutaController,
     NotaEvolucionController,
+    PacienteResponsableController,
     EstadoPacienteController
   ]
 })

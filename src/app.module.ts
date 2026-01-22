@@ -45,6 +45,7 @@ import { NotaEvolucion } from './pacientes/entities/nota-evolucion.entity';
 import { Rol } from './usuarios/rol.entity';
 import { Especialidad } from './usuarios/especialidad.entity';
 import { ParejaPaciente } from './pacientes/entities/pareja-paciente.entity';
+import { PacienteResponsable } from './pacientes/entities/paciente-responsable.entity';
 import { HistoriaClinicaModule } from './historia-clinica/historia-clinica.module';
 import { CitasModule } from './citas/citas.module';
 import { ReporteEvolucion } from './historia-clinica/entities/reporte-evolucion.entity';
@@ -108,6 +109,8 @@ import { EstadoCivil } from './catalogos/estado-civil.entity';
 import { Parentesco } from './catalogos/parentesco.entity';
 import { DatosAcademicos } from './usuarios/datos-academicos.entity';
 import { NivelEducacion } from './catalogos/nivel-educacion.entity';
+import { ProcesoLegalInfantil } from './procesos-legales-infantiles/entities/proceso-legal-infantil.entity';
+import { ProcesosLegalesInfantilesModule } from './procesos-legales-infantiles/procesos-legales-infantiles.module';
 // import { ScheduleModule } from '@nestjs/schedule';
 
 @Module({
@@ -191,6 +194,7 @@ import { NivelEducacion } from './catalogos/nivel-educacion.entity';
         Rol,
         Especialidad,
         ParejaPaciente,
+        PacienteResponsable,
         ReporteEvolucion,
         EntrevistaPadres,
         ArchivoDigital,
@@ -245,7 +249,8 @@ import { NivelEducacion } from './catalogos/nivel-educacion.entity';
         EstadoCivil,
         Parentesco,
         DatosAcademicos,
-        NivelEducacion
+        NivelEducacion,
+        ProcesoLegalInfantil
       ],
         synchronize: false,   // true en desarrollo, false en producción - DESHABILITADO para evitar conflictos con foreign keys
           // Activar logs de SQL para debug
@@ -278,7 +283,8 @@ import { NivelEducacion } from './catalogos/nivel-educacion.entity';
     AuthModule,
     Comentario,
     ConveniosModule,
-    StaffModule
+    StaffModule,
+    ProcesosLegalesInfantilesModule
   ],
   controllers: [AppController],
   providers: [
