@@ -81,4 +81,7 @@ export class Cita {
 
   @Column({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP', onUpdate: 'CURRENT_TIMESTAMP' })
   updated_at: Date;
+
+  @Column({ type: 'tinyint', default: 1, comment: 'Estado: 1=Activo, 0=Eliminado (Soft Delete)' })
+  flg_activo: number;
 }

@@ -212,6 +212,7 @@ export class HistorialCitasService {
           email: null,
         },
         descripcion_cambios: h.descripcion_cambios,
+        motivo_accion: h.motivo_accion || null,
         tipo_cita: tipoCita,
 
         // DATOS COMUNES A TODOS LOS TIPOS

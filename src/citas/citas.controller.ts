@@ -30,6 +30,16 @@ export class CitasController {
     return this.citasService.getTiposCita();
   }
 
+  @Get('estadisticas')
+  async obtenerEstadisticas(@Query() query: any) {
+    const { fecha_desde, fecha_hasta, terapeuta_id } = query;
+    return this.citasService.obtenerEstadisticas(
+      fecha_desde,
+      fecha_hasta,
+      terapeuta_id ? +terapeuta_id : undefined
+    );
+  }
+
   // ✅ RUTAS CON PARÁMETROS AL FINAL
   @Get(':id/historial')
   async obtenerHistorial(@Param('id') id: string) {
