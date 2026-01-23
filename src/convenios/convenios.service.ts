@@ -6,12 +6,15 @@ import { Convenio } from './entities/convenio.entity';
 import { PacienteConvenio } from './entities/paciente-convenio.entity';
 import { Beneficio } from './entities/beneficio.entity';
 import { CategoriaBeneficio } from './entities/categoria-beneficio.entity';
+import { BeneficioTermino } from './entities/beneficio-termino.entity';
 import { CreateConvenioDto } from './dto/create-convenio.dto';
 import { UpdateConvenioDto } from './dto/update-convenio.dto';
 import { CreatePacienteConvenioDto } from './dto/create-paciente-convenio.dto';
 import { UpdatePacienteConvenioDto } from './dto/update-paciente-convenio.dto';
 import { CreateBeneficioDto } from './dto/create-beneficio.dto';
 import { UpdateBeneficioDto } from './dto/update-beneficio.dto';
+import { CreateBeneficioTerminoDto } from './dto/create-beneficio-termino.dto';
+import { UpdateBeneficioTerminoDto } from './dto/update-beneficio-termino.dto';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -28,6 +31,8 @@ export class ConveniosService {
     private readonly beneficioRepo: Repository<Beneficio>,
     @InjectRepository(CategoriaBeneficio)
     private readonly categoriaBeneficioRepo: Repository<CategoriaBeneficio>,
+    @InjectRepository(BeneficioTermino)
+    private readonly beneficioTerminoRepo: Repository<BeneficioTermino>,
   ) {
     // Crear carpeta de uploads si no existe
     if (!fs.existsSync(this.uploadPath)) {
@@ -456,6 +461,76 @@ export class ConveniosService {
       throw new NotFoundException(`Categoría de beneficio con ID ${id} no encontrada`);
     }
     return categoria;
+  }
+
+  // =============== TÉRMINOS Y CONDICIONES DE BENEFICIOS ===============
+
+  async createBeneficioTermino(dto: CreateBeneficioTerminoDto): Promise<BeneficioTermino> {
+    // Verificar que el beneficio existe
+    const beneficio = await this.beneficioRepo.findOne({ where: { id: dto.beneficio_id } });
+    if (!beneficio) {
+      throw new NotFoundException(`Beneficio con ID ${dto.beneficio_id} no encontrado`);
+    }
+
+    const termino = this.beneficioTerminoRepo.create({
+      beneficio_id: dto.beneficio_id,
+      descripcion: dto.descripcion,
+      orden: dto.orden !== undefined ? dto.orden : 0,
+      activo: dto.activo !== undefined ? dto.activo : true,
+    });
+
+    return await this.beneficioTerminoRepo.save(termino);
+  }
+
+  async findTerminosByBeneficio(beneficioId: number, activo?: boolean): Promise<BeneficioTermino[]> {
+    const where: any = { beneficio_id: beneficioId };
+    if (activo !== undefined) {
+      where.activo = activo;
+    }
+
+    return await this.beneficioTerminoRepo.find({
+      where,
+      order: { orden: 'ASC', id: 'ASC' }
+    });
+  }
+
+  async findOneBeneficioTermino(id: number): Promise<BeneficioTermino> {
+    const termino = await this.beneficioTerminoRepo.findOne({
+      where: { id },
+      relations: ['beneficio']
+    });
+
+    if (!termino) {
+      throw new NotFoundException(`Término con ID ${id} no encontrado`);
+    }
+
+    return termino;
+  }
+
+  async updateBeneficioTermino(id: number, dto: UpdateBeneficioTerminoDto): Promise<BeneficioTermino> {
+    const termino = await this.findOneBeneficioTermino(id);
+
+    // Si se está cambiando el beneficio, verificar que existe
+    if (dto.beneficio_id && dto.beneficio_id !== termino.beneficio_id) {
+      const beneficio = await this.beneficioRepo.findOne({ where: { id: dto.beneficio_id } });
+      if (!beneficio) {
+        throw new NotFoundException(`Beneficio con ID ${dto.beneficio_id} no encontrado`);
+      }
+    }
+
+    Object.assign(termino, dto);
+    return await this.beneficioTerminoRepo.save(termino);
+  }
+
+  async removeBeneficioTermino(id: number): Promise<void> {
+    const termino = await this.findOneBeneficioTermino(id);
+    await this.beneficioTerminoRepo.remove(termino);
+  }
+
+  async setEstadoBeneficioTermino(id: number, activo: boolean): Promise<BeneficioTermino> {
+    const termino = await this.findOneBeneficioTermino(id);
+    termino.activo = activo;
+    return await this.beneficioTerminoRepo.save(termino);
   }
 
 }

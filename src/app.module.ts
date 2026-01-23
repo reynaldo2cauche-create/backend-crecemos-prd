@@ -102,6 +102,7 @@ import { Convenio } from './convenios/entities/convenio.entity';
 import { PacienteConvenio } from './convenios/entities/paciente-convenio.entity';
 import { ConveniosModule } from './convenios/convenios.module';
 import { CategoriaBeneficio } from './convenios/entities/categoria-beneficio.entity';
+import { BeneficioTermino } from './convenios/entities/beneficio-termino.entity';
 import { StaffModule } from './staff/staff.module';
 import { Staff } from './staff/entities/staff.entity';
 import { StaffCursos } from './staff/entities/staff-cursos.entity';
@@ -243,6 +244,7 @@ import { ProcesosLegalesInfantilesModule } from './procesos-legales-infantiles/p
         Convenio,
         PacienteConvenio,
         CategoriaBeneficio,
+        BeneficioTermino,
         TipoCita,
         Staff,
         StaffCursos,

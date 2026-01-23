@@ -8,12 +8,13 @@ import { Convenio } from './entities/convenio.entity';
 import { PacienteConvenio } from './entities/paciente-convenio.entity';
 import { Beneficio } from './entities/beneficio.entity';
 import { CategoriaBeneficio } from './entities/categoria-beneficio.entity';
+import { BeneficioTermino } from './entities/beneficio-termino.entity';
 import { diskStorage } from 'multer';
 import * as path from 'path';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Convenio, PacienteConvenio, Beneficio, CategoriaBeneficio]),
+    TypeOrmModule.forFeature([Convenio, PacienteConvenio, Beneficio, CategoriaBeneficio, BeneficioTermino]),
     MulterModule.register({
       storage: diskStorage({
         destination: (req, file, callback) => {
