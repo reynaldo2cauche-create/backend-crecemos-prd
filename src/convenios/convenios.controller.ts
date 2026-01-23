@@ -27,6 +27,8 @@ import { CreatePacienteConvenioDto } from './dto/create-paciente-convenio.dto';
 import { UpdatePacienteConvenioDto } from './dto/update-paciente-convenio.dto';
 import { CreateBeneficioDto } from './dto/create-beneficio.dto';
 import { UpdateBeneficioDto } from './dto/update-beneficio.dto';
+import { CreateBeneficioTerminoDto } from './dto/create-beneficio-termino.dto';
+import { UpdateBeneficioTerminoDto } from './dto/update-beneficio-termino.dto';
 import { ApiTags, ApiOperation, ApiResponse, ApiQuery, ApiParam, ApiConsumes, ApiBody } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { Auditable } from '../auditoria/decorators/auditable.decorator';
@@ -223,10 +225,6 @@ export class ConveniosController {
   @Post('beneficios')
   @ApiOperation({ summary: 'Crear un nuevo beneficio' })
   @ApiResponse({ status: 201, description: 'Beneficio creado exitosamente' })
-  @Auditable({
-    modulo: 'CONVENIOS',
-    accion: 'CREAR_BENEFICIO',
-  })
   createBeneficio(@Body() dto: CreateBeneficioDto, @Request() req) {
     return this.conveniosService.createBeneficio(dto, req.user?.id);
   }
@@ -265,10 +263,6 @@ export class ConveniosController {
   @ApiOperation({ summary: 'Actualizar un beneficio' })
   @ApiParam({ name: 'id', description: 'ID del beneficio' })
   @ApiResponse({ status: 200, description: 'Beneficio actualizado exitosamente' })
-  @Auditable({
-    modulo: 'CONVENIOS',
-    accion: 'EDITAR_BENEFICIO',
-  })
   updateBeneficio(
     @Param('id') id: string,
     @Body() dto: UpdateBeneficioDto,
@@ -282,10 +276,6 @@ export class ConveniosController {
   @ApiParam({ name: 'id', description: 'ID del beneficio' })
   @ApiResponse({ status: 200, description: 'Beneficio eliminado exitosamente' })
   @ApiResponse({ status: 400, description: 'No se puede eliminar, tiene convenios asociados' })
-  @Auditable({
-    modulo: 'CONVENIOS',
-    accion: 'ELIMINAR_BENEFICIO',
-  })
   removeBeneficio(@Param('id') id: string) {
     return this.conveniosService.removeBeneficio(+id);
   }
@@ -294,10 +284,6 @@ export class ConveniosController {
   @ApiOperation({ summary: 'Activar un beneficio' })
   @ApiParam({ name: 'id', description: 'ID del beneficio' })
   @ApiResponse({ status: 200, description: 'Beneficio activado exitosamente' })
-  @Auditable({
-    modulo: 'CONVENIOS',
-    accion: 'ACTIVAR_BENEFICIO',
-  })
   activarBeneficio(@Param('id') id: string, @Request() req) {
     return this.conveniosService.setEstadoBeneficio(+id, true, req.user?.id);
   }
@@ -306,12 +292,77 @@ export class ConveniosController {
   @ApiOperation({ summary: 'Desactivar un beneficio' })
   @ApiParam({ name: 'id', description: 'ID del beneficio' })
   @ApiResponse({ status: 200, description: 'Beneficio desactivado exitosamente' })
-  @Auditable({
-    modulo: 'CONVENIOS',
-    accion: 'DESACTIVAR_BENEFICIO',
-  })
   desactivarBeneficio(@Param('id') id: string, @Request() req) {
     return this.conveniosService.setEstadoBeneficio(+id, false, req.user?.id);
+  }
+
+  // =============== TÉRMINOS Y CONDICIONES DE BENEFICIOS ===============
+  // IMPORTANTE: Estas rutas deben ir ANTES de 'beneficios/:id' para evitar conflictos
+
+  @Post('beneficios/terminos')
+  @ApiOperation({ summary: 'Crear un nuevo término o condición para un beneficio' })
+  @ApiResponse({ status: 201, description: 'Término creado exitosamente' })
+  createBeneficioTermino(@Body() dto: CreateBeneficioTerminoDto, @Request() req) {
+    return this.conveniosService.createBeneficioTermino(dto);
+  }
+
+  @Get('beneficios/terminos/:id/activar')
+  @ApiOperation({ summary: 'Activar un término' })
+  @ApiParam({ name: 'id', description: 'ID del término' })
+  @ApiResponse({ status: 200, description: 'Término activado exitosamente' })
+  activarBeneficioTermino(@Param('id') id: string, @Request() req) {
+    return this.conveniosService.setEstadoBeneficioTermino(+id, true);
+  }
+
+  @Get('beneficios/terminos/:id/desactivar')
+  @ApiOperation({ summary: 'Desactivar un término' })
+  @ApiParam({ name: 'id', description: 'ID del término' })
+  @ApiResponse({ status: 200, description: 'Término desactivado exitosamente' })
+  desactivarBeneficioTermino(@Param('id') id: string, @Request() req) {
+    return this.conveniosService.setEstadoBeneficioTermino(+id, false);
+  }
+
+  @Get('beneficios/terminos/:id')
+  @ApiOperation({ summary: 'Obtener un término por ID' })
+  @ApiParam({ name: 'id', description: 'ID del término' })
+  @ApiResponse({ status: 200, description: 'Término encontrado' })
+  @ApiResponse({ status: 404, description: 'Término no encontrado' })
+  findOneBeneficioTermino(@Param('id') id: string) {
+    return this.conveniosService.findOneBeneficioTermino(+id);
+  }
+
+  @Patch('beneficios/terminos/:id')
+  @ApiOperation({ summary: 'Actualizar un término' })
+  @ApiParam({ name: 'id', description: 'ID del término' })
+  @ApiResponse({ status: 200, description: 'Término actualizado exitosamente' })
+  updateBeneficioTermino(
+    @Param('id') id: string,
+    @Body() dto: UpdateBeneficioTerminoDto,
+    @Request() req
+  ) {
+    return this.conveniosService.updateBeneficioTermino(+id, dto);
+  }
+
+  @Delete('beneficios/terminos/:id')
+  @ApiOperation({ summary: 'Eliminar un término' })
+  @ApiParam({ name: 'id', description: 'ID del término' })
+  @ApiResponse({ status: 200, description: 'Término eliminado exitosamente' })
+  removeBeneficioTermino(@Param('id') id: string) {
+    return this.conveniosService.removeBeneficioTermino(+id);
+  }
+
+  @Public()
+  @Get('beneficios/:beneficioId/terminos')
+  @ApiOperation({ summary: 'Obtener todos los términos de un beneficio' })
+  @ApiParam({ name: 'beneficioId', description: 'ID del beneficio' })
+  @ApiQuery({ name: 'activo', required: false, type: Boolean })
+  @ApiResponse({ status: 200, description: 'Lista de términos del beneficio' })
+  findTerminosByBeneficio(
+    @Param('beneficioId') beneficioId: string,
+    @Query('activo') activo?: string
+  ) {
+    const activoBoolean = activo === 'true' ? true : activo === 'false' ? false : undefined;
+    return this.conveniosService.findTerminosByBeneficio(+beneficioId, activoBoolean);
   }
 
   // =============== CONVENIO BY ID ===============
