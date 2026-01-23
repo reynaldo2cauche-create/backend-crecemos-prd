@@ -801,231 +801,189 @@ private async actualizarVisitaEscolar(id: number, dto: CrearCitaDto): Promise<Ci
     });
   }
 
-  /**
-   * Obtener estadísticas de citas
-   * @param fechaDesde - Fecha de inicio (formato YYYY-MM-DD)
-   * @param fechaHasta - Fecha de fin (formato YYYY-MM-DD)
-   * @param terapeutaId - ID del terapeuta (opcional)
-   */
-  async obtenerEstadisticas(fechaDesde: string, fechaHasta: string, terapeutaId?: number): Promise<any> {
-    console.log(`📊 Obteniendo estadísticas de citas del ${fechaDesde} al ${fechaHasta}${terapeutaId ? ` para terapeuta ${terapeutaId}` : ' (todos los terapeutas)'}`);
 
-    // Función auxiliar para formatear fechas
-    const formatearFecha = (fecha: Date) => {
-      const year = fecha.getFullYear();
-      const month = String(fecha.getMonth() + 1).padStart(2, '0');
-      const day = String(fecha.getDate()).padStart(2, '0');
-      return `${year}-${month}-${day}`;
-    };
+/**
+ * Obtener estadísticas de citas
+ * @param fechaDesde - Primer día del mes visible (YYYY-MM-DD)
+ * @param fechaHasta - Último día del mes visible (YYYY-MM-DD)
+ * @param terapeutaId - ID del terapeuta (opcional)
+ * @param fechaReferencia - Fecha de referencia del calendario (YYYY-MM-DD)
+ */
+async obtenerEstadisticas(
+  fechaDesde: string,
+  fechaHasta: string,
+  terapeutaId?: number,
+  fechaReferencia?: string
+): Promise<any> {
+  console.log(`📊 Obteniendo estadísticas de citas`);
+  console.log(`   - Rango mes visible: ${fechaDesde} al ${fechaHasta}`);
+  console.log(`   - Terapeuta ID: ${terapeutaId || 'TODOS'}`);
+  console.log(`   - Fecha de referencia: ${fechaReferencia || 'HOY (sin calendario)'}`);
 
-    // Función auxiliar para contar reuniones clínicas en un rango de fechas
-    const contarReunionesClinicas = async (fechaInicio: string, fechaFin: string, terapeutaId?: number): Promise<number> => {
-      const reunionesIds = await this.reunionRepo.find({ select: ['id'] });
-      let contador = 0;
+  // Función auxiliar para formatear fechas
+  const formatearFecha = (fecha: Date) => {
+    const year = fecha.getFullYear();
+    const month = String(fecha.getMonth() + 1).padStart(2, '0');
+    const day = String(fecha.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
 
-      console.log(`   🔍 Contando reuniones clínicas entre ${fechaInicio} y ${fechaFin}${terapeutaId ? ` para terapeuta ${terapeutaId}` : ''}`);
-      console.log(`   📋 Total de reuniones clínicas registradas: ${reunionesIds.length}`);
+  // ===================================================================
+  // DETERMINAR FECHA BASE PARA LOS CÁLCULOS
+  // ===================================================================
+  let fechaBase: Date;
+  let esModoCalendario = false; // ¿Hay terapeuta seleccionado?
 
-      for (const r of reunionesIds) {
-        // Verificar si la cita está en el rango y activa
-        const citaBase = await this.citaRepo
-          .createQueryBuilder('cita')
-          .where('cita.id = :id', { id: r.id })
-          .andWhere('cita.fecha >= :fechaInicio', { fechaInicio })
-          .andWhere('cita.fecha <= :fechaFin', { fechaFin })
-          .andWhere('cita.flg_activo = 1')
-          .getOne();
-
-        if (!citaBase) continue;
-
-        // Si se filtra por terapeuta, verificar que la reunión incluya a ese terapeuta
-        if (terapeutaId) {
-          const reunion = await this.reunionRepo.findOne({
-            where: { id: r.id },
-            relations: ['terapeutas'],
-          });
-
-          if (!reunion || !reunion.terapeutas) {
-            console.log(`   ⚠️ Reunión ${r.id} no tiene terapeutas asociados`);
-            continue;
-          }
-
-          const tieneTerapeuta = reunion.terapeutas.some(t => t.id_terapeuta === terapeutaId);
-          console.log(`   📌 Reunión ${r.id}: Terapeutas [${reunion.terapeutas.map(t => t.id_terapeuta).join(', ')}] - Incluye terapeuta ${terapeutaId}: ${tieneTerapeuta}`);
-
-          if (!tieneTerapeuta) continue;
-        }
-
-        contador++;
-      }
-
-      console.log(`   ✅ Reuniones clínicas encontradas: ${contador}`);
-      return contador;
-    };
-
-    const hoy = new Date();
-
-    // 1. Total de citas del AÑO (desde inicio del año hasta ahora)
-    const inicioAnio = `${hoy.getFullYear()}-01-01`;
-    const finAnio = `${hoy.getFullYear()}-12-31`;
-
-    // Para citas normales: contar donde doctor_id = terapeutaId (o todas si no hay filtro)
-    let totalCitasAnio = 0;
-    if (terapeutaId) {
-      // CON filtro de terapeuta: contar citas normales + reuniones donde participa
-      const citasNormalesAnio = await this.citaRepo
-        .createQueryBuilder('cita')
-        .where('cita.fecha >= :inicioAnio', { inicioAnio })
-        .andWhere('cita.fecha <= :finAnio', { finAnio })
-        .andWhere('cita.flg_activo = 1')
-        .andWhere('cita.doctor_id = :terapeutaId', { terapeutaId })
-        .getCount();
-
-      const reunionesDelAnio = await contarReunionesClinicas(inicioAnio, finAnio, terapeutaId);
-      totalCitasAnio = citasNormalesAnio + reunionesDelAnio;
-    } else {
-      // SIN filtro de terapeuta: simplemente contar TODAS las citas activas
-      totalCitasAnio = await this.citaRepo
-        .createQueryBuilder('cita')
-        .where('cita.fecha >= :inicioAnio', { inicioAnio })
-        .andWhere('cita.fecha <= :finAnio', { finAnio })
-        .andWhere('cita.flg_activo = 1')
-        .getCount();
-    }
-
-    // 2. Total de citas del MES actual
-    let totalCitasMes = 0;
-    if (terapeutaId) {
-      // CON filtro de terapeuta: contar citas normales + reuniones donde participa
-      const citasNormalesMes = await this.citaRepo
-        .createQueryBuilder('cita')
-        .where('cita.fecha >= :fechaDesde', { fechaDesde })
-        .andWhere('cita.fecha <= :fechaHasta', { fechaHasta })
-        .andWhere('cita.flg_activo = 1')
-        .andWhere('cita.doctor_id = :terapeutaId', { terapeutaId })
-        .getCount();
-
-      const reunionesDelMes = await contarReunionesClinicas(fechaDesde, fechaHasta, terapeutaId);
-      totalCitasMes = citasNormalesMes + reunionesDelMes;
-    } else {
-      // SIN filtro de terapeuta: simplemente contar TODAS las citas activas
-      totalCitasMes = await this.citaRepo
-        .createQueryBuilder('cita')
-        .where('cita.fecha >= :fechaDesde', { fechaDesde })
-        .andWhere('cita.fecha <= :fechaHasta', { fechaHasta })
-        .andWhere('cita.flg_activo = 1')
-        .getCount();
-    }
-
-    // 3. Citas por mes (agrupadas)
-    const citasPorMes = await this.citaRepo
-      .createQueryBuilder('cita')
-      .select("DATE_FORMAT(cita.fecha, '%Y-%m') AS mes")
-      .addSelect('COUNT(*) AS total')
-      .where('cita.fecha >= :fechaDesde', { fechaDesde })
-      .andWhere('cita.fecha <= :fechaHasta', { fechaHasta })
-      .andWhere('cita.flg_activo = 1')
-      .andWhere(terapeutaId ? 'cita.doctor_id = :terapeutaId' : '1=1', { terapeutaId })
-      .groupBy("DATE_FORMAT(cita.fecha, '%Y-%m')")
-      .orderBy('mes', 'ASC')
-      .getRawMany();
-
-    // 3. Citas por terapeuta (TOP 10)
-    const citasPorTerapeuta = await this.citaRepo
-      .createQueryBuilder('cita')
-      .leftJoin('cita.doctor', 'doctor')
-      .select('doctor.id', 'terapeuta_id')
-      .addSelect("CONCAT(doctor.nombres, ' ', doctor.apellidos)", 'terapeuta_nombre')
-      .addSelect('COUNT(*)', 'total_citas')
-      .where('cita.fecha >= :fechaDesde', { fechaDesde })
-      .andWhere('cita.fecha <= :fechaHasta', { fechaHasta })
-      .andWhere('cita.flg_activo = 1')
-      .andWhere('cita.doctor_id IS NOT NULL')
-      .andWhere(terapeutaId ? 'cita.doctor_id = :terapeutaId' : '1=1', { terapeutaId })
-      .groupBy('doctor.id')
-      .addGroupBy('doctor.nombres')
-      .addGroupBy('doctor.apellidos')
-      .orderBy('total_citas', 'DESC')
-      .limit(10)
-      .getRawMany();
-
-    // 4. Citas de esta semana (lunes a sábado de la semana actual)
-    const diaSemana = hoy.getDay(); // 0 = domingo, 1 = lunes, ..., 6 = sábado
-    const lunes = new Date(hoy);
-
-    // Calcular el lunes de esta semana
-    if (diaSemana === 0) {
-      // Si hoy es domingo, ir al lunes anterior
-      lunes.setDate(hoy.getDate() - 6);
-    } else {
-      // Cualquier otro día, ir al lunes de esta semana
-      lunes.setDate(hoy.getDate() - (diaSemana - 1));
-    }
-
-    // Calcular el sábado de esta semana
-    const sabado = new Date(lunes);
-    sabado.setDate(lunes.getDate() + 5); // Lunes + 5 días = Sábado
-
-    const inicioSemana = formatearFecha(lunes);
-    const finSemana = formatearFecha(sabado);
-
-    // Total de citas de la semana
-    let citasEstaSemana = 0;
-    if (terapeutaId) {
-      // CON filtro de terapeuta: contar citas normales + reuniones donde participa
-      const citasNormalesSemana = await this.citaRepo
-        .createQueryBuilder('cita')
-        .where('cita.fecha >= :inicioSemana', { inicioSemana })
-        .andWhere('cita.fecha <= :finSemana', { finSemana })
-        .andWhere('cita.flg_activo = 1')
-        .andWhere('cita.doctor_id = :terapeutaId', { terapeutaId })
-        .getCount();
-
-      const reunionesDeLaSemana = await contarReunionesClinicas(inicioSemana, finSemana, terapeutaId);
-      citasEstaSemana = citasNormalesSemana + reunionesDeLaSemana;
-    } else {
-      // SIN filtro de terapeuta: simplemente contar TODAS las citas activas
-      citasEstaSemana = await this.citaRepo
-        .createQueryBuilder('cita')
-        .where('cita.fecha >= :inicioSemana', { inicioSemana })
-        .andWhere('cita.fecha <= :finSemana', { finSemana })
-        .andWhere('cita.flg_activo = 1')
-        .getCount();
-    }
-
-    // 5. Citas por estado
-    const citasPorEstado = await this.citaRepo
-      .createQueryBuilder('cita')
-      .leftJoin('cita.estado', 'estado')
-      .select('estado.id', 'estado_id')
-      .addSelect('estado.nombre', 'estado_nombre')
-      .addSelect('COUNT(*)', 'total_citas')
-      .where('cita.fecha >= :fechaDesde', { fechaDesde })
-      .andWhere('cita.fecha <= :fechaHasta', { fechaHasta })
-      .andWhere('cita.flg_activo = 1')
-      .andWhere(terapeutaId ? 'cita.doctor_id = :terapeutaId' : '1=1', { terapeutaId })
-      .groupBy('estado.id')
-      .addGroupBy('estado.nombre')
-      .orderBy('total_citas', 'DESC')
-      .getRawMany();
-
-    console.log(`✅ Estadísticas calculadas:`);
-    console.log(`   📅 Año: ${totalCitasAnio} citas`);
-    console.log(`   📅 Mes: ${totalCitasMes} citas`);
-    console.log(`   📅 Semana: ${citasEstaSemana} citas`);
-
-    return {
-      totalCitasAnio, // Total del año (normales + reuniones)
-      totalCitasMes,  // Total del mes (normales + reuniones)
-      citasEstaSemana, // Total de la semana lun-sáb (normales + reuniones)
-      inicioSemana,
-      finSemana,
-      citasPorMes,
-      citasPorTerapeuta,
-      citasPorEstado,
-      fechaDesde,
-      fechaHasta,
-    };
+  if (terapeutaId && fechaReferencia) {
+    // CASO 1: Hay terapeuta seleccionado → Usar fecha del calendario
+    fechaBase = new Date(fechaReferencia + 'T00:00:00');
+    esModoCalendario = true;
+    console.log(`   ✅ Modo: CALENDARIO (terapeuta seleccionado)`);
+    console.log(`   📅 Fecha base: ${formatearFecha(fechaBase)}`);
+  } else {
+    // CASO 2: No hay terapeuta → Usar fecha actual real
+    fechaBase = new Date();
+    console.log(`   ✅ Modo: GLOBAL (sin terapeuta)`);
+    console.log(`   📅 Fecha base: HOY ${formatearFecha(fechaBase)}`);
   }
+
+  // ===================================================================
+  // 1. TOTAL DE CITAS DEL AÑO (excluyendo motivo_id = 6)
+  // ===================================================================
+  const anioBase = fechaBase.getFullYear();
+  const inicioAnio = `${anioBase}-01-01`;
+  const finAnio = `${anioBase}-12-31`;
+
+  const queryAnio = this.citaRepo
+    .createQueryBuilder('cita')
+    .where('cita.fecha >= :inicioAnio', { inicioAnio })
+    .andWhere('cita.fecha <= :finAnio', { finAnio })
+    .andWhere('cita.flg_activo = 1')
+    .andWhere('cita.motivo_id != 6'); // ❌ EXCLUIR reuniones clínicas
+
+  if (terapeutaId) {
+    queryAnio.andWhere('cita.doctor_id = :terapeutaId', { terapeutaId });
+  }
+
+  const totalCitasAnio = await queryAnio.getCount();
+
+  // ===================================================================
+  // 2. TOTAL DE CITAS DEL MES
+  // ===================================================================
+  let mesDesde: string;
+  let mesHasta: string;
+
+  if (esModoCalendario) {
+    // Con calendario: usar el mes visible
+    mesDesde = fechaDesde;
+    mesHasta = fechaHasta;
+  } else {
+    // Sin calendario: usar el mes actual real
+    const primerDiaMes = new Date(fechaBase.getFullYear(), fechaBase.getMonth(), 1);
+    const ultimoDiaMes = new Date(fechaBase.getFullYear(), fechaBase.getMonth() + 1, 0);
+    mesDesde = formatearFecha(primerDiaMes);
+    mesHasta = formatearFecha(ultimoDiaMes);
+  }
+
+  const queryMes = this.citaRepo
+    .createQueryBuilder('cita')
+    .where('cita.fecha >= :mesDesde', { mesDesde })
+    .andWhere('cita.fecha <= :mesHasta', { mesHasta })
+    .andWhere('cita.flg_activo = 1')
+    .andWhere('cita.motivo_id != 6'); // ❌ EXCLUIR reuniones clínicas
+
+  if (terapeutaId) {
+    queryMes.andWhere('cita.doctor_id = :terapeutaId', { terapeutaId });
+  }
+
+  const totalCitasMes = await queryMes.getCount();
+
+  // ===================================================================
+  // 3. TOTAL DE REUNIONES CLÍNICAS DEL MES (SOLO motivo_id = 6)
+  // ===================================================================
+  const queryReuniones = this.citaRepo
+    .createQueryBuilder('cita')
+    .where('cita.fecha >= :mesDesde', { mesDesde })
+    .andWhere('cita.fecha <= :mesHasta', { mesHasta })
+    .andWhere('cita.flg_activo = 1')
+    .andWhere('cita.motivo_id = 6'); // ✅ SOLO reuniones clínicas
+
+  if (terapeutaId) {
+    // Para reuniones clínicas, buscar en la tabla de terapeutas asociados
+    queryReuniones.innerJoin(
+      'cita_reunion_clinica_terapeutas',
+      'rct',
+      'rct.id_reunion = cita.id AND rct.id_terapeuta = :terapeutaId',
+      { terapeutaId }
+    );
+  }
+
+  const totalReunionesClinicasMes = await queryReuniones.getCount();
+
+  // ===================================================================
+  // 4. CITAS DE ESTA SEMANA (Lunes a Sábado) - SIN motivo_id = 6
+  // ===================================================================
+  const diaSemana = fechaBase.getDay(); // 0=domingo, 1=lunes, ..., 6=sábado
+  const lunes = new Date(fechaBase);
+
+  if (diaSemana === 0) {
+    // Si es domingo, ir al lunes anterior
+    lunes.setDate(fechaBase.getDate() - 6);
+  } else {
+    // Cualquier otro día, ir al lunes de esa semana
+    lunes.setDate(fechaBase.getDate() - (diaSemana - 1));
+  }
+
+  const sabado = new Date(lunes);
+  sabado.setDate(lunes.getDate() + 5); // Lunes + 5 días = Sábado
+
+  const inicioSemana = formatearFecha(lunes);
+  const finSemana = formatearFecha(sabado);
+
+  const querySemana = this.citaRepo
+    .createQueryBuilder('cita')
+    .where('cita.fecha >= :inicioSemana', { inicioSemana })
+    .andWhere('cita.fecha <= :finSemana', { finSemana })
+    .andWhere('cita.flg_activo = 1')
+    .andWhere('cita.motivo_id != 6'); // ❌ EXCLUIR reuniones clínicas
+
+  if (terapeutaId) {
+    querySemana.andWhere('cita.doctor_id = :terapeutaId', { terapeutaId });
+  }
+
+  const citasEstaSemana = await querySemana.getCount();
+
+  // ===================================================================
+  // LOGS FINALES
+  // ===================================================================
+  console.log(`✅ Estadísticas calculadas:`);
+  console.log(`   📅 Año ${anioBase}: ${totalCitasAnio} citas (sin RC)`);
+  console.log(`   📅 Mes (${mesDesde} - ${mesHasta}): ${totalCitasMes} citas (sin RC)`);
+  console.log(`   📋 Reuniones Clínicas del Mes: ${totalReunionesClinicasMes}`);
+  console.log(`   📅 Semana (${inicioSemana} - ${finSemana}): ${citasEstaSemana} citas (sin RC)`);
+
+  return {
+    // Totales principales (SIN reuniones clínicas)
+    totalCitasAnio,
+    totalCitasMes,
+    citasEstaSemana,
+    
+    // ✅ Contador separado de reuniones clínicas
+    totalReunionesClinicasMes,
+    
+    // Información de la semana
+    inicioSemana,
+    finSemana,
+    
+    // Información del mes usado
+    mesDesde,
+    mesHasta,
+    
+    // Metadatos
+    anioBase,
+    esModoCalendario,
+    terapeutaId: terapeutaId || null,
+  };
+}
 
 }
