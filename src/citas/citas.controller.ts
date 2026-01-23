@@ -30,15 +30,16 @@ export class CitasController {
     return this.citasService.getTiposCita();
   }
 
-  @Get('estadisticas')
-  async obtenerEstadisticas(@Query() query: any) {
-    const { fecha_desde, fecha_hasta, terapeuta_id } = query;
-    return this.citasService.obtenerEstadisticas(
-      fecha_desde,
-      fecha_hasta,
-      terapeuta_id ? +terapeuta_id : undefined
-    );
-  }
+@Get('estadisticas')
+async obtenerEstadisticas(@Query() query: any) {
+  const { fecha_desde, fecha_hasta, terapeuta_id, fecha_referencia } = query;
+  return this.citasService.obtenerEstadisticas(
+    fecha_desde,
+    fecha_hasta,
+    terapeuta_id ? +terapeuta_id : undefined,
+    fecha_referencia
+  );
+}
 
   // ✅ RUTAS CON PARÁMETROS AL FINAL
   @Get(':id/historial')
