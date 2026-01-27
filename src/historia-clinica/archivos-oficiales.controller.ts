@@ -172,4 +172,20 @@ export class ArchivosOficialesController {
       data: resultado,
     };
   }
+
+  @Get('descargar-validado/:id')
+  async descargarArchivoValidado(
+    @Param('id', ParseIntPipe) id: number,
+    @Res() res: Response,
+  ) {
+    const { stream, mimetype, filename, fileSize } = await this.archivosService.obtenerArchivoStreamPublico(id);
+
+    res.set({
+      'Content-Type': mimetype,
+      'Content-Disposition': `attachment; filename="${filename}"`,
+      'Content-Length': fileSize,
+    });
+
+    stream.pipe(res);
+  }
 }

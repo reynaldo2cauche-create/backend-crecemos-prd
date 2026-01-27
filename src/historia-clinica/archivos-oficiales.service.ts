@@ -260,6 +260,40 @@ export class ArchivosOficialesService {
     };
   }
 
+  // ✅ FUNCIÓN PÚBLICA: Obtener archivo sin autenticación (para documentos validados)
+  async obtenerArchivoStreamPublico(
+    id: number,
+  ): Promise<{ stream: any; mimetype: string; filename: string; fileSize: number }> {
+    const archivo = await this.archivoOficialRepo.findOne({
+      where: { id, activo: 1 },
+    });
+
+    if (!archivo) {
+      throw new NotFoundException('Archivo no encontrado');
+    }
+
+    // ✅ Verificar que el archivo existe físicamente
+    const fsSync = require('fs');
+    if (!fsSync.existsSync(archivo.rutaArchivo)) {
+      throw new NotFoundException('Archivo físico no encontrado');
+    }
+
+    // ✅ Obtener el tamaño del archivo
+    const stats = await fs.stat(archivo.rutaArchivo);
+
+    // ✅ Crear stream de lectura
+    const stream = fsSync.createReadStream(archivo.rutaArchivo, {
+      highWaterMark: 64 * 1024 // Buffer de 64KB para streaming eficiente
+    });
+
+    return {
+      stream,
+      mimetype: archivo.tipoMime,
+      filename: archivo.nombreOriginal,
+      fileSize: stats.size,
+    };
+  }
+
   // ============================================
   // ELIMINAR ARCHIVO (CON ELIMINACIÓN FÍSICA)
   // ============================================
@@ -428,18 +462,19 @@ async validarDocumento(codigoValidacion: string) {
   }
 
   return {
+    id: archivo.id, // ✅ ID del archivo para poder descargarlo
     valido: true,
     codigo: archivo.codigoValidacion,
     tipoDocumento: archivo.tipoArchivo?.nombre || 'Sin especificar',
     tipoDestinatario, // 'paciente' o 'trabajador'
     destinatario, // datos del paciente o trabajador (DNI cifrado)
-    
+
     // MANTENER COMPATIBILIDAD CON CÓDIGO ANTERIOR
     paciente: tipoDestinatario === 'paciente' ? destinatario : null,
     trabajador: tipoDestinatario === 'trabajador' ? destinatario : null,
-    
+
     terapeuta: terapeutaData, // ✅ PUEDE SER NULL - el frontend lo maneja
-    
+
     fechaEmision: fechaEmisionFormateada,
     fechaVigencia: fechaVigenciaFormateada,
     vigente: vigente,

@@ -121,6 +121,7 @@ export class NotificacionesController {
         limite: limiteNum,
         offset: offsetNum,
         tiene_mas: notificaciones.length === limiteNum,
+        
         notificaciones,
       };
     } catch (error) {
