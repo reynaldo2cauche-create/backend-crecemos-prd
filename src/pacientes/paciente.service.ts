@@ -36,6 +36,32 @@ export class PacienteService {
   ) {}
 
   /**
+   * Parsea una fecha desde string (YYYY-MM-DD) a Date sin problemas de timezone
+   * Evita el desfase de 1 día causado por new Date() con fechas ISO
+   * @param fechaString - Fecha en formato YYYY-MM-DD o Date
+   * @returns Date con la fecha correcta
+   */
+  private parsearFechaSinTimezone(fechaString: string | Date): Date {
+    if (!fechaString) return null;
+
+    // Si ya es Date, retornar
+    if (fechaString instanceof Date) {
+      return fechaString;
+    }
+
+    // Si es string en formato YYYY-MM-DD
+    if (typeof fechaString === 'string' && /^\d{4}-\d{2}-\d{2}/.test(fechaString)) {
+      // Extraer año, mes, día
+      const [year, month, day] = fechaString.split(/[-T]/).map(Number);
+      // Crear Date en zona horaria local (no UTC)
+      return new Date(year, month - 1, day, 12, 0, 0);
+    }
+
+    // Fallback: usar Date normal
+    return new Date(fechaString);
+  }
+
+  /**
  * Verifica que el paciente exista y esté activo
  * Si cumple las condiciones, retorna los beneficios disponibles
  * @param numeroDocumento - Número de documento del paciente
@@ -442,7 +468,7 @@ async findAll(filters?: {
     if (dto.nombres !== undefined) updateData.nombres = dto.nombres;
     if (dto.apellido_paterno !== undefined) updateData.apellido_paterno = dto.apellido_paterno;
     if (dto.apellido_materno !== undefined) updateData.apellido_materno = dto.apellido_materno;
-    if (dto.fecha_nacimiento !== undefined) updateData.fecha_nacimiento = dto.fecha_nacimiento;
+    if (dto.fecha_nacimiento !== undefined) updateData.fecha_nacimiento = this.parsearFechaSinTimezone(dto.fecha_nacimiento);
     if (dto.numero_documento !== undefined) updateData.numero_documento = dto.numero_documento;
     if (dto.direccion !== undefined) updateData.direccion = dto.direccion;
     if (dto.motivo_consulta !== undefined) updateData.motivo_consulta = dto.motivo_consulta;
@@ -585,7 +611,8 @@ async findAll(filters?: {
       nombres: dto.paciente.nombres,
       apellido_paterno: dto.paciente.apellido_paterno,
       apellido_materno: dto.paciente.apellido_materno,
-      fecha_nacimiento: new Date(dto.paciente.fecha_nacimiento),
+      // Parsear fecha sin timezone para evitar desfase de 1 día
+      fecha_nacimiento: this.parsearFechaSinTimezone(dto.paciente.fecha_nacimiento),
       tipo_documento: { id: dto.paciente.tipo_documento_id },
       numero_documento: dto.paciente.numero_documento,
       sexo: { id: dto.paciente.sexo_id },
