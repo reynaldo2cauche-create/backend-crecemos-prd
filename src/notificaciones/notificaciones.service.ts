@@ -119,11 +119,6 @@ export class NotificacionesService {
     }
   }
 
-  /**
-   * Obtiene notificaciones del último mes (leídas y no leídas)
-   * Si existe en notificaciones_leidas → leida = true
-   * Si NO existe en notificaciones_leidas → leida = false
-   */
 async obtenerNotificacionesRecientes(
   rolId: number,
   usuarioId: number,
@@ -131,7 +126,6 @@ async obtenerNotificacionesRecientes(
   offset: number = 0
 ): Promise<any[]> {
   try {
-
     const query = `
       SELECT 
         n.id,
@@ -157,8 +151,6 @@ async obtenerNotificacionesRecientes(
       LIMIT ? OFFSET ?
     `;
 
-
-
     const notificaciones = await this.notificacionesRepo.query(query, [
       usuarioId,
       rolId,
@@ -166,41 +158,77 @@ async obtenerNotificacionesRecientes(
       offset
     ]);
 
+    // ============================================================
+// PASO 1: AGREGAR LOGS EN EL BACKEND (notificaciones.service.ts)
+// ============================================================
 
-    // 🔴 DEPURACIÓN CRÍTICA - Verificar el estado leída
-    if (notificaciones.length > 0) {
-   
-      notificaciones.slice(0, 3).forEach(n => {
-   
-      });
-    }
+// Dentro del método obtenerNotificacionesRecientes, DESPUÉS de procesar:
 
-    // 🔴 PROCESAR correctamente los resultados
-    const notificacionesProcesadas = notificaciones.map(notif => {
-      // MySQL puede devolver 1/0, TRUE/FALSE, o números
-      let leidaBoolean = false;
-      
-      if (notif.leida === 1 || notif.leida === true || notif.leida === '1' || notif.leida === 'true') {
-        leidaBoolean = true;
-      }
-      
-      if (notif.notif_leida_id) {
-        leidaBoolean = true;
-      }
-      
-      const resultado = {
-        ...notif,
-        datos_adicionales: notif.datos_adicionales ? JSON.parse(notif.datos_adicionales) : null,
-        tiempo_relativo: this.formatearTiempoRelativo(notif.minutos_transcurridos),
-        leida: leidaBoolean // Siempre boolean
-      };
-      
+const notificacionesProcesadas = notificaciones.map(notif => {
+  let leidaBoolean = false;
   
-      
-      return resultado;
-    });
+  if (notif.leida === 1 || notif.leida === true || notif.leida === '1' || notif.leida === 'true') {
+    leidaBoolean = true;
+  }
+  
+  if (notif.notif_leida_id) {
+    leidaBoolean = true;
+  }
 
-    return notificacionesProcesadas;
+  const datosAdicionales = notif.datos_adicionales ? JSON.parse(notif.datos_adicionales) : null;
+  
+  // 🔴 AGREGAR ESTE LOG AQUÍ:
+  if (notif.tipo_notificacion === 'CITA_MODIFICADA') {
+    console.log('🔍 ========================================');
+    console.log('🔍 NOTIFICACIÓN CITA_MODIFICADA ID:', notif.id);
+    console.log('🔍 datos_adicionales RAW:', notif.datos_adicionales);
+    console.log('🔍 datos_adicionales PARSED:', datosAdicionales);
+    console.log('🔍 terapeuta_nombre encontrado:', datosAdicionales?.terapeuta_nombre);
+    console.log('🔍 terapeuta_nuevo encontrado:', datosAdicionales?.terapeuta_nuevo);
+    console.log('🔍 terapeuta_anterior encontrado:', datosAdicionales?.terapeuta_anterior);
+  }
+  
+  let terapeutaNombre = null;
+  if (datosAdicionales) {
+    if (notif.tipo_notificacion === 'CITA_MODIFICADA') {
+      terapeutaNombre = 
+        datosAdicionales.terapeuta_nombre ||
+        datosAdicionales.terapeuta_nuevo ||
+        datosAdicionales.terapeuta_anterior ||
+        null;
+      
+      // 🔴 AGREGAR ESTE LOG:
+      console.log('🎯 terapeuta_nombre FINAL asignado:', terapeutaNombre);
+      console.log('🔍 ========================================');
+    } 
+    else if (notif.tipo_notificacion === 'CITA_ELIMINADA') {
+      terapeutaNombre = datosAdicionales.terapeuta_nombre || null;
+    }
+    else if (notif.tipo_notificacion === 'NOTA_EVOLUCION') {
+      terapeutaNombre = datosAdicionales.terapeuta_nombre || null;
+    }
+  }
+  
+  const resultado = {
+    ...notif,
+    datos_adicionales: datosAdicionales,
+    tiempo_relativo: this.formatearTiempoRelativo(notif.minutos_transcurridos),
+    leida: leidaBoolean,
+    terapeuta_nombre: terapeutaNombre
+  };
+  
+  return resultado;
+});
+
+// 🔴 AGREGAR ESTE LOG ANTES DE RETORNAR:
+console.log('📦 TOTAL notificaciones procesadas:', notificacionesProcesadas.length);
+const citasModificadas = notificacionesProcesadas.filter(n => n.tipo_notificacion === 'CITA_MODIFICADA');
+console.log('📝 Total CITA_MODIFICADA:', citasModificadas.length);
+citasModificadas.forEach(cm => {
+  console.log(`   - ID ${cm.id}: terapeuta_nombre = "${cm.terapeuta_nombre}"`);
+});
+
+return notificacionesProcesadas;
     
   } catch (error) {
     console.error('❌ [SERVICE] Error al obtener notificaciones recientes:', error);
@@ -528,54 +556,51 @@ private async obtenerRolDelUsuario(usuarioId: number): Promise<number> {
     });
   }
 
-  async notificarCitaModificada(
-    citaId: number,
-    usuarioModificadorId: number,
-    nombreUsuarioModificador: string,
-    pacienteNombre: string,
-    fechaAnterior: string,
-    horaAnterior: string,
-    terapeutaAnterior: string,
-    fechaNueva: string,
-    horaNueva: string,
-    terapeutaNuevo: string,
-    motivoModificacion: string,
-  ) {
-    const evento = await this.crearEvento({
-      tipo_evento: 'CITA_MODIFICADA',
-      descripcion: `Cita modificada por ${nombreUsuarioModificador}`,
-      usuario_id: usuarioModificadorId,
-      datos_adicionales: {
-        cita_id: citaId,
-        paciente_nombre: pacienteNombre,
-        fecha_anterior: fechaAnterior,
-        hora_anterior: horaAnterior,
-        terapeuta_anterior: terapeutaAnterior,
-        fecha_nueva: fechaNueva,
-        hora_nueva: horaNueva,
-        terapeuta_nuevo: terapeutaNuevo,
-        motivo_modificacion: motivoModificacion,
-      },
-    });
+async notificarCitaModificada(
+  citaId: number,
+  usuarioModificadorId: number,
+  nombreUsuarioModificador: string,
+  pacienteNombre: string,
+  fechaAnterior: string,
+  horaAnterior: string,
+  terapeutaNombre: string,  // 👈 Nombre del terapeuta (puede ser anterior o nuevo)
+  terapeutaId: number,      // 👈 ID del terapeuta
+  fechaNueva: string,
+  horaNueva: string,
+  motivoModificacion: string,
+) {
+  const evento = await this.crearEvento({
+    tipo_evento: 'CITA_MODIFICADA',
+    descripcion: `Cita modificada por ${nombreUsuarioModificador}`,
+    usuario_id: usuarioModificadorId,
+    datos_adicionales: {
+      cita_id: citaId,
+      paciente_nombre: pacienteNombre,
+      fecha_anterior: fechaAnterior,
+      hora_anterior: horaAnterior,
+      terapeuta_nombre: terapeutaNombre, // ✅ CAMPO UNIFICADO
+      terapeuta_id: terapeutaId,
+      fecha_nueva: fechaNueva,
+      hora_nueva: horaNueva,
+      motivo_modificacion: motivoModificacion,
+    },
+  });
 
-    const cambios = [];
-    if (fechaAnterior !== fechaNueva || horaAnterior !== horaNueva) {
-      cambios.push(`reprogramó de ${fechaAnterior} ${horaAnterior} a ${fechaNueva} ${horaNueva}`);
-    }
-    if (terapeutaAnterior !== terapeutaNuevo) {
-      cambios.push(`cambió terapeuta de ${terapeutaAnterior} a ${terapeutaNuevo}`);
-    }
-
-    const mensajeCambios = cambios.length > 0 ? cambios.join(' y ') : 'modificó la cita';
-
-    await this.crearNotificacion({
-      tipo_notificacion: 'CITA_MODIFICADA',
-      titulo: 'Cita Modificada',
-      mensaje: `${nombreUsuarioModificador} ${mensajeCambios} de ${pacienteNombre}. Motivo: ${motivoModificacion}`,
-      evento_id: evento.id,
-      roles_destino: [1],
-    });
+  const cambios = [];
+  if (fechaAnterior !== fechaNueva || horaAnterior !== horaNueva) {
+    cambios.push(`reprogramó de ${fechaAnterior} ${horaAnterior} a ${fechaNueva} ${horaNueva}`);
   }
+
+  const mensajeCambios = cambios.length > 0 ? cambios.join(', ') : 'modificó la cita';
+
+  await this.crearNotificacion({
+    tipo_notificacion: 'CITA_MODIFICADA',
+    titulo: 'Cita Modificada',
+    mensaje: `${nombreUsuarioModificador} ${mensajeCambios} de ${pacienteNombre} con ${terapeutaNombre}. Motivo: ${motivoModificacion}`,
+    evento_id: evento.id,
+    roles_destino: [1],
+  });
+}
 
   async notificarNotaEvolucion(
     terapeutaId: number,

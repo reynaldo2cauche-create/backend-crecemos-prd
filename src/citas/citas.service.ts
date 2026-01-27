@@ -166,19 +166,19 @@ async crearMultiples(citas: CrearCitaDto[]): Promise<any> {
     const citaGuardada = await this.citaRepo.save(cita);
     console.log(`✅ Cita base para reunión clínica creada: ID ${citaGuardada.id}`);
 
-    // Crear registro de reunión clínica con el MISMO ID
+    // Crear registro de reunión clínica relacionado con id_cita
     const reunion = this.reunionRepo.create({
-      id: citaGuardada.id,
+      id_cita: citaGuardada.id,
       estado_cita_id: dto.estado_id,
       user_id_crea: dto.user_id_crea,
     });
-    await this.reunionRepo.save(reunion);
-    console.log(`✅ Registro de reunión clínica creado`);
+    const reunionGuardada = await this.reunionRepo.save(reunion);
+    console.log(`✅ Registro de reunión clínica creado con ID: ${reunionGuardada.id}`);
 
     // Agregar terapeutas
     for (const terapeuta_id of dto.terapeutas_ids) {
       await this.reunionTerapeutasRepo.save({
-        id_reunion: citaGuardada.id,
+        id_reunion: reunionGuardada.id,
         id_terapeuta: terapeuta_id,
         user_id_crea: dto.user_id_crea,
       });
@@ -188,7 +188,7 @@ async crearMultiples(citas: CrearCitaDto[]): Promise<any> {
     // Agregar servicios
     for (const servicio_id of dto.servicios_ids) {
       await this.reunionServiciosRepo.save({
-        id_reunion: citaGuardada.id,
+        id_reunion: reunionGuardada.id,
         id_servicio: servicio_id,
         user_id_crea: dto.user_id_crea,
       });
@@ -315,19 +315,31 @@ async listar(filtros: any = {}): Promise<any[]> {
 
   // 2. Obtener REUNIONES CLÍNICAS del mes actual
   let reuniones = [];
-  const reunionesIds = await this.reunionRepo.find({ select: ['id'] });
+  const reunionesIds = await this.reunionRepo.find();
+
+  console.log(`📋 Total reuniones encontradas: ${reunionesIds.length}`);
 
   for (const r of reunionesIds) {
+    // 🔥 Soportar registros antiguos (id_cita = NULL) y nuevos (id_cita = X)
+    const idCitaBuscar = r.id_cita || r.id; // Si id_cita es NULL, usar el id de la reunión (estructura antigua)
+
+    console.log(`🔍 Procesando reunión ID: ${r.id}, id_cita: ${r.id_cita}, buscando cita con ID: ${idCitaBuscar}`);
+
     // Primero verificar si la cita está en el rango de fechas y activa
     const citaBase = await this.citaRepo
       .createQueryBuilder('cita')
-      .where('cita.id = :id', { id: r.id })
+      .where('cita.id = :id', { id: idCitaBuscar })
       .andWhere('cita.fecha >= :fechaDesde', { fechaDesde })
       .andWhere('cita.fecha <= :fechaHasta', { fechaHasta })
       .andWhere('cita.flg_activo = 1')
       .getOne();
 
-    if (!citaBase) continue; // Saltar si no está en el mes actual o está eliminada
+    if (!citaBase) {
+      console.log(`❌ Cita ${idCitaBuscar} NO encontrada en rango de fechas o está inactiva`);
+      continue; // Saltar si no está en el mes actual o está eliminada
+    }
+
+    console.log(`✅ Cita ${idCitaBuscar} encontrada: ${citaBase.fecha}`);
 
     const reunion = await this.reunionRepo.findOne({
       where: { id: r.id },
@@ -342,7 +354,7 @@ async listar(filtros: any = {}): Promise<any[]> {
     }
 
     const cita = await this.citaRepo.findOne({
-      where: { id: r.id },
+      where: { id: idCitaBuscar },
       relations: ['paciente', 'motivo', 'estado'],
     });
 
@@ -427,11 +439,19 @@ async listar(filtros: any = {}): Promise<any[]> {
 
     console.log(`✅ Cita encontrada. Paciente: ${cita.paciente?.nombres || 'N/A'}`);
 
-    // Verificar si es reunión clínica
-    const reunion = await this.reunionRepo.findOne({
-      where: { id },
+    // Verificar si es reunión clínica (soportar registros antiguos y nuevos)
+    let reunion = await this.reunionRepo.findOne({
+      where: { id_cita: id },
       relations: ['terapeutas', 'terapeutas.terapeuta', 'servicios', 'servicios.servicio'],
     });
+
+    // 🔥 Si no se encontró por id_cita, buscar por id (registros antiguos con id_cita = NULL)
+    if (!reunion) {
+      reunion = await this.reunionRepo.findOne({
+        where: { id: id },
+        relations: ['terapeutas', 'terapeutas.terapeuta', 'servicios', 'servicios.servicio'],
+      });
+    }
 
     if (reunion) {
       console.log(`📋 Es REUNIÓN CLÍNICA con ${reunion.terapeutas?.length || 0} terapeutas`);
@@ -530,17 +550,17 @@ async listar(filtros: any = {}): Promise<any[]> {
     }
 
     await this.notificacionesService.notificarCitaModificada(
-      id,
-      dto.user_id_crea,
-      nombreUsuario,
-      pacienteNombre,
-      datosAntiguos.fecha,
-      datosAntiguos.hora_inicio,
-      datosAntiguos.doctor_nombre,
-      dto.fecha,
-      dto.hora_inicio,
-      nuevoTerapeutaNombre,
-      dto.motivo_accion,
+        id,                              // citaId
+      dto.user_id_crea,                // usuarioModificadorId
+      nombreUsuario,                   // nombreUsuarioModificador
+      pacienteNombre,                  // pacienteNombre
+      datosAntiguos.fecha,             // fechaAnterior
+      datosAntiguos.hora_inicio,       // horaAnterior
+      datosAntiguos.doctor_nombre,     // terapeutaNombre
+      datosAntiguos.doctor_id,         // 👈 terapeutaId (agregado)
+      dto.fecha,                       // 👈 fechaNueva (corregido)
+      dto.hora_inicio,                 // 👈 horaNueva (corregido)
+      dto.motivo_accion, 
     );
   } catch (error) {
     console.error('❌ Error al crear notificación de cita modificada:', error.message);
@@ -607,19 +627,31 @@ private async actualizarReunionClinica(id: number, dto: CrearCitaDto): Promise<a
 
   console.log(`✅ Cita base actualizada: ID ${id}`);
 
+  // Buscar el registro de reunión clínica por id_cita (soportar registros antiguos y nuevos)
+  let reunion = await this.reunionRepo.findOne({ where: { id_cita: id } });
+
+  // 🔥 Si no se encontró por id_cita, buscar por id (registros antiguos con id_cita = NULL)
+  if (!reunion) {
+    reunion = await this.reunionRepo.findOne({ where: { id: id } });
+  }
+
+  if (!reunion) {
+    throw new BadRequestException(`No se encontró reunión clínica para la cita ${id}`);
+  }
+
   // Actualizar registro de reunión clínica
-  await this.reunionRepo.update(id, {
+  await this.reunionRepo.update(reunion.id, {
     estado_cita_id: dto.estado_id,
     user_id_actua: dto.user_id_crea,
   });
 
   // Eliminar terapeutas anteriores
-  await this.reunionTerapeutasRepo.delete({ id_reunion: id });
-  
+  await this.reunionTerapeutasRepo.delete({ id_reunion: reunion.id });
+
   // Agregar nuevos terapeutas
   for (const terapeuta_id of dto.terapeutas_ids) {
     await this.reunionTerapeutasRepo.save({
-      id_reunion: id,
+      id_reunion: reunion.id,
       id_terapeuta: terapeuta_id,
       user_id_crea: dto.user_id_crea,
     });
@@ -627,12 +659,12 @@ private async actualizarReunionClinica(id: number, dto: CrearCitaDto): Promise<a
   console.log(`✅ ${dto.terapeutas_ids.length} terapeutas actualizados`);
 
   // Eliminar servicios anteriores
-  await this.reunionServiciosRepo.delete({ id_reunion: id });
-  
+  await this.reunionServiciosRepo.delete({ id_reunion: reunion.id });
+
   // Agregar nuevos servicios
   for (const servicio_id of dto.servicios_ids) {
     await this.reunionServiciosRepo.save({
-      id_reunion: id,
+      id_reunion: reunion.id,
       id_servicio: servicio_id,
       user_id_crea: dto.user_id_crea,
     });
@@ -834,21 +866,23 @@ async obtenerEstadisticas(
   let fechaBase: Date;
   let esModoCalendario = false; // ¿Hay terapeuta seleccionado?
 
-  if (terapeutaId && fechaReferencia) {
-    // CASO 1: Hay terapeuta seleccionado → Usar fecha del calendario
+  if (fechaReferencia) {
+    // Siempre usar la fecha de referencia del calendario si está disponible
     fechaBase = new Date(fechaReferencia + 'T00:00:00');
-    esModoCalendario = true;
-    console.log(`   ✅ Modo: CALENDARIO (terapeuta seleccionado)`);
+    esModoCalendario = !!terapeutaId; // true si hay terapeuta, false si es global
+    console.log(`   ✅ Modo: ${esModoCalendario ? 'CALENDARIO (terapeuta seleccionado)' : 'GLOBAL (calendario visible)'}`);
     console.log(`   📅 Fecha base: ${formatearFecha(fechaBase)}`);
   } else {
-    // CASO 2: No hay terapeuta → Usar fecha actual real
-    fechaBase = new Date();
-    console.log(`   ✅ Modo: GLOBAL (sin terapeuta)`);
-    console.log(`   📅 Fecha base: HOY ${formatearFecha(fechaBase)}`);
+    // Fallback: usar fecha actual de Perú (GMT-5)
+    const ahora = new Date();
+    const fechaPeru = new Date(ahora.toLocaleString('en-US', { timeZone: 'America/Lima' }));
+    fechaBase = fechaPeru;
+    console.log(`   ⚠️ Modo: FALLBACK (usando hora de Perú)`);
+    console.log(`   📅 Fecha base: ${formatearFecha(fechaBase)}`);
   }
 
   // ===================================================================
-  // 1. TOTAL DE CITAS DEL AÑO (excluyendo motivo_id = 6)
+  // 1. TOTAL DE CITAS DEL AÑO (excluyendo motivo_id = 7)
   // ===================================================================
   const anioBase = fechaBase.getFullYear();
   const inicioAnio = `${anioBase}-01-01`;
@@ -859,7 +893,7 @@ async obtenerEstadisticas(
     .where('cita.fecha >= :inicioAnio', { inicioAnio })
     .andWhere('cita.fecha <= :finAnio', { finAnio })
     .andWhere('cita.flg_activo = 1')
-    .andWhere('cita.motivo_id != 6'); // ❌ EXCLUIR reuniones clínicas
+    .andWhere('cita.motivo_id != 7'); // ❌ EXCLUIR reuniones clínicas
 
   if (terapeutaId) {
     queryAnio.andWhere('cita.doctor_id = :terapeutaId', { terapeutaId });
@@ -890,7 +924,7 @@ async obtenerEstadisticas(
     .where('cita.fecha >= :mesDesde', { mesDesde })
     .andWhere('cita.fecha <= :mesHasta', { mesHasta })
     .andWhere('cita.flg_activo = 1')
-    .andWhere('cita.motivo_id != 6'); // ❌ EXCLUIR reuniones clínicas
+    .andWhere('cita.motivo_id != 7'); // ❌ EXCLUIR reuniones clínicas
 
   if (terapeutaId) {
     queryMes.andWhere('cita.doctor_id = :terapeutaId', { terapeutaId });
@@ -899,29 +933,38 @@ async obtenerEstadisticas(
   const totalCitasMes = await queryMes.getCount();
 
   // ===================================================================
-  // 3. TOTAL DE REUNIONES CLÍNICAS DEL MES (SOLO motivo_id = 6)
+  // 3. TOTAL DE REUNIONES CLÍNICAS DEL MES (SOLO motivo_id = 7)
   // ===================================================================
   const queryReuniones = this.citaRepo
     .createQueryBuilder('cita')
+    .innerJoin('cita_reunion_clinica', 'rc', 'rc.id_cita = cita.id')
     .where('cita.fecha >= :mesDesde', { mesDesde })
     .andWhere('cita.fecha <= :mesHasta', { mesHasta })
     .andWhere('cita.flg_activo = 1')
-    .andWhere('cita.motivo_id = 6'); // ✅ SOLO reuniones clínicas
+    .andWhere('cita.motivo_id = 7'); // ✅ SOLO reuniones clínicas
 
   if (terapeutaId) {
+    console.log(`   🔍 Filtrando reuniones clínicas por terapeuta ID: ${terapeutaId}`);
     // Para reuniones clínicas, buscar en la tabla de terapeutas asociados
     queryReuniones.innerJoin(
       'cita_reunion_clinica_terapeutas',
       'rct',
-      'rct.id_reunion = cita.id AND rct.id_terapeuta = :terapeutaId',
+      'rct.id_reunion = rc.id AND rct.id_terapeuta = :terapeutaId',
       { terapeutaId }
     );
   }
 
+  // 🔥 LOG DE LA QUERY SQL GENERADA
+  const sqlQuery = queryReuniones.getSql();
+  console.log(`   🔍 SQL Query para reuniones clínicas:`);
+  console.log(`   ${sqlQuery}`);
+  console.log(`   📊 Parámetros: mesDesde=${mesDesde}, mesHasta=${mesHasta}, terapeutaId=${terapeutaId || 'N/A'}`);
+
   const totalReunionesClinicasMes = await queryReuniones.getCount();
+  console.log(`   ✅ Reuniones clínicas encontradas: ${totalReunionesClinicasMes}`);
 
   // ===================================================================
-  // 4. CITAS DE ESTA SEMANA (Lunes a Sábado) - SIN motivo_id = 6
+  // 4. CITAS DE ESTA SEMANA (Lunes a Sábado) - SIN motivo_id = 7
   // ===================================================================
   const diaSemana = fechaBase.getDay(); // 0=domingo, 1=lunes, ..., 6=sábado
   const lunes = new Date(fechaBase);
@@ -945,7 +988,7 @@ async obtenerEstadisticas(
     .where('cita.fecha >= :inicioSemana', { inicioSemana })
     .andWhere('cita.fecha <= :finSemana', { finSemana })
     .andWhere('cita.flg_activo = 1')
-    .andWhere('cita.motivo_id != 6'); // ❌ EXCLUIR reuniones clínicas
+    .andWhere('cita.motivo_id != 7'); // ❌ EXCLUIR reuniones clínicas
 
   if (terapeutaId) {
     querySemana.andWhere('cita.doctor_id = :terapeutaId', { terapeutaId });

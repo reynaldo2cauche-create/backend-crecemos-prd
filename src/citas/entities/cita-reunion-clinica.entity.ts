@@ -2,6 +2,7 @@ import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, OneToMany, JoinColum
 import { EstadoCita } from '../../catalogos/estado-cita.entity';
 import { CitaReunionClinicaTerapeutas } from './cita-reunion-clinica-terapeutas.entity';
 import { CitaReunionClinicaServicios } from './cita-reunion-clinica-servicios.entity';
+import { Cita } from './cita.entity';
 
 /**
  * Entidad para REUNIONES CLÍNICAS
@@ -11,6 +12,13 @@ import { CitaReunionClinicaServicios } from './cita-reunion-clinica-servicios.en
 export class CitaReunionClinica {
   @PrimaryGeneratedColumn()
   id: number;
+
+  @Column({ type: 'int' })
+  id_cita: number;
+
+  @ManyToOne(() => Cita, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'id_cita' })
+  cita: Cita;
 
   @Column({ type: 'int', name: 'estado_cita_id' })
   estado_cita_id: number;
