@@ -24,6 +24,8 @@ export class ArchivosDigitalesService {
     private terapeutaRepository: Repository<TrabajadorCentro>,
   ) {}
 
+
+  
   // Métodos para Archivos Digitales
   async create(createArchivoDigitalDto: CreateArchivoDigitalDto): Promise<ArchivoDigital> {
     // Verificar que el terapeuta existe

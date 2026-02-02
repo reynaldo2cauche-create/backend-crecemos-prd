@@ -30,6 +30,39 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { v4 as uuidv4 } from 'uuid';
 
+ 
+function sanitizeFilename(filename: string): string {
+  if (!filename) return 'archivo';
+  
+  try {
+    let normalized = filename;
+    
+    // 1. Normalizar a NFC (forma compuesta correcta de tildes)
+    normalized = normalized.normalize('NFC');
+    
+    // 2. Remover caracteres de control
+    normalized = normalized.replace(/[\x00-\x1F\x7F]/g, '');
+    
+    // 3. Convertir espacios a guiones bajos
+    normalized = normalized.replace(/\s+/g, '_');
+    
+    // 4. Permitir solo: letras (incluidas con tildes), números, puntos, guiones
+    // Esto permite: a-z, A-Z, 0-9, áéíóúñÁÉÍÓÚÑüÜ, ., -, _
+    normalized = normalized.replace(/[^a-zA-Z0-9áéíóúñÁÉÍÓÚÑüÜ._-]/g, '_');
+    
+    // 5. Limpiar múltiples guiones bajos
+    normalized = normalized
+      .replace(/_+/g, '_')
+      .replace(/^_+|_+$/g, '');
+    
+    // 6. Fallback si quedó vacío
+    return normalized.length > 0 ? normalized : 'archivo';
+    
+  } catch (error) {
+    console.error('Error en sanitizeFilename:', error);
+    return 'archivo';
+  }
+}
 @Controller('backend_api/archivos-digitales')
 @UseGuards(JwtAuthGuard)
 export class ArchivosDigitalesController {
@@ -38,20 +71,38 @@ export class ArchivosDigitalesController {
     private readonly auditoriaService: AuditoriaService,
   ) {}
 
-  // Rutas para Archivos Digitales
   @Post()
   @Auditable({
     modulo: 'ARCHIVOS_DIGITALES',
     accion: 'SUBIR_ARCHIVO',
   })
   @UseInterceptors(FileInterceptor('archivo', {
-    storage: undefined, // Usaremos manejo manual del archivo
+    storage: undefined,
     fileFilter: (req, file, callback) => {
-      // Validar tipos de archivo permitidos
+      // ✅ SANITIZAR EL NOMBRE AQUÍ MISMO, ANTES DE VALIDAR
+      console.log('🔍 Nombre recibido por Multer:', file.originalname);
+      console.log('🔍 Bytes originales:', Buffer.from(file.originalname, 'latin1').toString('hex'));
+      
+      // Intentar reinterpretar el encoding
+      try {
+        // Convertir de latin1 a UTF-8 correctamente
+        const buffer = Buffer.from(file.originalname, 'latin1');
+        const utf8Name = buffer.toString('utf8');
+        console.log('🔄 Reinterpretado UTF-8:', utf8Name);
+        
+        // Sanitizar
+        file.originalname = sanitizeFilename(utf8Name);
+        console.log('✅ Nombre sanitizado:', file.originalname);
+      } catch (error) {
+        console.error('❌ Error al reinterpretar:', error);
+        // Si falla, sanitizar directamente
+        file.originalname = sanitizeFilename(file.originalname);
+        console.log('✅ Nombre sanitizado (fallback):', file.originalname);
+      }
+      
+      // Validar tipo de archivo
       const allowedMimeTypes = [
-        // PDFs
         'application/pdf',
-        // Imágenes
         'image/jpeg',
         'image/jpg',
         'image/png',
@@ -59,16 +110,12 @@ export class ArchivosDigitalesController {
         'image/bmp',
         'image/webp',
         'image/svg+xml',
-        // Word
         'application/msword',
         'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-        // Excel
         'application/vnd.ms-excel',
         'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        // PowerPoint
         'application/vnd.ms-powerpoint',
         'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-        // Archivos de texto
         'text/plain',
         'text/csv'
       ];
@@ -77,13 +124,13 @@ export class ArchivosDigitalesController {
         callback(null, true);
       } else {
         callback(new HttpException(
-          `Formato de archivo no permitido. Tipos permitidos: PDF, Imágenes (JPG, PNG, GIF, BMP, WEBP, SVG), Word (DOC, DOCX), Excel (XLS, XLSX), PowerPoint (PPT, PPTX), Texto (TXT, CSV). Formato recibido: ${file.mimetype}`,
+          `Formato de archivo no permitido. Formato recibido: ${file.mimetype}`,
           HttpStatus.BAD_REQUEST
         ), false);
       }
     },
     limits: {
-      fileSize: 10 * 1024 * 1024, // 10MB máximo
+      fileSize: 10 * 1024 * 1024,
     },
   }))
   async create(
@@ -94,24 +141,28 @@ export class ArchivosDigitalesController {
       throw new HttpException('Archivo requerido', HttpStatus.BAD_REQUEST);
     }
 
-    // Validar peso máximo del archivo
-    const maxSize = 10 * 1024 * 1024; // 10MB
+    const maxSize = 10 * 1024 * 1024;
     if (file.size > maxSize) {
       throw new HttpException(
-        `El archivo excede el peso máximo permitido. Peso máximo: 10MB. Peso del archivo: ${(file.size / (1024 * 1024)).toFixed(2)}MB`, 
+        `El archivo excede el peso máximo permitido. Peso máximo: 10MB`,
         HttpStatus.BAD_REQUEST
       );
     }
 
-    // Generar nombre único para el archivo
-    const extension = path.extname(file.originalname);
-    const nombreArchivo = `${uuidv4()}${extension}`;
+    // ✅ El nombre YA viene sanitizado del fileFilter
+    const nombreOriginalSanitizado = file.originalname;
     
-    // Crear subcarpeta para archivos digitales
+    console.log('📄 Nombre a guardar en BD:', nombreOriginalSanitizado);
+    
+    const extension = path.extname(nombreOriginalSanitizado);
+    const nombreSinExtension = path.basename(nombreOriginalSanitizado, extension);
+    
+    // Generar nombre único
+    const nombreArchivo = `${uuidv4()}_${nombreSinExtension}${extension}`;
+    
     const subcarpeta = 'archivos_digitales';
     const rutaArchivo = `${subcarpeta}/${nombreArchivo}`;
 
-    // Guardar archivo en el sistema de archivos
     const uploadsDir = path.join(process.cwd(), 'uploads');
     const subcarpetaCompleta = path.join(uploadsDir, subcarpeta);
     
@@ -120,9 +171,17 @@ export class ArchivosDigitalesController {
     }
 
     const rutaCompleta = path.join(uploadsDir, rutaArchivo);
-    fs.writeFileSync(rutaCompleta, file.buffer);
+    
+    try {
+      fs.writeFileSync(rutaCompleta, file.buffer);
+      console.log('💾 Archivo guardado:', rutaCompleta);
+    } catch (error) {
+      throw new HttpException(
+        `Error al guardar el archivo: ${error.message}`,
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
 
-    // Validar que los IDs sean números válidos
     const terapeutaId = parseInt(createArchivoDigitalDto.terapeutaId);
     const tipoArchivoId = parseInt(createArchivoDigitalDto.tipoArchivoId);
     const pacienteId = createArchivoDigitalDto.pacienteId ? parseInt(createArchivoDigitalDto.pacienteId) : null;
@@ -139,13 +198,12 @@ export class ArchivosDigitalesController {
       throw new HttpException('ID de paciente inválido', HttpStatus.BAD_REQUEST);
     }
 
-    // Crear DTO con la información del archivo
     const dto: CreateArchivoDigitalDto = {
       terapeutaId,
       tipoArchivoId,
       descripcion: createArchivoDigitalDto.descripcion || null,
       nombreArchivo: nombreArchivo,
-      nombreOriginal: file.originalname,
+      nombreOriginal: nombreOriginalSanitizado,
       tipoMime: file.mimetype,
       tamano: file.size,
       rutaArchivo: rutaArchivo,

@@ -212,7 +212,6 @@ const notificacionesProcesadas = notificaciones.map(notif => {
   const resultado = {
     ...notif,
     datos_adicionales: datosAdicionales,
-    tiempo_relativo: this.formatearTiempoRelativo(notif.minutos_transcurridos),
     leida: leidaBoolean,
     terapeuta_nombre: terapeutaNombre
   };
@@ -442,6 +441,18 @@ private async obtenerRolDelUsuario(usuarioId: number): Promise<number> {
     usuarioCreador: number,
     rolesDestino: number[]
   ) {
+    // ✅ VERIFICAR DUPLICADOS ANTES DE CREAR
+    const yaExiste = await this.verificarEventoExistente(
+      'CUMPLEANOS_PACIENTE',
+      pacienteId,
+      rolesDestino
+    );
+
+    if (yaExiste) {
+      this.logger.warn(`⚠️ Ya existe notificación de cumpleaños para paciente ${pacienteId} (${nombrePaciente})`);
+      return null;
+    }
+
     const evento = await this.crearEvento({
       tipo_evento: 'CUMPLEANOS_PACIENTE',
       descripcion: `${nombrePaciente} cumplirá ${edad} años`,
@@ -461,6 +472,8 @@ private async obtenerRolDelUsuario(usuarioId: number): Promise<number> {
       evento_id: evento.id,
       roles_destino: rolesDestino,
     });
+
+    this.logger.log(`✅ Notificación de cumpleaños creada para paciente ${nombrePaciente}`);
   }
 
   async notificarCumpleanosEmpleado(
@@ -471,6 +484,18 @@ private async obtenerRolDelUsuario(usuarioId: number): Promise<number> {
     cargo: string,
     usuarioCreador: number,
   ) {
+    // ✅ VERIFICAR DUPLICADOS ANTES DE CREAR
+    const yaExiste = await this.verificarEventoExistente(
+      'CUMPLEANOS_EMPLEADO',
+      empleadoId,
+      [1]
+    );
+
+    if (yaExiste) {
+      this.logger.warn(`⚠️ Ya existe notificación de cumpleaños para empleado ${empleadoId} (${nombreEmpleado})`);
+      return null;
+    }
+
     const evento = await this.crearEvento({
       tipo_evento: 'CUMPLEANOS_EMPLEADO',
       descripcion: `${nombreEmpleado} cumplirá ${edad} años`,
@@ -491,6 +516,8 @@ private async obtenerRolDelUsuario(usuarioId: number): Promise<number> {
       evento_id: evento.id,
       roles_destino: [1],
     });
+
+    this.logger.log(`✅ Notificación de cumpleaños creada para empleado ${nombreEmpleado}`);
   }
 
   async notificarAccesoFueraHorario(
@@ -627,5 +654,192 @@ async notificarCitaModificada(
       evento_id: evento.id,
       roles_destino: [1],
     });
+  }
+
+  // ========================================
+  // MÉTODOS PARA PREVENIR Y LIMPIAR DUPLICADOS
+  // ========================================
+
+  /**
+   * Verifica si ya existe un evento del tipo especificado para evitar duplicados
+   * antes de crear una nueva notificación
+   */
+  private async verificarEventoExistente(
+    tipoEvento: string,
+    entidadId: number,
+    roles: number[]
+  ): Promise<boolean> {
+    try {
+      let query: string;
+      let params: any[];
+
+      if (tipoEvento === 'CUMPLEANOS_PACIENTE') {
+        query = `
+          SELECT COUNT(DISTINCT e.id) as total
+          FROM eventos_sistema e
+          INNER JOIN notificaciones n ON n.evento_id = e.id
+          WHERE e.tipo_evento = ?
+            AND JSON_EXTRACT(e.datos_adicionales, '$.paciente_id') = ?
+            AND YEAR(e.fecha_evento) = YEAR(CURDATE())
+            AND e.fecha_evento >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
+            AND e.fecha_evento <= DATE_ADD(CURDATE(), INTERVAL 7 DAY)
+        `;
+        params = [tipoEvento, entidadId];
+      } else if (tipoEvento === 'CUMPLEANOS_EMPLEADO') {
+        query = `
+          SELECT COUNT(DISTINCT e.id) as total
+          FROM eventos_sistema e
+          INNER JOIN notificaciones n ON n.evento_id = e.id
+          WHERE e.tipo_evento = ?
+            AND JSON_EXTRACT(e.datos_adicionales, '$.empleado_id') = ?
+            AND YEAR(e.fecha_evento) = YEAR(CURDATE())
+            AND e.fecha_evento >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
+            AND e.fecha_evento <= DATE_ADD(CURDATE(), INTERVAL 7 DAY)
+        `;
+        params = [tipoEvento, entidadId];
+      } else if (tipoEvento === 'ANIVERSARIO_LABORAL') {
+        query = `
+          SELECT COUNT(DISTINCT e.id) as total
+          FROM eventos_sistema e
+          INNER JOIN notificaciones n ON n.evento_id = e.id
+          WHERE e.tipo_evento = ?
+            AND JSON_EXTRACT(e.datos_adicionales, '$.empleado_id') = ?
+            AND YEAR(e.fecha_evento) = YEAR(CURDATE())
+            AND e.fecha_evento >= DATE_SUB(CURDATE(), INTERVAL 14 DAY)
+            AND e.fecha_evento <= DATE_ADD(CURDATE(), INTERVAL 14 DAY)
+        `;
+        params = [tipoEvento, entidadId];
+      } else {
+        return false;
+      }
+
+      const result = await this.eventosRepo.query(query, params);
+      const existe = parseInt(result[0].total) > 0;
+
+      return existe;
+    } catch (error) {
+      this.logger.error(`Error al verificar evento existente: ${error.message}`);
+      return false;
+    }
+  }
+
+  /**
+   * Limpia notificaciones duplicadas de cumpleaños y aniversarios
+   * Mantiene solo el registro más reciente de cada grupo duplicado
+   */
+  async limpiarNotificacionesDuplicadas(): Promise<{
+    eliminados_pacientes: number;
+    eliminados_empleados: number;
+    eliminados_aniversarios: number;
+    total_eliminados: number;
+  }> {
+    try {
+      this.logger.log('🧹 Iniciando limpieza de notificaciones duplicadas...');
+
+      // 1. Limpiar duplicados de cumpleaños de PACIENTES
+      const deletePacientes = `
+        DELETE n FROM notificaciones n
+        INNER JOIN eventos_sistema e ON e.id = n.evento_id
+        WHERE e.tipo_evento = 'CUMPLEANOS_PACIENTE'
+        AND n.id NOT IN (
+          SELECT * FROM (
+            SELECT MAX(n2.id)
+            FROM notificaciones n2
+            INNER JOIN eventos_sistema e2 ON e2.id = n2.evento_id
+            WHERE e2.tipo_evento = 'CUMPLEANOS_PACIENTE'
+            GROUP BY
+              JSON_EXTRACT(e2.datos_adicionales, '$.paciente_id'),
+              YEAR(e2.fecha_evento)
+          ) AS keep_ids
+        )
+      `;
+
+      const resultPacientes = await this.notificacionesRepo.query(deletePacientes);
+      const eliminadosPacientes = resultPacientes.affectedRows || 0;
+
+      // 2. Limpiar eventos huérfanos de pacientes
+      const deleteEventosPacientes = `
+        DELETE FROM eventos_sistema
+        WHERE tipo_evento = 'CUMPLEANOS_PACIENTE'
+        AND id NOT IN (SELECT DISTINCT evento_id FROM notificaciones)
+      `;
+      await this.eventosRepo.query(deleteEventosPacientes);
+
+      // 3. Limpiar duplicados de cumpleaños de EMPLEADOS
+      const deleteEmpleados = `
+        DELETE n FROM notificaciones n
+        INNER JOIN eventos_sistema e ON e.id = n.evento_id
+        WHERE e.tipo_evento = 'CUMPLEANOS_EMPLEADO'
+        AND n.id NOT IN (
+          SELECT * FROM (
+            SELECT MAX(n2.id)
+            FROM notificaciones n2
+            INNER JOIN eventos_sistema e2 ON e2.id = n2.evento_id
+            WHERE e2.tipo_evento = 'CUMPLEANOS_EMPLEADO'
+            GROUP BY
+              JSON_EXTRACT(e2.datos_adicionales, '$.empleado_id'),
+              YEAR(e2.fecha_evento)
+          ) AS keep_ids
+        )
+      `;
+
+      const resultEmpleados = await this.notificacionesRepo.query(deleteEmpleados);
+      const eliminadosEmpleados = resultEmpleados.affectedRows || 0;
+
+      // 4. Limpiar eventos huérfanos de empleados
+      const deleteEventosEmpleados = `
+        DELETE FROM eventos_sistema
+        WHERE tipo_evento = 'CUMPLEANOS_EMPLEADO'
+        AND id NOT IN (SELECT DISTINCT evento_id FROM notificaciones)
+      `;
+      await this.eventosRepo.query(deleteEventosEmpleados);
+
+      // 5. Limpiar duplicados de ANIVERSARIOS LABORALES
+      const deleteAniversarios = `
+        DELETE n FROM notificaciones n
+        INNER JOIN eventos_sistema e ON e.id = n.evento_id
+        WHERE e.tipo_evento = 'ANIVERSARIO_LABORAL'
+        AND n.id NOT IN (
+          SELECT * FROM (
+            SELECT MAX(n2.id)
+            FROM notificaciones n2
+            INNER JOIN eventos_sistema e2 ON e2.id = n2.evento_id
+            WHERE e2.tipo_evento = 'ANIVERSARIO_LABORAL'
+            GROUP BY
+              JSON_EXTRACT(e2.datos_adicionales, '$.empleado_id'),
+              YEAR(e2.fecha_evento)
+          ) AS keep_ids
+        )
+      `;
+
+      const resultAniversarios = await this.notificacionesRepo.query(deleteAniversarios);
+      const eliminadosAniversarios = resultAniversarios.affectedRows || 0;
+
+      // 6. Limpiar eventos huérfanos de aniversarios
+      const deleteEventosAniversarios = `
+        DELETE FROM eventos_sistema
+        WHERE tipo_evento = 'ANIVERSARIO_LABORAL'
+        AND id NOT IN (SELECT DISTINCT evento_id FROM notificaciones)
+      `;
+      await this.eventosRepo.query(deleteEventosAniversarios);
+
+      const totalEliminados = eliminadosPacientes + eliminadosEmpleados + eliminadosAniversarios;
+
+      this.logger.log(`✅ Limpieza completada:`);
+      this.logger.log(`   - Cumpleaños pacientes eliminados: ${eliminadosPacientes}`);
+      this.logger.log(`   - Cumpleaños empleados eliminados: ${eliminadosEmpleados}`);
+      this.logger.log(`   - Aniversarios eliminados: ${eliminadosAniversarios}`);
+      this.logger.log(`   - Total eliminados: ${totalEliminados}`);
+
+      return {
+        eliminados_pacientes: eliminadosPacientes,
+        eliminados_empleados: eliminadosEmpleados,
+        eliminados_aniversarios: eliminadosAniversarios,
+        total_eliminados: totalEliminados,
+      };
+    } catch (error) {
+      this.logger.error(`❌ Error al limpiar duplicados: ${error.message}`);
+      throw error;
+    }
   }
 }

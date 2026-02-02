@@ -168,13 +168,13 @@ async marcarComoLeida(
   const usuarioId = req.user?.id;
   const rolId = req.user?.rol?.id;
 
- 
+
 
   if (!usuarioId) {
     console.error('❌ Usuario no autenticado');
-    return { 
-      success: false, 
-      message: 'Usuario no autenticado' 
+    return {
+      success: false,
+      message: 'Usuario no autenticado'
     };
   }
 
@@ -185,27 +185,27 @@ async marcarComoLeida(
       INNER JOIN notificaciones_destino nd ON nd.notificacion_id = n.id
       WHERE n.id = ? AND nd.rol_id = ?
     `;
-    
+
     const tieneAcceso = await this.notificacionesRepo.query(verificarAccesoQuery, [
-      parseInt(notificacionId), 
+      parseInt(notificacionId),
       rolId
     ]);
 
     if (!tieneAcceso || tieneAcceso.length === 0) {
       console.error('❌ Usuario no tiene acceso a esta notificación');
-      return { 
-        success: false, 
-        message: 'No tienes permiso para marcar esta notificación' 
+      return {
+        success: false,
+        message: 'No tienes permiso para marcar esta notificación'
       };
     }
 
     // 🔴 EJECUTAR EL SERVICIO
     const resultado = await this.notificacionesService.marcarComoLeida(
-      parseInt(notificacionId), 
+      parseInt(notificacionId),
       usuarioId
     );
 
-  
+
     return {
       success: true,
       message: 'Notificación marcada como leída',
@@ -224,4 +224,42 @@ async marcarComoLeida(
     };
   }
 }
+
+  /**
+   * Limpia notificaciones duplicadas de cumpleaños y aniversarios
+   * POST /backend_api/notificaciones/limpiar-duplicados
+   * ⚠️ Solo accesible para administradores
+   */
+  @Post('limpiar-duplicados')
+  async limpiarDuplicados(@Request() req) {
+    const rolId = req.user?.rol?.id;
+    const usuarioId = req.user?.id;
+
+    // Verificar que sea administrador (rol_id = 1)
+    if (!rolId || rolId !== 1) {
+      return {
+        success: false,
+        message: 'No tienes permisos para ejecutar esta acción. Solo administradores.',
+      };
+    }
+
+    try {
+      const resultado = await this.notificacionesService.limpiarNotificacionesDuplicadas();
+
+      return {
+        success: true,
+        message: 'Limpieza de duplicados completada exitosamente',
+        resultado,
+        ejecutado_por: usuarioId,
+        fecha: new Date().toISOString(),
+      };
+    } catch (error) {
+      console.error('❌ Error al limpiar duplicados:', error);
+      return {
+        success: false,
+        message: 'Error al limpiar notificaciones duplicadas',
+        error: error.message,
+      };
+    }
+  }
 }
