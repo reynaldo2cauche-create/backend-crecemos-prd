@@ -65,6 +65,7 @@ import { HistorialCita } from './citas/entities/historial-cita.entity';
 import { HistorialCitaReunionTerapeutas } from './citas/entities/historial-cita-reunion-terapeutas.entity';
 import { HistorialCitaReunionServicios } from './citas/entities/historial-cita-reunion-servicios.entity';
 import { HistorialCitaVisitaEscolar } from './citas/entities/historial-cita-visita-escolar.entity';
+import { SeguimientoAsistencia } from './citas/entities/seguimiento-asistencia.entity';
 import { MotivoCita } from './catalogos/motivo-cita.entity';
 import { EstadoCita } from './catalogos/estado-cita.entity';
 import { TipoCita } from './catalogos/tipo-cita.entity';
@@ -112,7 +113,7 @@ import { DatosAcademicos } from './usuarios/datos-academicos.entity';
 import { NivelEducacion } from './catalogos/nivel-educacion.entity';
 import { ProcesoLegalInfantil } from './procesos-legales-infantiles/entities/proceso-legal-infantil.entity';
 import { ProcesosLegalesInfantilesModule } from './procesos-legales-infantiles/procesos-legales-infantiles.module';
-// import { ScheduleModule } from '@nestjs/schedule';
+
 
 @Module({
   imports: [
@@ -212,6 +213,7 @@ import { ProcesosLegalesInfantilesModule } from './procesos-legales-infantiles/p
         CitaReunionClinicaTerapeutas,
         CitaReunionClinicaServicios,
         CitaVisitaEscolar,
+        SeguimientoAsistencia,
         HistorialCita,
         HistorialCitaReunionTerapeutas,
         HistorialCitaReunionServicios,

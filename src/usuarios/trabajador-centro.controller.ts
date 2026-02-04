@@ -27,6 +27,11 @@ export class TrabajadorCentroController {
     return this.service.findAllForSelect();
   }
 
+  @Get('terapeutas')
+  findTerapeutas() {
+    return this.service.findTerapeutas();
+  }
+
   // ============== ENDPOINTS RRHH ==============
   @Get('empleados')
   @UseGuards(JwtAuthGuard)

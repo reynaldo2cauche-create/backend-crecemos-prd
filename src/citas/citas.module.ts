@@ -7,6 +7,7 @@ import { CitaReunionClinica } from './entities/cita-reunion-clinica.entity';
 import { CitaReunionClinicaTerapeutas } from './entities/cita-reunion-clinica-terapeutas.entity';
 import { CitaReunionClinicaServicios } from './entities/cita-reunion-clinica-servicios.entity';
 import { CitaVisitaEscolar } from './entities/cita-visita-escolar.entity';
+import { SeguimientoAsistencia } from './entities/seguimiento-asistencia.entity';
 
 // Entidades de historial
 import { HistorialCita } from './entities/historial-cita.entity';
@@ -22,7 +23,10 @@ import { TipoCita } from '../catalogos/tipo-cita.entity';
 // Servicios y controladores
 import { CitasService } from './citas.service';
 import { HistorialCitasService } from './historial-citas.service';
+import { AsistenciaService } from './asistencia.service';
+
 import { CitasController } from './citas.controller';
+import { AsistenciaController } from './asistencia.controller';
 import { NotificacionesModule } from '../notificaciones/notificaciones.module';
 
 @Module({
@@ -34,6 +38,7 @@ import { NotificacionesModule } from '../notificaciones/notificaciones.module';
       CitaReunionClinicaTerapeutas,
       CitaReunionClinicaServicios,
       CitaVisitaEscolar,
+      SeguimientoAsistencia,
       // Entidades de historial
       HistorialCita,
       HistorialCitaReunionTerapeutas,
@@ -46,8 +51,8 @@ import { NotificacionesModule } from '../notificaciones/notificaciones.module';
     ]),
     forwardRef(() => NotificacionesModule),
   ],
-  providers: [CitasService, HistorialCitasService],
-  controllers: [CitasController],
-  exports: [CitasService, HistorialCitasService]
+  providers: [CitasService, HistorialCitasService, AsistenciaService],
+  controllers: [CitasController, AsistenciaController],
+  exports: [CitasService, HistorialCitasService, AsistenciaService]
 })
 export class CitasModule {}
