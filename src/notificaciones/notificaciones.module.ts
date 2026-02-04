@@ -9,6 +9,7 @@ import { NotificacionDestino } from './entities/notificacion-destino.entity';
 import { NotificacionLeida } from './entities/notificacion-leida.entity';
 import { TrabajadorCentro } from '../usuarios/trabajador-centro.entity';
 import { Paciente } from '../pacientes/paciente.entity';
+import { SeguimientoAsistencia } from 'src/citas/entities/seguimiento-asistencia.entity';
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { Paciente } from '../pacientes/paciente.entity';
       NotificacionLeida,
       TrabajadorCentro,
       Paciente,
+      SeguimientoAsistencia,
     ]),
   ],
   controllers: [NotificacionesController],

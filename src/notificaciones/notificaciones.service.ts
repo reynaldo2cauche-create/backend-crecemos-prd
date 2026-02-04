@@ -656,6 +656,71 @@ async notificarCitaModificada(
     });
   }
 
+async notificarInconsistenciaAsistencia(
+  citaId: number,
+  pacienteNombre: string,
+  terapeutaNombre: string,
+  fechaCita: string,
+  horaCita: string,
+  estadoRecepcion: number,
+  estadoTerapeuta: number,
+  recepcionMarco: boolean,
+  terapeutaMarco: boolean,
+) {
+  // Determinar el tipo de inconsistencia y mensaje específico
+  let tipoInconsistencia = '';
+  let mensajeDetallado = '';
+
+  if (!recepcionMarco && !terapeutaMarco) {
+    // Ninguno marcó asistencia
+    tipoInconsistencia = 'Ninguno marcó asistencia';
+    mensajeDetallado = `Cita #${citaId} - Ninguno marcó asistencia`;
+  } else if (!recepcionMarco) {
+    // Solo terapeuta marcó
+    tipoInconsistencia = 'Falta registro de admisión';
+    mensajeDetallado = `Cita #${citaId} - Falta registro de admisión`;
+  } else if (!terapeutaMarco) {
+    // Solo admisión marcó
+    tipoInconsistencia = 'Falta registro del terapeuta';
+    mensajeDetallado = `Cita #${citaId} - Falta registro del terapeuta`;
+  } else if (estadoRecepcion !== estadoTerapeuta) {
+    // Ambos marcaron pero estados diferentes
+    const estadoAdmisionTexto = estadoRecepcion === 7 ? 'Asistió' : 'Sesión Dictada';
+    const estadoTerapeutaTexto = estadoTerapeuta === 7 ? 'Asistió' : 'Sesión Dictada';
+    tipoInconsistencia = 'Estados no coinciden';
+    mensajeDetallado = `Cita #${citaId} - Estados no coinciden (Admisión: ${estadoAdmisionTexto}, Terapeuta: ${estadoTerapeutaTexto})`;
+  }
+
+  const evento = await this.crearEvento({
+    tipo_evento: 'INCONSISTENCIA_ASISTENCIA',
+    descripcion: `Inconsistencia detectada en cita #${citaId}`,
+    usuario_id: 1, // Sistema
+    datos_adicionales: {
+      cita_id: citaId,
+      paciente_nombre: pacienteNombre,
+      terapeuta_nombre: terapeutaNombre,
+      fecha_cita: fechaCita,
+      hora_cita: horaCita,
+      estado_recepcion: estadoRecepcion,
+      estado_terapeuta: estadoTerapeuta,
+      recepcion_marco: recepcionMarco,
+      terapeuta_marco: terapeutaMarco,
+      tipo_inconsistencia: tipoInconsistencia,
+    },
+  });
+
+  await this.crearNotificacion({
+    tipo_notificacion: 'INCONSISTENCIA_ASISTENCIA',
+    titulo: 'Inconsistencia de Asistencia',
+    mensaje: mensajeDetallado,
+    evento_id: evento.id,
+    roles_destino: [1], // Solo para administradores
+  });
+
+  this.logger.log(`🚨 Notificación de inconsistencia creada para cita #${citaId}: ${tipoInconsistencia}`);
+}
+
+
   // ========================================
   // MÉTODOS PARA PREVENIR Y LIMPIAR DUPLICADOS
   // ========================================

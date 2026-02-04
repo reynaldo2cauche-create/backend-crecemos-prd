@@ -2,6 +2,7 @@ import { Controller, Get, Post, Delete, Query, Param, UseGuards, Request } from 
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { NotificacionesService } from './notificaciones.service';
+import { NotificacionesScheduler } from './notificaciones.scheduler';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Notificacion } from './entities/notificacion.entity';
 import { Repository } from 'typeorm';
@@ -11,6 +12,7 @@ import { Repository } from 'typeorm';
 export class NotificacionesController {
   constructor(
     private readonly notificacionesService: NotificacionesService,
+    private readonly notificacionesScheduler: NotificacionesScheduler,
      @InjectRepository(Notificacion)
         private notificacionesRepo: Repository<Notificacion>,
   ) {}
@@ -258,6 +260,47 @@ async marcarComoLeida(
       return {
         success: false,
         message: 'Error al limpiar notificaciones duplicadas',
+        error: error.message,
+      };
+    }
+  }
+
+  /**
+   * 🧪 Endpoint temporal para forzar verificación de inconsistencias de asistencia
+   * POST /backend_api/notificaciones/forzar-verificacion-inconsistencias
+   * ⚠️ Solo accesible para administradores
+   */
+  @Post('forzar-verificacion-inconsistencias')
+  async forzarVerificacionInconsistencias(@Request() req, @Query('fecha') fecha?: string) {
+    const rolId = req.user?.rol?.id;
+    const usuarioId = req.user?.id;
+
+    // Verificar que sea administrador (rol_id = 1)
+    if (!rolId || rolId !== 1) {
+      return {
+        success: false,
+        message: 'No tienes permisos para ejecutar esta acción. Solo administradores.',
+      };
+    }
+
+    try {
+      console.log('🧪 Forzando verificación manual de inconsistencias de asistencia...');
+
+      // Llamar al método privado del scheduler mediante reflexión
+      // Como el método es privado, necesitamos acceder mediante el scheduler
+      await (this.notificacionesScheduler as any).verificarInconsistenciasAsistencia();
+
+      return {
+        success: true,
+        message: 'Verificación de inconsistencias ejecutada manualmente',
+        ejecutado_por: usuarioId,
+        fecha: new Date().toISOString(),
+      };
+    } catch (error) {
+      console.error('❌ Error al verificar inconsistencias:', error);
+      return {
+        success: false,
+        message: 'Error al verificar inconsistencias de asistencia',
         error: error.message,
       };
     }

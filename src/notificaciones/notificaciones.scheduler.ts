@@ -4,12 +4,15 @@ import { Repository } from 'typeorm';
 import { NotificacionesService } from './notificaciones.service';
 import { TrabajadorCentro } from '../usuarios/trabajador-centro.entity';
 import { Paciente } from '../pacientes/paciente.entity';
+import { SeguimientoAsistencia } from '../citas/entities/seguimiento-asistencia.entity';
+
 
 @Injectable()
 export class NotificacionesScheduler {
   private readonly logger = new Logger(NotificacionesScheduler.name);
   private intervalId: NodeJS.Timeout;
   private sincronizacionInicialCompletada = false;
+  
 
   constructor(
     @InjectRepository(TrabajadorCentro)
@@ -17,6 +20,8 @@ export class NotificacionesScheduler {
     @InjectRepository(Paciente)
     private pacientesRepo: Repository<Paciente>,
     private notificacionesService: NotificacionesService,
+    @InjectRepository(SeguimientoAsistencia)
+    private seguimientoRepo: Repository<SeguimientoAsistencia>,
   ) {}
 
   async iniciar() {
@@ -25,10 +30,12 @@ export class NotificacionesScheduler {
     // Ejecutar sincronización inicial solo la primera vez
     await this.ejecutarSincronizacionInicial();
 
+    // ✅ Ejecutar verificaciones de notificaciones normales cada hora
     this.verificarNotificaciones();
     this.intervalId = setInterval(() => {
       this.verificarNotificaciones();
-    }, 3600000);
+      this.verificarInconsistenciasAsistenciaA9PM(); // Verificar si es hora de revisar inconsistencias
+    }, 3600000); // Cada 1 hora
   }
 
   detener() {
@@ -563,4 +570,181 @@ export class NotificacionesScheduler {
     }
   }
 
+
+  /**
+   * ✅ Verifica si es hora de revisar inconsistencias (solo a las 9 PM)
+   */
+  private async verificarInconsistenciasAsistenciaA9PM() {
+    const ahora = new Date();
+    const hora = ahora.getHours();
+
+    // Solo ejecutar a las 9 PM (21:00)
+    if (hora === 21) {
+      this.logger.log('🕘 Es hora de verificar inconsistencias (9 PM)');
+      await this.verificarInconsistenciasAsistencia();
+    }
+  }
+
+  /**
+   * ✅ MÉTODO CORREGIDO: Verifica inconsistencias de asistencia del DÍA ACTUAL
+   *
+   * Detecta 4 tipos de inconsistencias:
+   * 1. Ninguno marcó después de 24 horas - ni admisión ni terapeuta registraron (SOLO SI YA PASARON 24 HORAS)
+   * 2. Solo terapeuta marcó - admisión no registró
+   * 3. Solo admisión marcó - terapeuta no registró
+   * 4. Ambos marcaron estados diferentes - uno marcó 7, otro marcó 6
+   *
+   * Se ejecuta a las 9 PM y verifica las citas del DÍA ACTUAL
+   */
+  private async verificarInconsistenciasAsistencia() {
+    try {
+      this.logger.log('🔍 Verificando inconsistencias de asistencia del DÍA ACTUAL...');
+
+      // ✅ Obtener solo la fecha de hoy
+      const hoy = new Date();
+      const fechaHoy = this.formatearFecha(hoy);
+
+      this.logger.log(`📅 Verificando citas del día: ${fechaHoy}`);
+
+      // ✅ QUERY CORREGIDA: Buscar SOLO citas con inconsistencias reales (excluir las que ambos marcaron correctamente)
+      const query = `
+        SELECT
+          c.id as cita_id,
+          CONCAT(c.fecha, ' ', c.hora_inicio) AS fecha_cita,
+          c.fecha,
+          c.hora_inicio,
+          CONCAT(p.nombres, ' ', p.apellido_paterno, ' ', COALESCE(p.apellido_materno, '')) AS paciente_nombre,
+          CONCAT(tc.nombres, ' ', tc.apellidos) AS terapeuta_nombre,
+          COALESCE(sa.recepcion_marco, 0) as recepcion_marco,
+          sa.recepcion_estado_id,
+          COALESCE(sa.terapeuta_marco, 0) as terapeuta_marco,
+          sa.terapeuta_estado_id,
+          TIMESTAMPDIFF(HOUR, CONCAT(c.fecha, ' ', c.hora_inicio), NOW()) as horas_transcurridas,
+          -- Determinar el tipo de inconsistencia
+          CASE
+            -- Caso 1: Ninguno marcó (sin importar las horas, se cuenta si es del día)
+            WHEN (COALESCE(sa.recepcion_marco, 0) = 0 AND COALESCE(sa.terapeuta_marco, 0) = 0)
+            THEN 'NINGUNO_MARCO'
+            -- Caso 2: Solo terapeuta marcó
+            WHEN (COALESCE(sa.recepcion_marco, 0) = 0 AND COALESCE(sa.terapeuta_marco, 0) = 1)
+            THEN 'SOLO_TERAPEUTA'
+            -- Caso 3: Solo admisión marcó
+            WHEN (COALESCE(sa.recepcion_marco, 0) = 1 AND COALESCE(sa.terapeuta_marco, 0) = 0)
+            THEN 'SOLO_ADMISION'
+            -- Caso 4: Ambos marcaron pero estados diferentes
+            WHEN (COALESCE(sa.recepcion_marco, 0) = 1 AND COALESCE(sa.terapeuta_marco, 0) = 1
+                  AND sa.recepcion_estado_id != sa.terapeuta_estado_id)
+            THEN 'ESTADOS_DIFERENTES'
+            ELSE NULL
+          END as tipo_inconsistencia
+        FROM citas c
+        LEFT JOIN seguimiento_asistencia sa ON sa.cita_id = c.id
+        INNER JOIN paciente p ON c.paciente_id = p.id
+        INNER JOIN trabajador_centro tc ON c.doctor_id = tc.id
+        WHERE c.fecha >= ?
+          AND c.fecha <= ?
+          AND c.flg_activo = 1
+          -- ✅ EXCLUIR citas donde ambos marcaron el MISMO estado (sin inconsistencia)
+          AND NOT (
+            COALESCE(sa.recepcion_marco, 0) = 1
+            AND COALESCE(sa.terapeuta_marco, 0) = 1
+            AND sa.recepcion_estado_id = sa.terapeuta_estado_id
+          )
+        HAVING tipo_inconsistencia IS NOT NULL
+        ORDER BY c.fecha DESC, c.hora_inicio DESC
+      `;
+
+      const inconsistencias = await this.seguimientoRepo.query(query, [
+        fechaHoy,
+        fechaHoy,
+      ]);
+
+      this.logger.log(`📋 Encontradas ${inconsistencias.length} inconsistencias del día ${fechaHoy}`);
+
+      // ✅ Si hay inconsistencias, crear UNA SOLA notificación con el conteo total
+      if (inconsistencias.length > 0) {
+        // Verificar si ya se notificó hoy
+        const yaNotificadoHoy = await this.verificarNotificacionInconsistenciaHoy(fechaHoy);
+
+        if (yaNotificadoHoy) {
+          this.logger.log(`⏭️ Ya se notificaron las inconsistencias del día ${fechaHoy}, saltando...`);
+          return;
+        }
+
+        // Crear UNA notificación con el conteo total
+        try {
+          this.logger.log(`📝 Creando evento...`);
+          const evento = await this.notificacionesService.crearEvento({
+            tipo_evento: 'INCONSISTENCIA_ASISTENCIA_DIARIA',
+            descripcion: `Resumen de inconsistencias del ${fechaHoy}`,
+            usuario_id: 1,
+            datos_adicionales: {
+              fecha: fechaHoy,
+              total_inconsistencias: inconsistencias.length,
+            },
+          });
+
+          this.logger.log(`✅ Evento creado con ID: ${evento.id}`);
+
+          this.logger.log(`📝 Creando notificación con evento_id: ${evento.id}...`);
+          const notif = await this.notificacionesService.crearNotificacion({
+            tipo_notificacion: 'INCONSISTENCIA_DIARIA',
+            titulo: 'Inconsistencias de Asistencia',
+            mensaje: `Hoy ${fechaHoy} se detectaron ${inconsistencias.length} inconsistencias de asistencia`,
+            evento_id: evento.id,
+            roles_destino: [1], // Solo administradores
+          });
+
+          this.logger.log(`✅ Notificación creada con ID: ${notif.id}`);
+          this.logger.log(`🚨 Notificación diaria creada: ${inconsistencias.length} inconsistencias del ${fechaHoy}`);
+        } catch (errorNotif) {
+          this.logger.error(`❌ Error al crear notificación: ${errorNotif.message}`);
+          this.logger.error(`Stack: ${errorNotif.stack}`);
+          throw errorNotif;
+        }
+      } else {
+        this.logger.log(`✅ No hay inconsistencias del día ${fechaHoy}`);
+      }
+    } catch (error) {
+      this.logger.error(`❌ Error en verificación de inconsistencias: ${error.message}`);
+      this.logger.error(`Stack: ${error.stack}`);
+    }
+  }
+
+  /**
+   * ✅ Formatea una fecha a formato YYYY-MM-DD
+   */
+  private formatearFecha(fecha: Date): string {
+    const year = fecha.getFullYear();
+    const month = String(fecha.getMonth() + 1).padStart(2, '0');
+    const day = String(fecha.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
+  /**
+   * ✅ Verifica si ya existe una notificación diaria de inconsistencias para una fecha
+   */
+  private async verificarNotificacionInconsistenciaHoy(fecha: string): Promise<boolean> {
+    try {
+      const query = `
+        SELECT COUNT(*) as total
+        FROM eventos_sistema e
+        INNER JOIN notificaciones n ON n.evento_id = e.id
+        WHERE e.tipo_evento = 'INCONSISTENCIA_ASISTENCIA_DIARIA'
+          AND JSON_EXTRACT(e.datos_adicionales, '$.fecha') = ?
+      `;
+
+      const result = await this.trabajadoresRepo.query(query, [fecha]);
+      const existe = parseInt(result[0].total) > 0;
+
+      if (existe) {
+        this.logger.debug(`✅ Ya existe notificación diaria de inconsistencias para ${fecha}`);
+      }
+
+      return existe;
+    } catch (error) {
+      this.logger.error(`Error al verificar notificación diaria: ${error.message}`);
+      return false;
+    }
+  }
 }

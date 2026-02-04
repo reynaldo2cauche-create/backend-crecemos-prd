@@ -554,10 +554,27 @@ async eliminarArchivo(id: number, tipo: 'cv' | 'dni') {
   // También actualizar el objeto local para consistencia
   trabajador[campo] = null;
 
-  return { 
+  return {
     message: `Archivo de ${tipo.toUpperCase()} eliminado exitosamente`,
     campo,
     archivoEliminado: nombreArchivo
   };
+}
+
+/**
+ * Obtener solo terapeutas (rol_id = 4) activos
+ */
+async findTerapeutas(): Promise<any[]> {
+  const terapeutas = await this.trabajadorCentroRepository.find({
+    where: {
+      estado: true
+    },
+    relations: ['rol'],
+    select: ['id', 'nombres', 'apellidos', 'email', 'telefono'],
+    order: { apellidos: 'ASC', nombres: 'ASC' }
+  });
+
+  // Filtrar solo terapeutas (rol_id = 4)
+  return terapeutas.filter(t => t.rol?.id === 4);
 }
 }
