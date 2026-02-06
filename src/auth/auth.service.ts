@@ -57,6 +57,9 @@ export class AuthService {
       throw new UnauthorizedException('Usuario inactivo');
     }
 
+    // 🔒 Incrementar session_version para invalidar sesiones anteriores
+    const nuevaVersion = (user.session_version || 0) + 1;
+
     const payload = {
       username: user.username,
       sub: user.id,
@@ -64,12 +67,16 @@ export class AuthService {
       apellidos: user.apellidos,
       rol: user.rol,
       institucion_id: user.institucion?.id,
+      session_version: nuevaVersion, // 🔒 Incluir versión de sesión en el JWT
     };
 
-    // Actualizar último acceso
+    // Actualizar último acceso y session_version
     await this.trabajadorRepository.update(user.id, {
       ultimo_acceso: new Date(),
+      session_version: nuevaVersion, // 🔒 Invalidar sesiones anteriores
     });
+
+    console.log(`🔒 Nueva sesión creada para ${user.username}. Version: ${nuevaVersion}`);
 
     // 📍 Registrar login en auditoría CON COORDENADAS GPS
     try {
