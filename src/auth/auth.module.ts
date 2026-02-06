@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { TypeOrmModule } from '@nestjs/typeorm';
@@ -7,6 +7,7 @@ import { AuthController } from './auth.controller';
 import { LocalStrategy } from './strategies/local.strategy';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { TrabajadorCentro } from '../usuarios/trabajador-centro.entity';
+import { NotificacionesModule } from '../notificaciones/notificaciones.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { TrabajadorCentro } from '../usuarios/trabajador-centro.entity';
       secret: process.env.JWT_SECRET || 'tu-secreto-seguro',
       signOptions: { expiresIn: '24h' },
     }),
+    forwardRef(() => NotificacionesModule),
   ],
   controllers: [AuthController],
   providers: [AuthService, LocalStrategy, JwtStrategy],

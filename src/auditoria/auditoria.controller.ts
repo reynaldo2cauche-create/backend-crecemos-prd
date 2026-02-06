@@ -37,10 +37,6 @@ export class AuditoriaController {
    */
   @Get('historial')
   @Roles('Administrador')
-  @Auditable({
-    modulo: 'AUDITORIA',
-    accion: 'VER_HISTORIAL',
-  })
   async obtenerHistorial(@Query() filtros: FiltrarAuditoriaDto) {
     return this.auditoriaService.obtenerHistorial(filtros);
   }
@@ -51,10 +47,6 @@ export class AuditoriaController {
    */
   @Get('estadisticas')
   @Roles('Administrador')
-  @Auditable({
-    modulo: 'AUDITORIA',
-    accion: 'VER_ESTADISTICAS',
-  })
   async obtenerEstadisticas(
     @Query('fechaInicio') fechaInicio?: string,
     @Query('fechaFin') fechaFin?: string,
@@ -70,10 +62,6 @@ export class AuditoriaController {
    */
   @Get('actividad-usuario/:trabajadorId')
   @Roles('Administrador')
-  @Auditable({
-    modulo: 'AUDITORIA',
-    accion: 'VER_ACTIVIDAD_USUARIO',
-  })
   async obtenerActividadUsuario(
     @Param('trabajadorId', ParseIntPipe) trabajadorId: number,
     @Query('limite', ParseIntPipe) limite: number = 20,
@@ -101,10 +89,6 @@ export class AuditoriaController {
    */
   @Get('alertas')
   @Roles('Administrador')
-  @Auditable({
-    modulo: 'AUDITORIA',
-    accion: 'VER_ALERTAS',
-  })
   async obtenerAlertas(
     @Query('leida') leida?: string,
     @Query('resuelta') resuelta?: string,
@@ -140,10 +124,6 @@ export class AuditoriaController {
    */
   @Put('alertas/:id/marcar-leida')
   @Roles('Administrador')
-  @Auditable({
-    modulo: 'AUDITORIA',
-    accion: 'MARCAR_ALERTA_LEIDA',
-  })
   async marcarAlertaLeida(@Param('id', ParseIntPipe) id: number) {
     await this.alertasService.marcarComoLeida(id);
     return { mensaje: 'Alerta marcada como leída' };
@@ -155,10 +135,6 @@ export class AuditoriaController {
    */
   @Put('alertas/marcar-todas-leidas')
   @Roles('Administrador')
-  @Auditable({
-    modulo: 'AUDITORIA',
-    accion: 'MARCAR_TODAS_ALERTAS_LEIDAS',
-  })
   async marcarTodasAlertasLeidas() {
     await this.alertasService.marcarTodasComoLeidas();
     return { mensaje: 'Todas las alertas marcadas como leídas' };
