@@ -40,7 +40,13 @@ export class AuthService {
     return null;
   }
 
-  async login(username: string, password: string, ip: string, userAgent: string) {
+  async login(
+    username: string,
+    password: string,
+    ip: string,
+    userAgent: string,
+    coordenadas?: { latitud?: number; longitud?: number }
+  ) {
     const user = await this.validateUser(username, password);
 
     if (!user) {
@@ -65,7 +71,7 @@ export class AuthService {
       ultimo_acceso: new Date(),
     });
 
-    // Registrar login en auditoría
+    // 📍 Registrar login en auditoría CON COORDENADAS GPS
     try {
       await this.auditoriaService.registrar({
         trabajadorId: user.id,
@@ -75,7 +81,16 @@ export class AuthService {
         ipAddress: ip,
         userAgent: userAgent,
         datosNuevos: null,
+        // 📍 Agregar coordenadas GPS
+        ...(coordenadas?.latitud && { latitud: coordenadas.latitud }),
+        ...(coordenadas?.longitud && { longitud: coordenadas.longitud }),
       });
+
+      if (coordenadas?.latitud && coordenadas?.longitud) {
+        console.log(`✅ LOGIN registrado en auditoría con GPS: ${coordenadas.latitud}, ${coordenadas.longitud}`);
+      } else {
+        console.log('⚠️ LOGIN registrado en auditoría SIN coordenadas GPS');
+      }
     } catch (error) {
       console.error('Error al registrar auditoría de login:', error);
       // No lanzar error para no afectar el login

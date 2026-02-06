@@ -40,6 +40,28 @@ export class AuditoriaAccion {
   @Column({ name: 'user_agent', type: 'text', nullable: true })
   userAgent: string;
 
+  // =====================================================
+  // 📍 GEOLOCALIZACIÓN
+  // =====================================================
+
+  @Column({ 
+    type: 'decimal', 
+    precision: 10, 
+    scale: 8, 
+    nullable: true 
+  })
+  latitud: number;
+
+  @Column({ 
+    type: 'decimal', 
+    precision: 11, 
+    scale: 8, 
+    nullable: true 
+  })
+  longitud: number;
+
+  // =====================================================
+
   @CreateDateColumn({ name: 'fecha_hora', type: 'timestamp' })
   fechaHora: Date;
 

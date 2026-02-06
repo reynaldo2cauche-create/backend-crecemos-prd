@@ -41,6 +41,7 @@ import { TrabajadorCentro as TrabajadorCentroUsuario } from './usuarios/trabajad
 import { TrabajadorServicio } from './usuarios/trabajador-servicio.entity';
 import { AuthModule } from './auth/auth.module';
 import { TrabajadorCentroModule } from './usuarios/trabajador-centro.module';
+import { GeofencingModule } from './geofencing/geofencing.module';
 import { NotaEvolucion } from './pacientes/entities/nota-evolucion.entity';
 import { Rol } from './usuarios/rol.entity';
 import { Especialidad } from './usuarios/especialidad.entity';
@@ -285,6 +286,7 @@ import { ProcesosLegalesInfantilesModule } from './procesos-legales-infantiles/p
     AuditoriaModule,
     NotificacionesModule,
     AuthModule,
+    GeofencingModule,
     Comentario,
     ConveniosModule,
     StaffModule,

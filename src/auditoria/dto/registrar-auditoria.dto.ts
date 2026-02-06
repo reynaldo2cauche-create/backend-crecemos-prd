@@ -23,4 +23,7 @@ export class RegistrarAuditoriaDto {
   @IsOptional()
   @IsString()
   userAgent?: string;
+    // 📍 Geolocalización
+  latitud?: number;
+  longitud?: number;
 }
