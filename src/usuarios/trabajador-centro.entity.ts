@@ -180,6 +180,9 @@ export class TrabajadorCentro {
   @Column({ type: 'timestamp', nullable: true })
   ultimo_acceso: Date;
 
+  @Column({ type: 'int', default: 1, comment: 'Versión de sesión para control de login único' })
+  session_version: number;
+
   @Column({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' })
   created_at: Date;
 
