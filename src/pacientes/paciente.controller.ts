@@ -8,9 +8,11 @@ import { ApiOperation, ApiQuery, ApiResponse,ApiParam } from '@nestjs/swagger';
 import { Auditable } from 'src/auditoria/decorators/auditable.decorator';
 import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
 import { Public } from 'src/auth/decorators/public.decorator';
+import { GeofencingGuard } from 'src/geofencing/geofencing.guard';
+import { RequiereUbicacion } from 'src/geofencing/requiere-ubicacion.decorator';
 
 @Controller('backend_api/pacientes')
-@UseGuards(JwtAuthGuard) 
+@UseGuards(JwtAuthGuard, GeofencingGuard) 
 export class PacienteController {
   constructor(private readonly pacienteService: PacienteService) {}
 
@@ -33,12 +35,14 @@ export class PacienteController {
   }
 
   @Get('estadisticas')
+  @RequiereUbicacion()
   @ApiOperation({ summary: 'Obtener estadísticas de pacientes del mes actual' })
   getEstadisticas() {
     return this.pacienteService.getEstadisticasMesActual();
   }
 
   @Get()
+  @RequiereUbicacion()
   findAll(
     @Query('terapeutaId') terapeutaId?: string,
     @Query('numeroDocumento') numeroDocumento?: string,
@@ -60,6 +64,7 @@ export class PacienteController {
   }
 
    @Get('all')
+   @RequiereUbicacion()
 @ApiOperation({ summary: 'Obtener todos los pacientes incluyendo activos e inactivos' })
 @ApiQuery({ name: 'terapeutaId', required: false, type: Number })
 @ApiQuery({ name: 'numeroDocumento', required: false, type: String })

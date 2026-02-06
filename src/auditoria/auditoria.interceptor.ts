@@ -86,6 +86,9 @@ export class AuditoriaInterceptor implements NestInterceptor {
       'rol?.nombre': user.rol?.nombre
     }, null, 2));
 
+    // 📍 CAPTURAR COORDENADAS
+    const coordenadas = this.extraerCoordenadas(request);
+
     // Obtener información de la petición
     const ipAddress = this.obtenerIPReal(request);
     const userAgent = request.headers['user-agent'];
@@ -111,7 +114,7 @@ export class AuditoriaInterceptor implements NestInterceptor {
             responseData,
           );
 
-          // 🔥 REGISTRAR AUDITORÍA (sin campos eliminados)
+          // 🔥 REGISTRAR AUDITORÍA CON COORDENADAS
           this.logger.debug(`📝 Registrando auditoría: ${metadata.accion}`);
 
           await this.auditoriaService.registrar({
@@ -122,6 +125,7 @@ export class AuditoriaInterceptor implements NestInterceptor {
             datosNuevos,
             ipAddress,
             userAgent,
+            ...coordenadas, // 📍 Coordenadas GPS
           });
 
           // Evaluar y generar alertas si es necesario
@@ -169,6 +173,7 @@ export class AuditoriaInterceptor implements NestInterceptor {
           datosNuevos,
           ipAddress: this.obtenerIPReal(request),
           userAgent: request.headers['user-agent'],
+          ...coordenadas, // 📍 Coordenadas GPS también en errores
         });
 
         return throwError(() => error);
@@ -341,6 +346,34 @@ export class AuditoriaInterceptor implements NestInterceptor {
     }
 
     return Object.keys(datos).length > 0 ? datos : null;
+  }
+
+  /**
+   * 📍 Extraer coordenadas GPS desde los headers
+   */
+  private extraerCoordenadas(request: any): { latitud?: number; longitud?: number } {
+    const latHeader = request.headers['x-user-latitude'];
+    const lngHeader = request.headers['x-user-longitude'];
+
+    if (!latHeader || !lngHeader) {
+      return {}; // Sin coordenadas
+    }
+
+    const lat = parseFloat(latHeader);
+    const lng = parseFloat(lngHeader);
+
+    // Validar que sean números válidos
+    if (isNaN(lat) || isNaN(lng)) {
+      this.logger.warn('⚠️ Coordenadas inválidas en headers');
+      return {};
+    }
+
+    this.logger.debug(`📍 Coordenadas capturadas: ${lat}, ${lng}`);
+
+    return {
+      latitud: lat,
+      longitud: lng,
+    };
   }
 
   /**

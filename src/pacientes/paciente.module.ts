@@ -35,6 +35,7 @@ import { EstadoPacienteController } from './estado-paciente.controller';
 import { ConveniosModule } from 'src/convenios/convenios.module';
 import { NotificacionesModule } from 'src/notificaciones/notificaciones.module';
 import { NotificacionesService } from 'src/notificaciones/notificaciones.service';
+import { GeofencingModule } from 'src/geofencing/geofencing.module';
 
 @Module({
   imports: [
@@ -54,6 +55,7 @@ import { NotificacionesService } from 'src/notificaciones/notificaciones.service
     ]),
     ConveniosModule,
     NotificacionesModule,
+    GeofencingModule,
   ],
   providers: [
     PacienteService,
