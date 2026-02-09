@@ -308,12 +308,32 @@ export class PacienteServicioService {
         activo: true
       });
 
-      await this.asignacionTerapeutaRepository.save(asignacion);
+      const asignacionGuardada = await this.asignacionTerapeutaRepository.save(asignacion);
       console.log('✅ Terapeuta asignado correctamente');
+
+      // 🔥 Cargar terapeuta para auditoría
+      const asignacionConTerapeuta = await this.asignacionTerapeutaRepository.findOne({
+        where: { id: asignacionGuardada.id },
+        relations: ['terapeuta']
+      });
+
+      return {
+        message: 'Servicio asignado correctamente y terapeuta asignado',
+        pacienteServicio: {
+          id: savedPacienteServicio.id
+        },
+        paciente: savedPacienteServicio.paciente ? {
+          id: savedPacienteServicio.paciente.id,
+          nombres: savedPacienteServicio.paciente.nombres,
+          apellidos: savedPacienteServicio.paciente.apellido_paterno + ' ' + savedPacienteServicio.paciente.apellido_materno
+        } : null,
+        servicio: savedPacienteServicio.servicio,
+        terapeuta: asignacionConTerapeuta?.terapeuta
+      };
     }
 
     return {
-      message: 'Servicio asignado correctamente' + (dto.terapeuta_id ? ' y terapeuta asignado' : ''),
+      message: 'Servicio asignado correctamente',
       pacienteServicio: {
         id: savedPacienteServicio.id
       },
@@ -321,7 +341,8 @@ export class PacienteServicioService {
         id: savedPacienteServicio.paciente.id,
         nombres: savedPacienteServicio.paciente.nombres,
         apellidos: savedPacienteServicio.paciente.apellido_paterno + ' ' + savedPacienteServicio.paciente.apellido_materno
-      } : null
+      } : null,
+      servicio: savedPacienteServicio.servicio
     };
   }
 
@@ -364,7 +385,7 @@ export class PacienteServicioService {
     });
   }
 
-  async desasignarServicio(pacienteId: number, servicioId: number): Promise<{ message: string; paciente?: any }> {
+  async desasignarServicio(pacienteId: number, servicioId: number): Promise<{ message: string; paciente?: any; servicio?: any }> {
     const pacienteServicio = await this.pacienteServicioRepository.findOne({
       where: {
         paciente: { id: pacienteId },
@@ -400,11 +421,12 @@ export class PacienteServicioService {
         id: pacienteServicio.paciente.id,
         nombres: pacienteServicio.paciente.nombres,
         apellidos: pacienteServicio.paciente.apellido_paterno + ' ' + pacienteServicio.paciente.apellido_materno
-      } : null
+      } : null,
+      servicio: pacienteServicio.servicio
     };
   }
 
-  async desasignarServicioPorId(pacienteServicioId: number): Promise<{ message: string; paciente?: any }> {
+  async desasignarServicioPorId(pacienteServicioId: number): Promise<{ message: string; paciente?: any; servicio?: any }> {
     const pacienteServicio = await this.pacienteServicioRepository.findOne({
       where: { id: pacienteServicioId, activo: true },
       relations: ['asignaciones', 'servicio', 'paciente']
@@ -436,7 +458,8 @@ export class PacienteServicioService {
         id: pacienteServicio.paciente.id,
         nombres: pacienteServicio.paciente.nombres,
         apellidos: pacienteServicio.paciente.apellido_paterno + ' ' + pacienteServicio.paciente.apellido_materno
-      } : null
+      } : null,
+      servicio: pacienteServicio.servicio
     };
   }
 
@@ -508,6 +531,11 @@ export class PacienteServicioService {
     const asignacionGuardada = await this.asignacionTerapeutaRepository.save(asignacion);
     console.log('✅ Asignación creada con ID:', asignacionGuardada.id);
 
+    // 🔥 Cargar terapeuta para auditoría
+    const terapeuta = await this.trabajadorRepository.findOne({
+      where: { id: dto.terapeuta_id }
+    });
+
     return {
       message: 'Terapeuta asignado correctamente',
       asignacion: {
@@ -517,7 +545,9 @@ export class PacienteServicioService {
         id: pacienteServicio.paciente.id,
         nombres: pacienteServicio.paciente.nombres,
         apellidos: pacienteServicio.paciente.apellido_paterno + ' ' + pacienteServicio.paciente.apellido_materno
-      } : null
+      } : null,
+      servicio: pacienteServicio.servicio,
+      terapeuta: terapeuta
     };
   }
 
@@ -531,9 +561,12 @@ export class PacienteServicioService {
       throw new Error(`Asignación con ID ${asignacionId} no encontrada`);
     }
 
+    // 🔥 Guardar terapeuta anterior para auditoría
+    const terapeutaAnterior = asignacion.terapeuta;
+
     // ✅ VALIDACIÓN: Verificar si el NUEVO terapeuta ya está en OTRO servicio del mismo paciente
     const verificacion = await this.verificarTerapeutaOcupado(
-      dto.terapeuta_id, 
+      dto.terapeuta_id,
       asignacion.pacienteServicio.paciente.id,
       asignacion.pacienteServicio.servicio.id,
       asignacion.pacienteServicio.id // Excluir asignaciones de este servicio
@@ -544,6 +577,11 @@ export class PacienteServicioService {
         verificacion.mensaje || `La terapeuta ya está asignada a otro servicio del paciente.`
       );
     }
+
+    // Cargar nuevo terapeuta
+    const nuevoTerapeuta = await this.trabajadorRepository.findOne({
+      where: { id: dto.terapeuta_id }
+    });
 
     // Inactivar la asignación actual
     asignacion.estado = 'INACTIVO';
@@ -568,14 +606,17 @@ export class PacienteServicioService {
         id: asignacion.pacienteServicio.paciente.id,
         nombres: asignacion.pacienteServicio.paciente.nombres,
         apellidos: asignacion.pacienteServicio.paciente.apellido_paterno + ' ' + asignacion.pacienteServicio.paciente.apellido_materno
-      } : null
+      } : null,
+      servicio: asignacion.pacienteServicio?.servicio,
+      terapeutaAnterior: terapeutaAnterior,
+      terapeutaNuevo: nuevoTerapeuta
     };
   }
 
-  async desasignarTerapeutaIndividual(asignacionId: number): Promise<{ message: string; paciente?: any }> {
+  async desasignarTerapeutaIndividual(asignacionId: number): Promise<{ message: string; paciente?: any; servicio?: any; terapeuta?: any }> {
     const asignacion = await this.asignacionTerapeutaRepository.findOne({
       where: { id: asignacionId, activo: true },
-      relations: ['pacienteServicio', 'pacienteServicio.paciente', 'terapeuta']
+      relations: ['pacienteServicio', 'pacienteServicio.paciente', 'pacienteServicio.servicio', 'terapeuta']
     });
 
     if (!asignacion) {
@@ -593,7 +634,9 @@ export class PacienteServicioService {
         id: asignacion.pacienteServicio.paciente.id,
         nombres: asignacion.pacienteServicio.paciente.nombres,
         apellidos: asignacion.pacienteServicio.paciente.apellido_paterno + ' ' + asignacion.pacienteServicio.paciente.apellido_materno
-      } : null
+      } : null,
+      servicio: asignacion.pacienteServicio?.servicio,
+      terapeuta: asignacion.terapeuta
     };
   }
   private parsearFechaISO(fechaString: any): Date {

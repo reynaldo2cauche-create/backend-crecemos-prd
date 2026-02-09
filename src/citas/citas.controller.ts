@@ -2,6 +2,7 @@ import { Controller, Get, Post, Delete, Body, Param, Query, UseGuards, Put, BadR
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
+import { Auditable } from '../auditoria/decorators/auditable.decorator';
 import { CitasService } from './citas.service';
 import { HistorialCitasService } from './historial-citas.service';
 import { CrearCitaDto } from './dto/crear-cita.dto';
@@ -70,12 +71,20 @@ async obtenerEstadisticas(@Query() query: any) {
     return this.citasService.crearMultiples(body.citas);
   }
   @Post()
+  @Auditable({
+    modulo: 'CITAS',
+    accion: 'CREAR_CITA'
+  })
   async crear(@Body() dto: CrearCitaDto) {
     return this.citasService.crear(dto);
   }
 
 
   @Put(':id')
+  @Auditable({
+    modulo: 'CITAS',
+    accion: 'EDITAR_CITA'
+  })
   async actualizar(
     @Param('id') id: string,
     @Body() dto: CrearCitaDto
@@ -86,6 +95,10 @@ async obtenerEstadisticas(@Query() query: any) {
   @Delete(':id')
   @UseGuards(RolesGuard)
   @Roles('Administrador')
+  @Auditable({
+    modulo: 'CITAS',
+    accion: 'ELIMINAR_CITA'
+  })
   async eliminar(
     @Param('id') id: string,
     @Body() body: { usuario_id: number; motivo_accion: string }

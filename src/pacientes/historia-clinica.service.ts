@@ -101,8 +101,18 @@ export class HistoriaClinicaService {
       throw new Error('HistoriaClinica no encontrado');
     }
 
+    // Guardar datos anteriores para auditoría
+    const datosAnteriores = { ...historiaClinica };
+
     Object.assign(historiaClinica, updateHistoriaClinicaDto);
-    return this.historiaClinicaRepository.save(historiaClinica);
+    const resultado = await this.historiaClinicaRepository.save(historiaClinica);
+
+    // Retornar datos anteriores y nuevos para auditoría detallada
+    return {
+      datosAnteriores,
+      datosNuevos: resultado,
+      ...resultado  // Spread para mantener compatibilidad con código existente
+    } as any;
   }
 
   async remove(id: number): Promise<void> {

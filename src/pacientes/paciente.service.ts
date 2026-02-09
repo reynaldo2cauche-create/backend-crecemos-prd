@@ -39,26 +39,41 @@ export class PacienteService {
    * Parsea una fecha desde string (YYYY-MM-DD) a Date sin problemas de timezone
    * Evita el desfase de 1 día causado por new Date() con fechas ISO
    * @param fechaString - Fecha en formato YYYY-MM-DD o Date
-   * @returns Date con la fecha correcta
+   * @returns Date con la fecha correcta en UTC medianoche
    */
-  private parsearFechaSinTimezone(fechaString: string | Date): Date {
+  private parsearFechaSinTimezone(fechaString: string | Date): Date | string {
     if (!fechaString) return null;
 
-    // Si ya es Date, retornar
+    // Si es string en formato YYYY-MM-DD, devolverlo directamente como string
+    // Esto permite que MySQL lo interprete como DATE sin conversión de timezone
+    if (typeof fechaString === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(fechaString)) {
+      return fechaString; // Devolver string puro, no Date
+    }
+
+    // Si es string con timestamp, extraer solo la fecha
+    if (typeof fechaString === 'string' && fechaString.includes('T')) {
+      return fechaString.split('T')[0]; // Devolver string puro YYYY-MM-DD
+    }
+
+    // Si ya es Date, convertir a string YYYY-MM-DD
     if (fechaString instanceof Date) {
-      return fechaString;
+      const fecha = new Date(fechaString);
+      const year = fecha.getUTCFullYear();
+      const month = String(fecha.getUTCMonth() + 1).padStart(2, '0');
+      const day = String(fecha.getUTCDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`; // Devolver string puro
     }
 
-    // Si es string en formato YYYY-MM-DD
-    if (typeof fechaString === 'string' && /^\d{4}-\d{2}-\d{2}/.test(fechaString)) {
-      // Extraer año, mes, día
-      const [year, month, day] = fechaString.split(/[-T]/).map(Number);
-      // Crear Date en zona horaria local (no UTC)
-      return new Date(year, month - 1, day, 12, 0, 0);
+    // Fallback: intentar parsear y convertir a string
+    const fecha = new Date(fechaString);
+    if (!isNaN(fecha.getTime())) {
+      const year = fecha.getUTCFullYear();
+      const month = String(fecha.getUTCMonth() + 1).padStart(2, '0');
+      const day = String(fecha.getUTCDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
     }
 
-    // Fallback: usar Date normal
-    return new Date(fechaString);
+    return null;
   }
 
   /**
@@ -517,7 +532,13 @@ async findAll(filters?: {
     });
     
     console.log('Update - Resultado:', resultado);
-    return resultado;
+
+    // Retornar datos anteriores y nuevos para auditoría detallada
+    return {
+      datosAnteriores: paciente,
+      datosNuevos: resultado,
+      ...resultado  // Spread para mantener compatibilidad con código existente
+    } as any;
   }
 
   async findOneById(id: number): Promise<{ paciente: Paciente; parejas: any[] }> {
