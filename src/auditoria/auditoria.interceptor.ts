@@ -14,6 +14,12 @@ import { AuditoriaService } from './auditoria.service';
 import { AlertasService } from './alertas.service';
 import { AuditoriaAccion } from './auditoria-accion.entity';
 import { AUDITABLE_KEY, AuditableMetadata } from './decorators/auditable.decorator';
+import {
+  detectarCambios,
+  generarDescripcionDetallada,
+  extraerNombreEntidad,
+  requiereDescripcionDetallada,
+} from './utils/auditoria-helpers';
 
 @Injectable()
 export class AuditoriaInterceptor implements NestInterceptor {
@@ -238,6 +244,19 @@ export class AuditoriaInterceptor implements NestInterceptor {
   ): string {
     const nombreUsuario = `${user.nombres} ${user.apellidos}`;
 
+    // 🔥 NUEVA FUNCIONALIDAD: Descripción detallada para EDITAR
+    if (requiereDescripcionDetallada(metadata.modulo, metadata.accion)) {
+      const descripcionDetallada = this.generarDescripcionConCambios(
+        metadata,
+        request,
+        responseData,
+      );
+      if (descripcionDetallada) {
+        return descripcionDetallada;
+      }
+      // Si no se pudo generar descripción detallada, continuar con la normal
+    }
+
     // Extraer nombre del paciente si está disponible
     const nombrePaciente = this.extraerNombrePaciente(request, responseData);
     const pacienteDescripcion = nombrePaciente ? ` del paciente ${nombrePaciente}` : ' de un paciente';
@@ -262,9 +281,11 @@ export class AuditoriaInterceptor implements NestInterceptor {
       CAMBIAR_VISIBILIDAD_PACIENTE: `Cambió visibilidad${pacienteDescripcion}`,
 
       // SERVICIOS Y TERAPIAS
-      ASIGNAR_SERVICIO: `Asignó servicio${pacienteDescripcion}`,
-      DESASIGNAR_SERVICIO: `Desasignó servicio${pacienteDescripcion}`,
-      EDITAR_TERAPEUTA: `Editó terapeuta${pacienteDescripcion}`,
+      ASIGNAR_SERVICIO: this.generarDescripcionAsignarServicio(responseData),
+      DESASIGNAR_SERVICIO: this.generarDescripcionDesasignarServicio(responseData),
+      CREAR_ASIGNACION_TERAPEUTA: this.generarDescripcionCrearAsignacionTerapeuta(responseData),
+      EDITAR_TERAPEUTA: this.generarDescripcionEditarTerapeuta(responseData),
+      DESASIGNAR_TERAPEUTA: this.generarDescripcionDesasignarTerapeuta(responseData),
 
       // HISTORIA CLÍNICA Y EVOLUCIÓN
       CREAR_HISTORIA_CLINICA: `Creó historia clínica${pacienteDescripcion}`,
@@ -286,8 +307,8 @@ export class AuditoriaInterceptor implements NestInterceptor {
       // CITAS
       VER_AGENDA: 'Consultó la agenda de citas',
       CREAR_CITA: 'Creó una nueva cita',
-      EDITAR_CITA: 'Editó una cita',
-      ELIMINAR_CITA: 'Eliminó una cita',
+      EDITAR_CITA: this.generarDescripcionEditarCita(responseData),
+      ELIMINAR_CITA: this.generarDescripcionEliminarCita(responseData),
 
       // CERTIFICADOS Y OTROS ARCHIVOS
       CREAR_CERTIFICADO: 'Creó un certificado oficial',
@@ -317,6 +338,65 @@ export class AuditoriaInterceptor implements NestInterceptor {
 
     return accionesDescripciones[metadata.accion] ||
            `Realizó la acción ${metadata.accion} en ${metadata.modulo}`;
+  }
+
+  /**
+   * 🔥 NUEVO: Genera descripción detallada con cambios detectados
+   * Espera que responseData tenga la estructura:
+   * { datosAnteriores: {...}, datosNuevos: {...}, ...otrosDatos }
+   */
+  private generarDescripcionConCambios(
+    metadata: AuditableMetadata,
+    request: any,
+    responseData: any,
+  ): string | null {
+    try {
+      // Verificar si responseData contiene datosAnteriores y datosNuevos
+      let datosAnteriores = responseData?.datosAnteriores;
+      let datosNuevos = responseData?.datosNuevos || responseData;
+
+      // Si no hay datosAnteriores en responseData, intentar con el body del request
+      if (!datosAnteriores) {
+        // Para el caso de EDITAR, el body contiene los nuevos datos
+        // pero no tenemos los anteriores aún
+        this.logger.debug(
+          `⚠️ No se encontraron datosAnteriores para generar descripción detallada en ${metadata.accion}`,
+        );
+        return null;
+      }
+
+      // Detectar cambios
+      const cambios = detectarCambios(datosAnteriores, datosNuevos);
+
+      if (cambios.length === 0) {
+        return null; // No hay cambios, usar descripción normal
+      }
+
+      // Extraer ID de la entidad
+      const idEntidad = request.params?.id || datosNuevos?.id || datosAnteriores?.id;
+
+      // Extraer nombre de la entidad
+      const nombreEntidad = extraerNombreEntidad(
+        metadata.modulo,
+        datosAnteriores,
+        datosNuevos,
+        idEntidad,
+      );
+
+      // Generar descripción detallada
+      const descripcion = generarDescripcionDetallada(
+        metadata.modulo,
+        metadata.accion,
+        nombreEntidad,
+        cambios,
+      );
+
+      this.logger.debug(`✅ Descripción detallada generada con ${cambios.length} cambios`);
+      return descripcion;
+    } catch (error) {
+      this.logger.error('❌ Error al generar descripción detallada:', error);
+      return null;
+    }
   }
 
   /**
@@ -434,5 +514,140 @@ export class AuditoriaInterceptor implements NestInterceptor {
     }
 
     return ip;
+  }
+
+  /**
+   * 🔥 Genera descripción detallada para ASIGNAR_SERVICIO
+   */
+  private generarDescripcionAsignarServicio(responseData: any): string {
+    if (!responseData) return 'Asignó servicio a un paciente';
+
+    const pacienteNombre = responseData.paciente
+      ? `${responseData.paciente.nombres} ${responseData.paciente.apellidos}`.trim()
+      : 'un paciente';
+
+    const servicioNombre = responseData.servicio?.nombre || 'un servicio';
+    const terapeutaNombre = responseData.terapeuta
+      ? `${responseData.terapeuta.nombres} ${responseData.terapeuta.apellidos}`.trim()
+      : null;
+
+    if (terapeutaNombre) {
+      return `Asignó terapeuta ${terapeutaNombre} al servicio de ${servicioNombre} del paciente ${pacienteNombre}`;
+    }
+
+    return `Asignó servicio de ${servicioNombre} al paciente ${pacienteNombre}`;
+  }
+
+  /**
+   * 🔥 Genera descripción detallada para DESASIGNAR_SERVICIO
+   */
+  private generarDescripcionDesasignarServicio(responseData: any): string {
+    if (!responseData) return 'Desasignó servicio de un paciente';
+
+    const pacienteNombre = responseData.paciente
+      ? `${responseData.paciente.nombres} ${responseData.paciente.apellidos}`.trim()
+      : 'un paciente';
+
+    const servicioNombre = responseData.servicio?.nombre || 'un servicio';
+
+    return `Eliminó el servicio de ${servicioNombre} del paciente ${pacienteNombre}`;
+  }
+
+  /**
+   * 🔥 Genera descripción detallada para CREAR_ASIGNACION_TERAPEUTA
+   */
+  private generarDescripcionCrearAsignacionTerapeuta(responseData: any): string {
+    if (!responseData) return 'Asignó terapeuta a un servicio';
+
+    const pacienteNombre = responseData.paciente
+      ? `${responseData.paciente.nombres} ${responseData.paciente.apellidos}`.trim()
+      : 'un paciente';
+
+    const servicioNombre = responseData.servicio?.nombre || 'un servicio';
+    const terapeutaNombre = responseData.terapeuta
+      ? `${responseData.terapeuta.nombres} ${responseData.terapeuta.apellidos}`.trim()
+      : 'un terapeuta';
+
+    return `Asignó terapeuta ${terapeutaNombre} al servicio de ${servicioNombre} del paciente ${pacienteNombre}`;
+  }
+
+  /**
+   * 🔥 Genera descripción detallada para EDITAR_TERAPEUTA
+   */
+  private generarDescripcionEditarTerapeuta(responseData: any): string {
+    if (!responseData) return 'Editó terapeuta de un servicio';
+
+    const pacienteNombre = responseData.paciente
+      ? `${responseData.paciente.nombres} ${responseData.paciente.apellidos}`.trim()
+      : 'un paciente';
+
+    const servicioNombre = responseData.servicio?.nombre || 'un servicio';
+
+    const terapeutaAnterior = responseData.terapeutaAnterior
+      ? `${responseData.terapeutaAnterior.nombres} ${responseData.terapeutaAnterior.apellidos}`.trim()
+      : 'terapeuta anterior';
+
+    const terapeutaNuevo = responseData.terapeutaNuevo
+      ? `${responseData.terapeutaNuevo.nombres} ${responseData.terapeutaNuevo.apellidos}`.trim()
+      : 'nuevo terapeuta';
+
+    return `Cambió terapeuta del servicio ${servicioNombre}: ${terapeutaAnterior} → ${terapeutaNuevo} (paciente ${pacienteNombre})`;
+  }
+
+  /**
+   * 🔥 Genera descripción detallada para DESASIGNAR_TERAPEUTA
+   */
+  private generarDescripcionDesasignarTerapeuta(responseData: any): string {
+    if (!responseData) return 'Eliminó terapeuta de un servicio';
+
+    const pacienteNombre = responseData.paciente
+      ? `${responseData.paciente.nombres} ${responseData.paciente.apellidos}`.trim()
+      : 'un paciente';
+
+    const servicioNombre = responseData.servicio?.nombre || 'un servicio';
+    const terapeutaNombre = responseData.terapeuta
+      ? `${responseData.terapeuta.nombres} ${responseData.terapeuta.apellidos}`.trim()
+      : 'un terapeuta';
+
+    return `Eliminó al terapeuta ${terapeutaNombre} del servicio de ${servicioNombre} del paciente ${pacienteNombre}`;
+  }
+
+  /**
+   * 🔥 Genera descripción detallada para EDITAR_CITA
+   */
+  private generarDescripcionEditarCita(responseData: any): string {
+    if (!responseData) return 'Editó una cita';
+
+    const pacienteNombre = responseData.paciente
+      ? `${responseData.paciente.nombres} ${responseData.paciente.apellido_paterno || ''} ${responseData.paciente.apellido_materno || ''}`.trim()
+      : 'un paciente';
+
+    const motivo = responseData.motivo_accion || '';
+
+    if (motivo) {
+      return `Editó cita del paciente ${pacienteNombre}. Motivo: ${motivo}`;
+    }
+
+    return `Editó cita del paciente ${pacienteNombre}`;
+  }
+
+  /**
+   * 🔥 Genera descripción detallada para ELIMINAR_CITA
+   */
+  private generarDescripcionEliminarCita(responseData: any): string {
+    if (!responseData) return 'Eliminó una cita';
+
+    const cita = responseData.cita || responseData;
+    const pacienteNombre = cita.paciente
+      ? `${cita.paciente.nombres} ${cita.paciente.apellido_paterno || ''} ${cita.paciente.apellido_materno || ''}`.trim()
+      : 'un paciente';
+
+    const motivo = responseData.motivo_accion || '';
+
+    if (motivo) {
+      return `Eliminó cita del paciente ${pacienteNombre}. Motivo: ${motivo}`;
+    }
+
+    return `Eliminó cita del paciente ${pacienteNombre}`;
   }
 }

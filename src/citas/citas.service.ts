@@ -496,11 +496,40 @@ async listar(filtros: any = {}): Promise<any[]> {
   // Obtener la cita existente con todas sus relaciones ANTES de actualizar
   const citaAntigua = await this.citaRepo.findOne({
     where: { id },
-    relations: ['paciente', 'doctor'],
+    relations: ['paciente', 'doctor', 'servicio', 'motivo', 'estado'],
   });
 
   if (!citaAntigua) {
     throw new NotFoundException(`Cita con ID ${id} no encontrada`);
+  }
+
+  // 🔥 Cargar datos específicos según tipo de cita ANTES de actualizar
+  let datosAntiguosCompletos: any = { ...citaAntigua };
+
+  if (tipoCita === 'VISITA_ESCOLAR') {
+    const visitaAntigua = await this.visitaEscolarRepo.findOne({
+      where: { id_cita: id }
+    });
+    if (visitaAntigua) {
+      datosAntiguosCompletos = {
+        ...datosAntiguosCompletos,
+        nombre_colegio: visitaAntigua.nombre_colegio,
+        nombre_intermediario: visitaAntigua.nombre_intermediario,
+        telefono: visitaAntigua.telefono,
+        observaciones: visitaAntigua.observaciones,
+      };
+    }
+  } else if (tipoCita === 'REUNION_CLINICA') {
+    const reunionAntigua = await this.reunionRepo.findOne({
+      where: { id_cita: id },
+      relations: ['terapeutas', 'servicios']
+    });
+    if (reunionAntigua) {
+      datosAntiguosCompletos = {
+        ...datosAntiguosCompletos,
+        reunion_clinica: reunionAntigua,
+      };
+    }
   }
 
   // Guardar datos antiguos para la notificación
@@ -567,10 +596,15 @@ async listar(filtros: any = {}): Promise<any[]> {
     // No detener la actualización si falla la notificación
   }
 
-  return resultado;
+  // Retornar datos anteriores y nuevos para auditoría detallada
+  return {
+    datosAnteriores: datosAntiguosCompletos,
+    datosNuevos: resultado,
+    ...resultado  // Spread para mantener compatibilidad con código existente
+  };
 }
 
-private async actualizarCitaNormal(id: number, dto: CrearCitaDto): Promise<Cita> {
+private async actualizarCitaNormal(id: number, dto: CrearCitaDto): Promise<any> {
   if (!dto.doctor_id || !dto.servicio_id) {
     throw new BadRequestException('Se requiere doctor_id y servicio_id para cita normal');
   }
@@ -600,7 +634,16 @@ private async actualizarCitaNormal(id: number, dto: CrearCitaDto): Promise<Cita>
     dto.motivo_accion,
   );
 
-  return this.citaRepo.findOne({ where: { id } });
+  const citaActualizada = await this.citaRepo.findOne({
+    where: { id },
+    relations: ['paciente', 'doctor', 'servicio', 'motivo', 'estado']
+  });
+
+  // 🔥 Retornar con motivo para auditoría
+  return {
+    ...citaActualizada,
+    motivo_accion: dto.motivo_accion
+  };
 }
 
 private async actualizarReunionClinica(id: number, dto: CrearCitaDto): Promise<any> {
@@ -680,10 +723,32 @@ private async actualizarReunionClinica(id: number, dto: CrearCitaDto): Promise<a
     dto.motivo_accion,
   );
 
-  return this.citaRepo.findOne({ where: { id } });
+  const citaActualizada = await this.citaRepo.findOne({
+    where: { id },
+    relations: ['paciente', 'doctor', 'servicio', 'motivo', 'estado']
+  });
+
+  // 🔥 Cargar datos actualizados de reunión clínica
+  let reunionFinal = await this.reunionRepo.findOne({ where: { id_cita: id } });
+  if (!reunionFinal) {
+    reunionFinal = await this.reunionRepo.findOne({ where: { id: id } });
+  }
+
+  const reunionActualizada = reunionFinal ? {
+    estado_cita_id: reunionFinal.estado_cita_id,
+    terapeutas_ids: dto.terapeutas_ids,
+    servicios_ids: dto.servicios_ids,
+  } : null;
+
+  // 🔥 Retornar con motivo y datos específicos de reunión clínica para auditoría
+  return {
+    ...citaActualizada,
+    reunion_clinica: reunionActualizada,
+    motivo_accion: dto.motivo_accion
+  };
 }
 
-private async actualizarVisitaEscolar(id: number, dto: CrearCitaDto): Promise<Cita> {
+private async actualizarVisitaEscolar(id: number, dto: CrearCitaDto): Promise<any> {
   if (!dto.doctor_id) {
     throw new BadRequestException('Se requiere doctor_id para visita escolar');
   }
@@ -733,10 +798,28 @@ private async actualizarVisitaEscolar(id: number, dto: CrearCitaDto): Promise<Ci
     dto.motivo_accion,
   );
 
-  return this.citaRepo.findOne({ where: { id } });
+  const citaActualizada = await this.citaRepo.findOne({
+    where: { id },
+    relations: ['paciente', 'doctor', 'servicio', 'motivo', 'estado']
+  });
+
+  // 🔥 Cargar datos actualizados de visita escolar
+  const visitaActualizada = await this.visitaEscolarRepo.findOne({
+    where: { id_cita: id }
+  });
+
+  // 🔥 Retornar con motivo y datos específicos de visita escolar para auditoría
+  return {
+    ...citaActualizada,
+    nombre_colegio: visitaActualizada?.nombre_colegio,
+    nombre_intermediario: visitaActualizada?.nombre_intermediario,
+    telefono: visitaActualizada?.telefono,
+    observaciones: visitaActualizada?.observaciones,
+    motivo_accion: dto.motivo_accion
+  };
 }
 
-  async eliminar(id: number, usuarioId?: number, motivoAccion?: string): Promise<{ mensaje: string }> {
+  async eliminar(id: number, usuarioId?: number, motivoAccion?: string): Promise<any> {
     // ✅ VALIDAR MOTIVO DE ACCIÓN (OBLIGATORIO PARA DELETE)
     if (!motivoAccion || motivoAccion.trim() === '') {
       throw new BadRequestException('El motivo de eliminación es obligatorio');
@@ -745,10 +828,10 @@ private async actualizarVisitaEscolar(id: number, dto: CrearCitaDto): Promise<Ci
     console.log(`🗑️ Eliminando (soft delete) cita ID ${id}`);
     console.log(`📝 Motivo de eliminación: ${motivoAccion}`);
 
-    // Obtener la cita con todas sus relaciones para la notificación
+    // Obtener la cita con todas sus relaciones para auditoría
     const cita = await this.citaRepo.findOne({
       where: { id },
-      relations: ['paciente', 'doctor'],
+      relations: ['paciente', 'doctor', 'servicio', 'motivo', 'estado'],
     });
 
     if (!cita) {
@@ -808,7 +891,12 @@ private async actualizarVisitaEscolar(id: number, dto: CrearCitaDto): Promise<Ci
     });
     console.log(`✅ Cita ${id} marcada como eliminada (flg_activo = 0)`);
 
-    return { mensaje: 'Cita eliminada correctamente' };
+    // 🔥 Retornar con motivo y datos de la cita para auditoría
+    return {
+      mensaje: 'Cita eliminada correctamente',
+      motivo_accion: motivoAccion,
+      cita: cita
+    };
   }
 
   async getMotivosCita(): Promise<MotivoCita[]> {

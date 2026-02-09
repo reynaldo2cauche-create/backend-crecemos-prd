@@ -242,14 +242,22 @@ export class HistoriaClinicaService {
   }
 
   async updateReporteEvolucion(reporteId: number, updateReporteDto: UpdateReporteEvolucionDto): Promise<ReporteEvolucion> {
-    // Verificar que el reporte existe
+    // Verificar que el reporte existe Y cargar relación con paciente y servicio
     const reporte = await this.reporteEvolucionRepository.findOne({
-      where: { id: reporteId, activo: true }
+      where: { id: reporteId, activo: true },
+      relations: ['paciente', 'servicio']
     });
 
     if (!reporte) {
       throw new NotFoundException(`Reporte de evolución con ID ${reporteId} no encontrado`);
     }
+
+    // 🔥 Guardar datos anteriores CON los nombres de las relaciones
+    const datosAnteriores = {
+      ...reporte,
+      paciente: reporte.paciente,
+      servicioNombre: reporte.servicio?.nombre || null,
+    };
 
     // Verificar que el servicio existe si se proporciona
     if (updateReporteDto.servicio_id) {
@@ -287,8 +295,25 @@ export class HistoriaClinicaService {
     // Actualizar el reporte
     await this.reporteEvolucionRepository.update(reporteId, updateData);
 
-    // Retornar el reporte actualizado
-    return await this.getReporteEvolucionById(reporteId);
+    // Cargar el reporte actualizado CON relaciones para auditoría
+    const reporteActualizado = await this.reporteEvolucionRepository.findOne({
+      where: { id: reporteId },
+      relations: ['paciente', 'servicio']
+    });
+
+    // 🔥 Preparar datos nuevos CON los nombres de las relaciones
+    const datosNuevos = {
+      ...reporteActualizado,
+      paciente: reporteActualizado.paciente,
+      servicioNombre: reporteActualizado.servicio?.nombre || null,
+    };
+
+    // Retornar datos anteriores y nuevos para auditoría detallada
+    return {
+      datosAnteriores,
+      datosNuevos,
+      ...datosNuevos  // Spread para mantener compatibilidad con código existente
+    } as any;
   }
 
   async getEntrevistasPadres(pacienteId: number): Promise<EntrevistaPadres[]> {
@@ -355,14 +380,25 @@ export class HistoriaClinicaService {
   }
 
   async updateEntrevistaPadres(entrevistaId: number, updateEntrevistaDto: UpdateEntrevistaPadresDto): Promise<EntrevistaPadres> {
-    // Verificar que la entrevista existe
+    // Verificar que la entrevista existe Y cargar TODAS las relaciones para auditoría
     const entrevista = await this.entrevistaPadresRepository.findOne({
-      where: { id: entrevistaId, activo: true }
+      where: { id: entrevistaId, activo: true },
+      relations: ['paciente', 'atenciones', 'relacionPadres', 'gradoEscolar']
     });
 
     if (!entrevista) {
       throw new NotFoundException(`Entrevista a padres con ID ${entrevistaId} no encontrada`);
     }
+
+    // 🔥 Guardar datos anteriores CON los nombres de las relaciones (no solo IDs)
+    const datosAnteriores = {
+      ...entrevista,
+      paciente: entrevista.paciente,
+      // Convertir IDs a nombres legibles para auditoría
+      otrasAtencionesNombre: entrevista.atenciones?.nombre || null,
+      relacionEntrePadresNombre: entrevista.relacionPadres?.nombre || null,
+      escolaridadNombre: entrevista.gradoEscolar?.nombre || null,
+    };
 
     // Preparar los datos de actualización
     const updateData: any = {};
@@ -405,8 +441,28 @@ export class HistoriaClinicaService {
     // Actualizar la entrevista
     await this.entrevistaPadresRepository.update(entrevistaId, updateData);
 
-    // Retornar la entrevista actualizada
-    return await this.getEntrevistaPadresById(entrevistaId);
+    // Cargar la entrevista actualizada CON relaciones para auditoría
+    const entrevistaActualizada = await this.entrevistaPadresRepository.findOne({
+      where: { id: entrevistaId },
+      relations: ['paciente', 'atenciones', 'relacionPadres', 'gradoEscolar']
+    });
+
+    // 🔥 Preparar datos nuevos CON los nombres de las relaciones
+    const datosNuevos = {
+      ...entrevistaActualizada,
+      paciente: entrevistaActualizada.paciente,
+      // Convertir IDs a nombres legibles para auditoría
+      otrasAtencionesNombre: entrevistaActualizada.atenciones?.nombre || null,
+      relacionEntrePadresNombre: entrevistaActualizada.relacionPadres?.nombre || null,
+      escolaridadNombre: entrevistaActualizada.gradoEscolar?.nombre || null,
+    };
+
+    // Retornar datos anteriores y nuevos para auditoría detallada
+    return {
+      datosAnteriores,
+      datosNuevos,
+      ...datosNuevos  // Spread para mantener compatibilidad con código existente
+    } as any;
   }
   // ==================== EVALUACIÓN TERAPIA OCUPACIONAL ====================
 
@@ -586,17 +642,21 @@ async getEvaluacionTerapiaById(evaluacionId: number): Promise<EvaluacionTerapiaO
   return evaluacion;
 }
 async updateEvaluacionTerapia(
-  evaluacionId: number, 
+  evaluacionId: number,
   updateDto: UpdateEvaluacionTerapiaDto
 ): Promise<EvaluacionTerapiaOcupacional> {
-  // Verificar que la evaluación existe
+  // Verificar que la evaluación existe Y cargar relación con paciente
   const evaluacion = await this.evaluacionTerapiaRepository.findOne({
-    where: { id: evaluacionId}
+    where: { id: evaluacionId },
+    relations: ['paciente']
   });
 
   if (!evaluacion) {
     throw new NotFoundException(`Evaluación de terapia con ID ${evaluacionId} no encontrada`);
   }
+
+  // Guardar datos anteriores para auditoría (incluyendo paciente)
+  const datosAnteriores = { ...evaluacion, paciente: evaluacion.paciente };
 
   // Si se va a cambiar el paciente, verificar que existe
   if (updateDto.paciente_id && updateDto.paciente_id !== evaluacion.pacienteId) {
@@ -724,10 +784,17 @@ async updateEvaluacionTerapia(
   const evaluacionGuardada = await this.evaluacionTerapiaRepository.save(evaluacion);
 
   // Cargar la evaluación con los datos del paciente para auditoría
-  return await this.evaluacionTerapiaRepository.findOne({
+  const resultado = await this.evaluacionTerapiaRepository.findOne({
     where: { id: evaluacionGuardada.id },
     relations: ['paciente']
   });
+
+  // Retornar datos anteriores y nuevos para auditoría detallada
+  return {
+    datosAnteriores,
+    datosNuevos: resultado,
+    ...resultado  // Spread para mantener compatibilidad con código existente
+  } as any;
 }
 
 }
