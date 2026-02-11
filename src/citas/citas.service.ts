@@ -504,7 +504,13 @@ async listar(filtros: any = {}): Promise<any[]> {
   }
 
   // 🔥 Cargar datos específicos según tipo de cita ANTES de actualizar
-  let datosAntiguosCompletos: any = { ...citaAntigua };
+  let datosAntiguosCompletos: any = {
+    ...citaAntigua,
+    servicioNombre: citaAntigua.servicio?.nombre || null,
+    doctorNombre: citaAntigua.doctor
+      ? `${citaAntigua.doctor.nombres} ${citaAntigua.doctor.apellidos}`.trim()
+      : null,
+  };
 
   if (tipoCita === 'VISITA_ESCOLAR') {
     const visitaAntigua = await this.visitaEscolarRepo.findOne({
@@ -525,9 +531,37 @@ async listar(filtros: any = {}): Promise<any[]> {
       relations: ['terapeutas', 'servicios']
     });
     if (reunionAntigua) {
+      // Cargar nombres de terapeutas antiguos
+      const terapeutasAntiguos = await this.reunionTerapeutasRepo.find({
+        where: { id_reunion: reunionAntigua.id }
+      });
+      const terapeutasIds = terapeutasAntiguos.map(t => t.id_terapeuta);
+
+      let terapeutasNombresAntiguos = [];
+      if (terapeutasIds.length > 0) {
+        const queryTerapeutas = `SELECT id, nombres, apellidos FROM trabajador_centro WHERE id IN (?)`;
+        const terapeutas = await this.citaRepo.query(queryTerapeutas, [terapeutasIds]);
+        terapeutasNombresAntiguos = terapeutas.map(t => `${t.nombres} ${t.apellidos}`.trim());
+      }
+
+      // Cargar nombres de servicios antiguos
+      const serviciosAntiguos = await this.reunionServiciosRepo.find({
+        where: { id_reunion: reunionAntigua.id }
+      });
+      const serviciosIds = serviciosAntiguos.map(s => s.id_servicio);
+
+      let serviciosNombresAntiguos = [];
+      if (serviciosIds.length > 0) {
+        const queryServicios = `SELECT id, nombre FROM servicios WHERE id IN (?)`;
+        const servicios = await this.citaRepo.query(queryServicios, [serviciosIds]);
+        serviciosNombresAntiguos = servicios.map(s => s.nombre);
+      }
+
       datosAntiguosCompletos = {
         ...datosAntiguosCompletos,
         reunion_clinica: reunionAntigua,
+        terapeutasNombres: terapeutasNombresAntiguos.join(', '),
+        serviciosNombres: serviciosNombresAntiguos.join(', '),
       };
     }
   }
@@ -639,9 +673,13 @@ private async actualizarCitaNormal(id: number, dto: CrearCitaDto): Promise<any> 
     relations: ['paciente', 'doctor', 'servicio', 'motivo', 'estado']
   });
 
-  // 🔥 Retornar con motivo para auditoría
+  // 🔥 Retornar con motivo y nombres para auditoría
   return {
     ...citaActualizada,
+    servicioNombre: citaActualizada.servicio?.nombre || null,
+    doctorNombre: citaActualizada.doctor
+      ? `${citaActualizada.doctor.nombres} ${citaActualizada.doctor.apellidos}`.trim()
+      : null,
     motivo_accion: dto.motivo_accion
   };
 }
@@ -728,22 +766,48 @@ private async actualizarReunionClinica(id: number, dto: CrearCitaDto): Promise<a
     relations: ['paciente', 'doctor', 'servicio', 'motivo', 'estado']
   });
 
-  // 🔥 Cargar datos actualizados de reunión clínica
-  let reunionFinal = await this.reunionRepo.findOne({ where: { id_cita: id } });
+  // 🔥 Cargar datos actualizados de reunión clínica con nombres
+  let reunionFinal = await this.reunionRepo.findOne({
+    where: { id_cita: id },
+    relations: ['terapeutas', 'servicios']
+  });
   if (!reunionFinal) {
-    reunionFinal = await this.reunionRepo.findOne({ where: { id: id } });
+    reunionFinal = await this.reunionRepo.findOne({
+      where: { id: id },
+      relations: ['terapeutas', 'servicios']
+    });
+  }
+
+  // Cargar nombres de terapeutas
+  let terapeutasNombres = [];
+  if (dto.terapeutas_ids && dto.terapeutas_ids.length > 0) {
+    const queryTerapeutas = `SELECT id, nombres, apellidos FROM trabajador_centro WHERE id IN (?)`;
+    const terapeutas = await this.citaRepo.query(queryTerapeutas, [dto.terapeutas_ids]);
+    terapeutasNombres = terapeutas.map(t => `${t.nombres} ${t.apellidos}`.trim());
+  }
+
+  // Cargar nombres de servicios
+  let serviciosNombres = [];
+  if (dto.servicios_ids && dto.servicios_ids.length > 0) {
+    const queryServicios = `SELECT id, nombre FROM servicios WHERE id IN (?)`;
+    const servicios = await this.citaRepo.query(queryServicios, [dto.servicios_ids]);
+    serviciosNombres = servicios.map(s => s.nombre);
   }
 
   const reunionActualizada = reunionFinal ? {
     estado_cita_id: reunionFinal.estado_cita_id,
     terapeutas_ids: dto.terapeutas_ids,
+    terapeutasNombres: terapeutasNombres.join(', '),
     servicios_ids: dto.servicios_ids,
+    serviciosNombres: serviciosNombres.join(', '),
   } : null;
 
   // 🔥 Retornar con motivo y datos específicos de reunión clínica para auditoría
   return {
     ...citaActualizada,
     reunion_clinica: reunionActualizada,
+    terapeutasNombres: terapeutasNombres.join(', '),
+    serviciosNombres: serviciosNombres.join(', '),
     motivo_accion: dto.motivo_accion
   };
 }
@@ -811,6 +875,10 @@ private async actualizarVisitaEscolar(id: number, dto: CrearCitaDto): Promise<an
   // 🔥 Retornar con motivo y datos específicos de visita escolar para auditoría
   return {
     ...citaActualizada,
+    servicioNombre: citaActualizada.servicio?.nombre || null,
+    doctorNombre: citaActualizada.doctor
+      ? `${citaActualizada.doctor.nombres} ${citaActualizada.doctor.apellidos}`.trim()
+      : null,
     nombre_colegio: visitaActualizada?.nombre_colegio,
     nombre_intermediario: visitaActualizada?.nombre_intermediario,
     telefono: visitaActualizada?.telefono,

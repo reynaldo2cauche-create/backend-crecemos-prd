@@ -12,7 +12,8 @@ export class NotificacionesScheduler {
   private readonly logger = new Logger(NotificacionesScheduler.name);
   private intervalId: NodeJS.Timeout;
   private sincronizacionInicialCompletada = false;
-  
+  private ultimaVerificacionCumpleanos: string = ''; // Fecha de última verificación (YYYY-MM-DD)
+
 
   constructor(
     @InjectRepository(TrabajadorCentro)
@@ -148,13 +149,25 @@ export class NotificacionesScheduler {
     this.logger.log('🔍 Verificando notificaciones programadas...');
 
     try {
-      await Promise.all([
-        this.verificarAniversariosLaborales(),
-        this.verificarCumpleaniosPacientes(),
-        this.verificarCumpleanosEmpleados(),
-      ]);
+      // Obtener fecha actual en formato YYYY-MM-DD
+      const fechaHoy = new Date().toISOString().split('T')[0];
 
-      this.logger.log('✅ Verificación completada');
+      // ✅ Solo verificar cumpleaños UNA VEZ AL DÍA
+      if (this.ultimaVerificacionCumpleanos !== fechaHoy) {
+        this.logger.log(`📅 Verificando cumpleaños para el día: ${fechaHoy}`);
+
+        await Promise.all([
+          this.verificarAniversariosLaborales(),
+          this.verificarCumpleaniosPacientes(),
+          this.verificarCumpleanosEmpleados(),
+        ]);
+
+        // Marcar que ya se verificó hoy
+        this.ultimaVerificacionCumpleanos = fechaHoy;
+        this.logger.log(`✅ Verificación de cumpleaños completada para ${fechaHoy}`);
+      } else {
+        this.logger.log(`⏭️ Cumpleaños ya verificados hoy (${fechaHoy}), saltando...`);
+      }
     } catch (error) {
       this.logger.error(`❌ Error en verificación: ${error.message}`);
     }
@@ -273,7 +286,7 @@ export class NotificacionesScheduler {
 
   /**
    * Verifica si ya existe una notificación de ANIVERSARIO para un empleado en el año actual
-   * Mejorado para evitar duplicados verificando por año en lugar de fecha exacta
+   * MEJORADO: Verifica que fue creada HOY para evitar duplicados
    */
   private async verificarAniversarioExistente(
     empleadoId: number,
@@ -287,13 +300,14 @@ export class NotificacionesScheduler {
         WHERE e.tipo_evento = 'ANIVERSARIO_LABORAL'
           AND JSON_EXTRACT(e.datos_adicionales, '$.empleado_id') = ?
           AND YEAR(e.fecha_evento) = YEAR(CURDATE())
+          AND DATE(e.fecha_evento) = CURDATE()
       `;
 
       const result = await this.trabajadoresRepo.query(query, [empleadoId]);
       const existe = parseInt(result[0].total) > 0;
 
       if (existe) {
-        this.logger.debug(`Ya existe notificación de aniversario para empleado ${empleadoId} en el año ${new Date().getFullYear()}`);
+        this.logger.debug(`Ya existe notificación de aniversario para empleado ${empleadoId} creada HOY`);
       }
 
       return existe;
@@ -306,7 +320,7 @@ export class NotificacionesScheduler {
   /**
    * Verifica si ya existe una notificación de CUMPLEAÑOS para un paciente en una fecha
    * Verifica por paciente_id y año actual del cumpleaños
-   * MEJORADO: Validación más estricta para evitar duplicados en producción
+   * MEJORADO: Validación MÁS ESTRICTA usando fecha exacta del día actual
    */
   private async verificarCumpleanosExistente(
     pacienteId: number,
@@ -314,7 +328,7 @@ export class NotificacionesScheduler {
     roles: number[],
   ): Promise<boolean> {
     try {
-      // ✅ Consulta simplificada y más confiable
+      // ✅ Verificar usando la fecha EXACTA de creación del evento (solo hoy)
       const query = `
         SELECT COUNT(DISTINCT e.id) as total
         FROM eventos_sistema e
@@ -322,15 +336,14 @@ export class NotificacionesScheduler {
         WHERE e.tipo_evento = 'CUMPLEANOS_PACIENTE'
           AND JSON_EXTRACT(e.datos_adicionales, '$.paciente_id') = ?
           AND YEAR(e.fecha_evento) = YEAR(CURDATE())
-          AND e.fecha_evento >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
-          AND e.fecha_evento <= DATE_ADD(CURDATE(), INTERVAL 7 DAY)
+          AND DATE(e.fecha_evento) = CURDATE()
       `;
 
       const result = await this.trabajadoresRepo.query(query, [pacienteId]);
       const existe = parseInt(result[0].total) > 0;
 
       if (existe) {
-        this.logger.debug(`✅ Ya existe notificación de cumpleaños para paciente ${pacienteId} en el año ${new Date().getFullYear()}`);
+        this.logger.debug(`✅ Ya existe notificación de cumpleaños para paciente ${pacienteId} creada HOY`);
       }
 
       return existe;
@@ -502,7 +515,7 @@ export class NotificacionesScheduler {
 
   /**
    * Verifica si ya existe una notificación del tipo especificado
-   * MEJORADO: Validación más estricta con ventana de tiempo para evitar duplicados
+   * MEJORADO: Validación MÁS ESTRICTA usando fecha exacta de creación HOY
    */
   private async verificarNotificacionExistente(
     tipoEvento: string,
@@ -522,8 +535,7 @@ export class NotificacionesScheduler {
           WHERE e.tipo_evento = ?
             AND JSON_EXTRACT(e.datos_adicionales, '$.empleado_id') = ?
             AND YEAR(e.fecha_evento) = YEAR(CURDATE())
-            AND e.fecha_evento >= DATE_SUB(CURDATE(), INTERVAL 14 DAY)
-            AND e.fecha_evento <= DATE_ADD(CURDATE(), INTERVAL 14 DAY)
+            AND DATE(e.fecha_evento) = CURDATE()
         `;
         params = [tipoEvento, entidadId];
       } else if (tipoEvento === 'CUMPLEANOS_PACIENTE' && roles) {
@@ -535,8 +547,7 @@ export class NotificacionesScheduler {
           WHERE e.tipo_evento = ?
             AND JSON_EXTRACT(e.datos_adicionales, '$.paciente_id') = ?
             AND YEAR(e.fecha_evento) = YEAR(CURDATE())
-            AND e.fecha_evento >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
-            AND e.fecha_evento <= DATE_ADD(CURDATE(), INTERVAL 7 DAY)
+            AND DATE(e.fecha_evento) = CURDATE()
             AND nd.rol_id IN (${roles.join(',')})
         `;
         params = [tipoEvento, entidadId];
@@ -548,8 +559,7 @@ export class NotificacionesScheduler {
           WHERE e.tipo_evento = ?
             AND JSON_EXTRACT(e.datos_adicionales, '$.empleado_id') = ?
             AND YEAR(e.fecha_evento) = YEAR(CURDATE())
-            AND e.fecha_evento >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
-            AND e.fecha_evento <= DATE_ADD(CURDATE(), INTERVAL 7 DAY)
+            AND DATE(e.fecha_evento) = CURDATE()
         `;
         params = [tipoEvento, entidadId];
       } else {
@@ -560,7 +570,7 @@ export class NotificacionesScheduler {
       const existe = parseInt(result[0].total) > 0;
 
       if (existe) {
-        this.logger.debug(`✅ Ya existe notificación ${tipoEvento} para entidad ${entidadId} en el año ${new Date().getFullYear()}`);
+        this.logger.debug(`✅ Ya existe notificación ${tipoEvento} para entidad ${entidadId} creada HOY`);
       }
 
       return existe;

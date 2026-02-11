@@ -244,11 +244,13 @@ export class AsistenciaService {
 
   /**
    * Obtener inconsistencias de asistencia en un rango de fechas
-   * Detecta cuando:
-   * 1. Ninguno marcó después de 24 horas - ni admisión ni terapeuta registraron (SOLO SI YA PASARON 24 HORAS)
-   * 2. Solo terapeuta marcó - admisión no registró
-   * 3. Solo admisión marcó - terapeuta no registró
-   * 4. Ambos marcaron estados diferentes
+   * LÓGICA:
+   * - Para citas en el rango de fechas especificado
+   * - Validar 24 horas DESDE la hora de la cita (no desde ahora)
+   * - Detectar:
+   *   1. Ninguno marcó (después de 24h desde la cita)
+   *   2. Solo uno marcó (falta el otro)
+   *   3. Ambos marcaron pero estados diferentes (6 vs 7)
    */
   async obtenerInconsistencias(fechaInicio: string, fechaFin: string): Promise<any> {
     console.log(`⚠️ Buscando inconsistencias desde ${fechaInicio} hasta ${fechaFin}`);
@@ -258,6 +260,7 @@ export class AsistenciaService {
         SELECT
           COALESCE(sa.id, c.id) as id,
           c.id as cita_id,
+          c.estado_id as cita_estado_id,
           CONCAT(c.fecha, ' ', c.hora_inicio) AS fecha_cita,
           CONCAT(p.nombres, ' ', p.apellido_paterno, ' ', p.apellido_materno) AS paciente_nombre,
           CONCAT(tc.nombres, ' ', tc.apellidos) AS terapeuta_nombre,
@@ -270,18 +273,29 @@ export class AsistenciaService {
           TIMESTAMPDIFF(HOUR, CONCAT(c.fecha, ' ', c.hora_inicio), NOW()) as horas_transcurridas,
           -- Determinar el tipo de inconsistencia
           CASE
-            -- Caso 1: Ninguno marcó Y ya pasaron 24 horas
-            WHEN (COALESCE(sa.recepcion_marco, 0) = 0 AND COALESCE(sa.terapeuta_marco, 0) = 0
+            -- Caso 1: Ninguno marcó Y ya pasaron 24 horas DESDE LA HORA DE LA CITA
+            WHEN (COALESCE(sa.recepcion_marco, 0) = 0
+                  AND COALESCE(sa.terapeuta_marco, 0) = 0
                   AND TIMESTAMPDIFF(HOUR, CONCAT(c.fecha, ' ', c.hora_inicio), NOW()) >= 24)
             THEN 'Ninguno marcó asistencia'
-            -- Caso 2: Solo terapeuta marcó
-            WHEN (COALESCE(sa.recepcion_marco, 0) = 0 AND COALESCE(sa.terapeuta_marco, 0) = 1)
+
+            -- Caso 2: Solo terapeuta marcó (6 o 7), falta recepción
+            WHEN (COALESCE(sa.recepcion_marco, 0) = 0
+                  AND COALESCE(sa.terapeuta_marco, 0) = 1
+                  AND sa.terapeuta_estado_id IN (6, 7))
             THEN 'Falta registro de admisión'
-            -- Caso 3: Solo admisión marcó
-            WHEN (COALESCE(sa.recepcion_marco, 0) = 1 AND COALESCE(sa.terapeuta_marco, 0) = 0)
+
+            -- Caso 3: Solo recepción marcó (6 o 7), falta terapeuta
+            WHEN (COALESCE(sa.recepcion_marco, 0) = 1
+                  AND COALESCE(sa.terapeuta_marco, 0) = 0
+                  AND sa.recepcion_estado_id IN (6, 7))
             THEN 'Falta registro del terapeuta'
-            -- Caso 4: Ambos marcaron pero estados diferentes
-            WHEN (COALESCE(sa.recepcion_marco, 0) = 1 AND COALESCE(sa.terapeuta_marco, 0) = 1
+
+            -- Caso 4: Ambos marcaron pero con estados DIFERENTES (6 vs 7)
+            WHEN (COALESCE(sa.recepcion_marco, 0) = 1
+                  AND COALESCE(sa.terapeuta_marco, 0) = 1
+                  AND sa.recepcion_estado_id IN (6, 7)
+                  AND sa.terapeuta_estado_id IN (6, 7)
                   AND sa.recepcion_estado_id != sa.terapeuta_estado_id)
             THEN CONCAT('Estados no coinciden (Admisión: ',
                        CASE WHEN sa.recepcion_estado_id = 7 THEN 'Asistió'
@@ -300,6 +314,7 @@ export class AsistenciaService {
         INNER JOIN trabajador_centro tc ON c.doctor_id = tc.id
         WHERE c.fecha BETWEEN ? AND ?
           AND c.flg_activo = 1
+          AND c.estado_id NOT IN (5, 8)
         HAVING tipo_inconsistencia IS NOT NULL
         ORDER BY c.fecha DESC, c.hora_inicio DESC
       `;

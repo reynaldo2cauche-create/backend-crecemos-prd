@@ -61,6 +61,16 @@ const CAMPOS_EXCLUIDOS = [
   'otrasAtenciones',
   'relacionEntrePadres',
   'escolaridad',
+  // IDs de citas - mostrar solo nombres
+  'doctor_id',
+  'servicio_id',
+  'doctor',
+  'terapeutas_ids',
+  'servicios_ids',
+  'motivo',
+  'estado',
+  'motivo_id',
+  'estado_id',
 ];
 
 /**
@@ -119,8 +129,14 @@ const NOMBRES_CAMPOS: Record<string, string> = {
 
   // Reunión Clínica (campos específicos)
   terapeutas_ids: 'Terapeutas Asignados',
+  terapeutasNombres: 'Terapeutas',
   servicios_ids: 'Servicios Incluidos',
+  serviciosNombres: 'Servicios',
   reunion_clinica: 'Datos de Reunión Clínica',
+
+  // Nombres de campos comunes
+  servicioNombre: 'Servicio',
+  doctorNombre: 'Terapeuta',
 
   // Historia Clínica
   diagnostico: 'Diagnóstico',
@@ -150,7 +166,6 @@ const NOMBRES_CAMPOS: Record<string, string> = {
 
   // Reporte de Evolución
   servicioId: 'Servicio',
-  servicioNombre: 'Servicio',
   edad: 'Edad',
   fecha_evaluacion: 'Fecha de Evaluación',
   fechaEvaluacion: 'Fecha de Evaluación',
@@ -334,7 +349,26 @@ export function detectarCambios(
     }
 
     const valorAnterior = datosAnteriores[campo];
-    const valorNuevo = datosNuevos[campo];
+const valorNuevo = datosNuevos[campo];
+
+      // 🔥 DETECTAR CAMBIOS EN CAMPOS DE RELACIÓN (sexo, tipo_documento, distrito)
+      if (campo === 'sexo' || campo === 'tipo_documento' || campo === 'distrito') {
+        const idAnterior = valorAnterior?.id;
+        const idNuevo = valorNuevo?.id;
+        
+        if (idAnterior !== idNuevo) {
+          cambios.push({
+            campo,
+            nombreCampo: NOMBRES_CAMPOS[campo] || formatearNombreCampo(campo),
+            valorAnterior,
+            valorNuevo,
+            valorAnteriorFormateado: formatearValor(campo, valorAnterior),
+            valorNuevoFormateado: formatearValor(campo, valorNuevo),
+          });
+        }
+        continue;
+}
+    
 
     // 🔥 IGNORAR CAMBIOS EN OBJETOS RELACIONADOS (relaciones de base de datos)
     // Si es un objeto con 'id', es una relación y NO debe registrarse como cambio
