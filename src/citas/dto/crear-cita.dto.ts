@@ -37,6 +37,11 @@ export class CrearCitaDto {
   @IsInt()
   servicio_id?: number;
 
+  // 🛒 Vinculación con compra (para sesiones individuales o paquetes)
+  @IsOptional()
+  @IsInt()
+  compra_id?: number;
+
   // Para REUNIÓN CLÍNICA
   @IsOptional()
   @IsArray()

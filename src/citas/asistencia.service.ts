@@ -32,7 +32,7 @@ export class AsistenciaService {
    * Registrar llegada del paciente (RECEPCIÓN)
    */
  async registrarRecepcion(dto: RegistrarRecepcionDto): Promise<any> {
-  console.log(`📝 Registrando llegada de paciente - Cita ID: ${dto.cita_id}`);
+  console.log(`📝 Registrando recepción - Cita ID: ${dto.cita_id}, Estado: ${dto.estado_id}`);
 
   // Verificar que la cita existe
   const cita = await this.citaRepo.findOne({ where: { id: dto.cita_id } });
@@ -40,8 +40,8 @@ export class AsistenciaService {
     throw new NotFoundException('Cita no encontrada');
   }
 
-  // Validar estado_id (7 = ASISTIÓ, 6 = NO_ASISTIÓ)
-  if (![7, 6].includes(dto.estado_id)) {
+  // Validar estado_id: solo 7, 6 o null (desmarcar)
+  if (dto.estado_id !== null && ![7, 6].includes(dto.estado_id)) {
     throw new BadRequestException('Estado inválido para recepción');
   }
 
@@ -56,12 +56,26 @@ export class AsistenciaService {
     });
   }
 
-  // Verificar que no se haya registrado antes
-  if (seguimiento.recepcion_marco === 1) {
-    throw new BadRequestException('La recepción ya fue registrada para esta cita');
+  if (dto.estado_id === null) {
+    // DESMARCAR: limpiar el registro de recepción
+    seguimiento.recepcion_marco = 0;
+    seguimiento.recepcion_estado_id = null;
+    seguimiento.recepcion_fecha = null;
+    seguimiento.recepcion_usuario_id = null;
+
+    await this.seguimientoRepo.save(seguimiento);
+
+    // Revertir estado de la cita a pendiente (estado 1) si terapeuta tampoco marcó
+    if (!seguimiento.terapeuta_marco) {
+      cita.estado_id = 1;
+      await this.citaRepo.save(cita);
+    }
+
+    console.log(`🔄 Recepción desmarcada - Cita ID: ${dto.cita_id}`);
+    return { success: true, message: 'Marca de recepción eliminada', seguimiento };
   }
 
-  // Actualizar registro de recepción
+  // MARCAR / CAMBIAR: permite actualizar aunque ya estuviera registrado
   seguimiento.recepcion_marco = 1;
   seguimiento.recepcion_usuario_id = dto.usuario_id;
   seguimiento.recepcion_estado_id = dto.estado_id;
@@ -73,14 +87,14 @@ export class AsistenciaService {
   cita.estado_id = dto.estado_id;
   await this.citaRepo.save(cita);
 
-  console.log(`✅ Recepción registrada - Estado: ${dto.estado_id}`);
+  console.log(`✅ Recepción registrada/actualizada - Estado: ${dto.estado_id}`);
 
-  // ✅ VERIFICAR INCONSISTENCIA SOLO SI AMBOS YA MARCARON Y TIENEN ESTADOS DIFERENTES
+  // VERIFICAR INCONSISTENCIA SOLO SI AMBOS YA MARCARON Y TIENEN ESTADOS DIFERENTES
   await this.verificarYNotificarInconsistencia(seguimiento, dto.cita_id);
 
   return {
     success: true,
-    message: dto.estado_id === 7 ? 'Llegada confirmada' : 'Inasistencia registrada',
+    message: dto.estado_id === 7 ? 'Llegada confirmada' : 'Sesión dictada registrada',
     seguimiento,
   };
 }
@@ -89,7 +103,7 @@ export class AsistenciaService {
    * Registrar sesión completada (TERAPEUTA)
    */
  async registrarTerapeuta(dto: RegistrarTerapeutaDto): Promise<any> {
-  console.log(`📝 Registrando sesión por terapeuta - Cita ID: ${dto.cita_id}`);
+  console.log(`📝 Registrando terapeuta - Cita ID: ${dto.cita_id}, Estado: ${dto.estado_id}`);
 
   // Verificar que la cita existe
   const cita = await this.citaRepo.findOne({ where: { id: dto.cita_id } });
@@ -97,8 +111,8 @@ export class AsistenciaService {
     throw new NotFoundException('Cita no encontrada');
   }
 
-  // Validar estado_id (7 = ASISTIÓ no completada, 6 = NO_ASISTIÓ)
-  if (![7, 6].includes(dto.estado_id)) {
+  // Validar estado_id: solo 7, 6 o null (desmarcar)
+  if (dto.estado_id !== null && ![7, 6].includes(dto.estado_id)) {
     throw new BadRequestException('Estado inválido para terapeuta');
   }
 
@@ -113,12 +127,26 @@ export class AsistenciaService {
     });
   }
 
-  // Verificar que no se haya registrado antes
-  if (seguimiento.terapeuta_marco === 1) {
-    throw new BadRequestException('El terapeuta ya registró esta cita');
+  if (dto.estado_id === null) {
+    // DESMARCAR: limpiar el registro de terapeuta
+    seguimiento.terapeuta_marco = 0;
+    seguimiento.terapeuta_estado_id = null;
+    seguimiento.terapeuta_fecha = null;
+    seguimiento.terapeuta_usuario_id = null;
+
+    await this.seguimientoRepo.save(seguimiento);
+
+    // Revertir estado de la cita a pendiente (estado 1) si recepción tampoco marcó
+    if (!seguimiento.recepcion_marco) {
+      cita.estado_id = 1;
+      await this.citaRepo.save(cita);
+    }
+
+    console.log(`🔄 Terapeuta desmarcado - Cita ID: ${dto.cita_id}`);
+    return { success: true, message: 'Marca de terapeuta eliminada', seguimiento };
   }
 
-  // Actualizar registro de terapeuta
+  // MARCAR / CAMBIAR: permite actualizar aunque ya estuviera registrado
   seguimiento.terapeuta_marco = 1;
   seguimiento.terapeuta_usuario_id = dto.terapeuta_id;
   seguimiento.terapeuta_estado_id = dto.estado_id;
@@ -130,9 +158,9 @@ export class AsistenciaService {
   if (seguimiento.recepcion_marco === 1) {
     // Si recepción ya marcó, verificar concordancia
     if (seguimiento.recepcion_estado_id === 7 && dto.estado_id === 7) {
-      cita.estado_id = 7; // Asistió (no completada)
+      cita.estado_id = 7;
     } else if (dto.estado_id === 6) {
-      cita.estado_id = 6; // No asistió
+      cita.estado_id = 6;
     }
     await this.citaRepo.save(cita);
   } else {
@@ -141,9 +169,9 @@ export class AsistenciaService {
     await this.citaRepo.save(cita);
   }
 
-  console.log(`✅ Terapeuta registró: ${dto.estado_id === 7 ? 'Asistió (no completada)' : 'No asistió'}`);
+  console.log(`✅ Terapeuta registrado/actualizado - Estado: ${dto.estado_id}`);
 
-  // ✅ VERIFICAR INCONSISTENCIA SOLO SI AMBOS YA MARCARON Y TIENEN ESTADOS DIFERENTES
+  // VERIFICAR INCONSISTENCIA SOLO SI AMBOS YA MARCARON Y TIENEN ESTADOS DIFERENTES
   await this.verificarYNotificarInconsistencia(seguimiento, dto.cita_id);
 
   return {
@@ -502,41 +530,60 @@ export class AsistenciaService {
         });
       }
 
-      // Modificar estado de recepción si se proporciona
+      // Modificar estado de recepción si se proporciona (null = desmarcar)
       if (dto.recepcion_estado_id !== undefined) {
-        if (![7, 6].includes(dto.recepcion_estado_id)) {
-          throw new BadRequestException('Estado de recepción inválido');
+        if (dto.recepcion_estado_id === null) {
+          // DESMARCAR recepción
+          seguimiento.recepcion_marco = 0;
+          seguimiento.recepcion_estado_id = null;
+          seguimiento.recepcion_fecha = null;
+          seguimiento.recepcion_usuario_id = null;
+        } else {
+          if (![7, 6].includes(dto.recepcion_estado_id)) {
+            throw new BadRequestException('Estado de recepción inválido');
+          }
+          seguimiento.recepcion_marco = 1;
+          seguimiento.recepcion_estado_id = dto.recepcion_estado_id;
+          seguimiento.recepcion_fecha = new Date();
+          seguimiento.recepcion_usuario_id = dto.admin_usuario_id;
         }
-        seguimiento.recepcion_marco = 1;
-        seguimiento.recepcion_estado_id = dto.recepcion_estado_id;
-        seguimiento.recepcion_fecha = new Date();
-        seguimiento.recepcion_usuario_id = dto.admin_usuario_id;
       }
 
-      // Modificar estado de terapeuta si se proporciona
+      // Modificar estado de terapeuta si se proporciona (null = desmarcar)
       if (dto.terapeuta_estado_id !== undefined) {
-        if (![7, 6].includes(dto.terapeuta_estado_id)) {
-          throw new BadRequestException('Estado de terapeuta inválido');
+        if (dto.terapeuta_estado_id === null) {
+          // DESMARCAR terapeuta
+          seguimiento.terapeuta_marco = 0;
+          seguimiento.terapeuta_estado_id = null;
+          seguimiento.terapeuta_fecha = null;
+          seguimiento.terapeuta_usuario_id = null;
+        } else {
+          if (![7, 6].includes(dto.terapeuta_estado_id)) {
+            throw new BadRequestException('Estado de terapeuta inválido');
+          }
+          seguimiento.terapeuta_marco = 1;
+          seguimiento.terapeuta_estado_id = dto.terapeuta_estado_id;
+          seguimiento.terapeuta_fecha = new Date();
+          seguimiento.terapeuta_usuario_id = dto.admin_usuario_id;
         }
-        seguimiento.terapeuta_marco = 1;
-        seguimiento.terapeuta_estado_id = dto.terapeuta_estado_id;
-        seguimiento.terapeuta_fecha = new Date();
-        seguimiento.terapeuta_usuario_id = dto.admin_usuario_id;
       }
 
       await this.seguimientoRepo.save(seguimiento);
 
-      // Actualizar estado de la cita
+      // Actualizar estado de la cita según lo que quedó en seguimiento
       if (seguimiento.recepcion_marco === 1 && seguimiento.terapeuta_marco === 1) {
         if (seguimiento.recepcion_estado_id === 7 && seguimiento.terapeuta_estado_id === 7) {
           cita.estado_id = 7; // Asistió
         } else if (seguimiento.recepcion_estado_id === 6 || seguimiento.terapeuta_estado_id === 6) {
           cita.estado_id = 6; // Sesión Dictada
         }
-      } else if (dto.recepcion_estado_id !== undefined) {
-        cita.estado_id = dto.recepcion_estado_id;
-      } else if (dto.terapeuta_estado_id !== undefined) {
-        cita.estado_id = dto.terapeuta_estado_id;
+      } else if (seguimiento.recepcion_marco === 1) {
+        cita.estado_id = seguimiento.recepcion_estado_id;
+      } else if (seguimiento.terapeuta_marco === 1) {
+        cita.estado_id = seguimiento.terapeuta_estado_id;
+      } else {
+        // Ninguno marcó → pendiente
+        cita.estado_id = 1;
       }
 
       await this.citaRepo.save(cita);

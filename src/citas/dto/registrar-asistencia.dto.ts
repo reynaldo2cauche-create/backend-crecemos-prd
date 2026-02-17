@@ -1,4 +1,4 @@
-import { IsNumber, IsNotEmpty } from 'class-validator';
+import { IsNumber, IsNotEmpty, IsOptional, ValidateIf } from 'class-validator';
 
 export class RegistrarRecepcionDto {
   @IsNumber()
@@ -9,9 +9,10 @@ export class RegistrarRecepcionDto {
   @IsNotEmpty()
   usuario_id: number;
 
+  @ValidateIf((o) => o.estado_id !== null)
   @IsNumber()
-  @IsNotEmpty()
-  estado_id: number; // 7 = ASISTIÓ, 6 = NO_ASISTIÓ
+  @IsOptional()
+  estado_id: number | null; // 7 = ASISTIÓ, 6 = SESIÓN DICTADA, null = DESMARCAR
 }
 
 export class RegistrarTerapeutaDto {
@@ -23,7 +24,8 @@ export class RegistrarTerapeutaDto {
   @IsNotEmpty()
   terapeuta_id: number;
 
+  @ValidateIf((o) => o.estado_id !== null)
   @IsNumber()
-  @IsNotEmpty()
-  estado_id: number; // 4 = COMPLETADA, 6 = NO_ASISTIÓ
+  @IsOptional()
+  estado_id: number | null; // 7 = ASISTIÓ, 6 = SESIÓN DICTADA, null = DESMARCAR
 }

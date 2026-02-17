@@ -808,29 +808,22 @@ async findAll(filters?: {
   }
 
   /**
-   * Busca pacientes por nombre/apellido para autocompletado
+   * Busca pacientes por nombre/apellido/DNI para autocompletado
    * @param query Término de búsqueda
-   * @returns Array con id, nombres y apellidos
-   */ 
-  async buscarPacientes(query: string): Promise<{ id: number; nombre_completo: string }[]> {
+   * @returns Array con id, nombre completo, DNI y celular
+   */
+  async buscarPacientes(query: string): Promise<{ id: number; nombre_completo: string; numero_documento: string; celular: string }[]> {
     if (!query || query.trim().length < 2) {
       return [];
     }
 
     const pacientes = await this.pacienteRepository
       .createQueryBuilder('paciente')
-      .leftJoinAndSelect('paciente.estado', 'estado')
-      .select([
-        'paciente.id',
-        'paciente.nombres',
-        'paciente.apellido_paterno',
-        'paciente.apellido_materno'
-      ])
-      .where('paciente.activo = :activo', { activo: true })
-      .andWhere('paciente.mostrar_en_listado = :mostrarEnListado', { mostrarEnListado: true })
-      .andWhere('estado.id IN (:...estados)', { estados: [1, 2, 3, 4] })
+      .leftJoin('paciente.estado', 'estado')
+      .where('paciente.mostrar_en_listado = :mostrarEnListado', { mostrarEnListado: true })
+      .andWhere('(estado.id IS NULL OR estado.id != :estadoExcluido)', { estadoExcluido: 5 })
       .andWhere(
-        '(paciente.nombres LIKE :query OR paciente.apellido_paterno LIKE :query OR paciente.apellido_materno LIKE :query)',
+        '(paciente.nombres LIKE :query OR paciente.apellido_paterno LIKE :query OR paciente.apellido_materno LIKE :query OR paciente.numero_documento LIKE :query)',
         { query: `%${query.trim()}%` }
       )
       .orderBy('paciente.nombres', 'ASC')
@@ -839,7 +832,9 @@ async findAll(filters?: {
 
     return pacientes.map(paciente => ({
       id: paciente.id,
-      nombre_completo: `${paciente.nombres} ${paciente.apellido_paterno} ${paciente.apellido_materno}`.trim()
+      nombre_completo: `${paciente.nombres} ${paciente.apellido_paterno} ${paciente.apellido_materno}`.trim(),
+      numero_documento: paciente.numero_documento || '',
+      celular: paciente.celular || ''
     }));
   }
 

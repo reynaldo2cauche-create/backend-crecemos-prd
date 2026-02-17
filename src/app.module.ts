@@ -114,6 +114,15 @@ import { DatosAcademicos } from './usuarios/datos-academicos.entity';
 import { NivelEducacion } from './catalogos/nivel-educacion.entity';
 import { ProcesoLegalInfantil } from './procesos-legales-infantiles/entities/proceso-legal-infantil.entity';
 import { ProcesosLegalesInfantilesModule } from './procesos-legales-infantiles/procesos-legales-infantiles.module';
+import { SorteoModule } from './sorteos/sorteo.module';
+import { Sorteo } from './sorteos/entities/sorteo.entity';
+import { ReglaSorteo } from './sorteos/entities/regla-sorteo.entity';
+import { SorteoGanador } from './sorteos/entities/sorteo-ganador.entity';
+import { EstadoSorteo } from './sorteos/entities/estado-sorteo.entity';
+import { SorteoParticipante } from './sorteos/entities/sorteo-participante.entity';
+import { Compra } from './sorteos/entities/compra.entity';
+import { TipoCompra } from './sorteos/entities/tipo-compra.entity';
+import { Paquete } from './sorteos/entities/paquete.entity';
 
 
 @Module({
@@ -255,7 +264,15 @@ import { ProcesosLegalesInfantilesModule } from './procesos-legales-infantiles/p
         Parentesco,
         DatosAcademicos,
         NivelEducacion,
-        ProcesoLegalInfantil
+        ProcesoLegalInfantil,
+        Sorteo,
+        ReglaSorteo,
+        SorteoGanador,
+        EstadoSorteo,
+        SorteoParticipante,
+        Compra,
+        TipoCompra,
+        Paquete
       ],
         synchronize: false,   // true en desarrollo, false en producción - DESHABILITADO para evitar conflictos con foreign keys
           // Activar logs de SQL para debug
@@ -290,7 +307,8 @@ import { ProcesosLegalesInfantilesModule } from './procesos-legales-infantiles/p
     Comentario,
     ConveniosModule,
     StaffModule,
-    ProcesosLegalesInfantilesModule
+    ProcesosLegalesInfantilesModule,
+    SorteoModule
   ],
   controllers: [AppController],
   providers: [
