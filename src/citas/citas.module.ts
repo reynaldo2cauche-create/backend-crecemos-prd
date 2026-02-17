@@ -28,6 +28,7 @@ import { AsistenciaService } from './asistencia.service';
 import { CitasController } from './citas.controller';
 import { AsistenciaController } from './asistencia.controller';
 import { NotificacionesModule } from '../notificaciones/notificaciones.module';
+import { SorteoModule } from '../sorteos/sorteo.module';
 
 @Module({
   imports: [
@@ -50,6 +51,7 @@ import { NotificacionesModule } from '../notificaciones/notificaciones.module';
       TipoCita
     ]),
     forwardRef(() => NotificacionesModule),
+    forwardRef(() => SorteoModule),
   ],
   providers: [CitasService, HistorialCitasService, AsistenciaService],
   controllers: [CitasController, AsistenciaController],
