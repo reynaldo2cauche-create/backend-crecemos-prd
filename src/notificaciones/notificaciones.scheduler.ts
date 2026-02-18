@@ -12,7 +12,7 @@ export class NotificacionesScheduler {
   private readonly logger = new Logger(NotificacionesScheduler.name);
   private intervalId: NodeJS.Timeout;
   private sincronizacionInicialCompletada = false;
-  private ultimaVerificacionCumpleanos: string = ''; // Fecha de última verificación (YYYY-MM-DD)
+
 
 
   constructor(
@@ -149,25 +149,18 @@ export class NotificacionesScheduler {
     this.logger.log('🔍 Verificando notificaciones programadas...');
 
     try {
-      // Obtener fecha actual en formato YYYY-MM-DD
-      const fechaHoy = new Date().toISOString().split('T')[0];
+      const fechaHoy = this.getFechaHoyLima();
+      this.logger.log(`📅 Verificando cumpleaños/aniversarios para el día: ${fechaHoy}`);
 
-      // ✅ Solo verificar cumpleaños UNA VEZ AL DÍA
-      if (this.ultimaVerificacionCumpleanos !== fechaHoy) {
-        this.logger.log(`📅 Verificando cumpleaños para el día: ${fechaHoy}`);
+      // La deduplicación se resuelve en cada método comparando contra la BD por fecha del día.
+      // No se usa variable en memoria para evitar re-notificaciones tras reinicios del servidor.
+      await Promise.all([
+        this.verificarAniversariosLaborales(),
+        this.verificarCumpleaniosPacientes(),
+        this.verificarCumpleanosEmpleados(),
+      ]);
 
-        await Promise.all([
-          this.verificarAniversariosLaborales(),
-          this.verificarCumpleaniosPacientes(),
-          this.verificarCumpleanosEmpleados(),
-        ]);
-
-        // Marcar que ya se verificó hoy
-        this.ultimaVerificacionCumpleanos = fechaHoy;
-        this.logger.log(`✅ Verificación de cumpleaños completada para ${fechaHoy}`);
-      } else {
-        this.logger.log(`⏭️ Cumpleaños ya verificados hoy (${fechaHoy}), saltando...`);
-      }
+      this.logger.log(`✅ Verificación completada para ${fechaHoy}`);
     } catch (error) {
       this.logger.error(`❌ Error en verificación: ${error.message}`);
     }
@@ -200,7 +193,7 @@ export class NotificacionesScheduler {
       for (const empleado of empleados) {
         const existeNotificacion = await this.verificarAniversarioExistente(
           empleado.id,
-          new Date().toISOString().split('T')[0]
+          this.getFechaHoyLima()
         );
 
         if (!existeNotificacion) {
@@ -257,7 +250,7 @@ export class NotificacionesScheduler {
       for (const paciente of pacientes) {
         const existeNotificacion = await this.verificarCumpleanosExistente(
           paciente.id,
-          new Date().toISOString().split('T')[0],
+          this.getFechaHoyLima(),
           roles
         );
 
@@ -290,16 +283,17 @@ export class NotificacionesScheduler {
    */
   private async verificarAniversarioExistente(
     empleadoId: number,
-    fecha: string,
+    fecha: string, // YYYY-MM-DD en timezone Lima (mantenido para compatibilidad, no se usa en SQL)
   ): Promise<boolean> {
     try {
+      // Usamos DATE(e.fecha_evento) = CURDATE() en lugar de CONVERT_TZ
+      // para evitar el problema de NULL cuando MySQL ya retorna TIMESTAMP en timezone de sesión.
       const query = `
         SELECT COUNT(*) as total
         FROM eventos_sistema e
         INNER JOIN notificaciones n ON n.evento_id = e.id
         WHERE e.tipo_evento = 'ANIVERSARIO_LABORAL'
           AND JSON_EXTRACT(e.datos_adicionales, '$.empleado_id') = ?
-          AND YEAR(e.fecha_evento) = YEAR(CURDATE())
           AND DATE(e.fecha_evento) = CURDATE()
       `;
 
@@ -307,13 +301,14 @@ export class NotificacionesScheduler {
       const existe = parseInt(result[0].total) > 0;
 
       if (existe) {
-        this.logger.debug(`Ya existe notificación de aniversario para empleado ${empleadoId} creada HOY`);
+        this.logger.debug(`Ya existe notificación de aniversario para empleado ${empleadoId} el día ${fecha}`);
       }
 
       return existe;
     } catch (error) {
       this.logger.error(`Error al verificar aniversario existente: ${error.message}`);
-      return false;
+      // Retornamos true (seguro) para evitar crear duplicados si falla la consulta
+      return true;
     }
   }
 
@@ -324,18 +319,19 @@ export class NotificacionesScheduler {
    */
   private async verificarCumpleanosExistente(
     pacienteId: number,
-    fecha: string,
+    fecha: string, // YYYY-MM-DD en timezone Lima (mantenido para compatibilidad, no se usa en SQL)
     roles: number[],
   ): Promise<boolean> {
     try {
-      // ✅ Verificar usando la fecha EXACTA de creación del evento (solo hoy)
+      // Usamos DATE(e.fecha_evento) = CURDATE() en lugar de CONVERT_TZ para evitar
+      // que CONVERT_TZ retorne NULL cuando el TIMESTAMP ya viene en el timezone de sesión (Lima).
+      // Ambos, DATE(e.fecha_evento) y CURDATE(), usan el mismo timezone de sesión MySQL.
       const query = `
         SELECT COUNT(DISTINCT e.id) as total
         FROM eventos_sistema e
         INNER JOIN notificaciones n ON n.evento_id = e.id
         WHERE e.tipo_evento = 'CUMPLEANOS_PACIENTE'
           AND JSON_EXTRACT(e.datos_adicionales, '$.paciente_id') = ?
-          AND YEAR(e.fecha_evento) = YEAR(CURDATE())
           AND DATE(e.fecha_evento) = CURDATE()
       `;
 
@@ -343,13 +339,14 @@ export class NotificacionesScheduler {
       const existe = parseInt(result[0].total) > 0;
 
       if (existe) {
-        this.logger.debug(`✅ Ya existe notificación de cumpleaños para paciente ${pacienteId} creada HOY`);
+        this.logger.debug(`✅ Ya existe notificación de cumpleaños para paciente ${pacienteId} el día ${fecha}`);
       }
 
       return existe;
     } catch (error) {
       this.logger.error(`Error al verificar cumpleaños existente: ${error.message}`);
-      return false;
+      // Retornamos true (seguro) para evitar crear duplicados si falla la consulta
+      return true;
     }
   }
 
@@ -382,7 +379,7 @@ export class NotificacionesScheduler {
         const existeNotificacion = await this.verificarNotificacionExistente(
           'CUMPLEANOS_EMPLEADO',
           empleado.id,
-          new Date().toISOString().split('T')[0]
+          this.getFechaHoyLima()
         );
 
         if (!existeNotificacion) {
@@ -435,7 +432,7 @@ export class NotificacionesScheduler {
         const existeNotificacion = await this.verificarNotificacionExistente(
           'CUMPLEANOS_EMPLEADO',
           empleado.id,
-          new Date().toISOString().split('T')[0]
+          this.getFechaHoyLima()
         );
 
         if (!existeNotificacion) {
@@ -489,7 +486,7 @@ export class NotificacionesScheduler {
       for (const empleado of empleados) {
         const existeNotificacion = await this.verificarAniversarioExistente(
           empleado.id,
-          new Date().toISOString().split('T')[0]
+          this.getFechaHoyLima()
         );
 
         if (!existeNotificacion) {
@@ -520,13 +517,15 @@ export class NotificacionesScheduler {
   private async verificarNotificacionExistente(
     tipoEvento: string,
     entidadId: number,
-    fecha: string,
+    fecha: string, // YYYY-MM-DD en timezone Lima (mantenido para compatibilidad, no se usa en SQL)
     roles?: number[]
   ): Promise<boolean> {
     try {
       let query: string;
       let params: any[];
 
+      // Usamos DATE(e.fecha_evento) = CURDATE() en lugar de CONVERT_TZ
+      // para evitar el problema de NULL cuando MySQL ya retorna TIMESTAMP en timezone de sesión.
       if (tipoEvento === 'ANIVERSARIO_LABORAL') {
         query = `
           SELECT COUNT(*) as total
@@ -534,7 +533,6 @@ export class NotificacionesScheduler {
           INNER JOIN notificaciones n ON n.evento_id = e.id
           WHERE e.tipo_evento = ?
             AND JSON_EXTRACT(e.datos_adicionales, '$.empleado_id') = ?
-            AND YEAR(e.fecha_evento) = YEAR(CURDATE())
             AND DATE(e.fecha_evento) = CURDATE()
         `;
         params = [tipoEvento, entidadId];
@@ -546,7 +544,6 @@ export class NotificacionesScheduler {
           INNER JOIN notificaciones_destino nd ON nd.notificacion_id = n.id
           WHERE e.tipo_evento = ?
             AND JSON_EXTRACT(e.datos_adicionales, '$.paciente_id') = ?
-            AND YEAR(e.fecha_evento) = YEAR(CURDATE())
             AND DATE(e.fecha_evento) = CURDATE()
             AND nd.rol_id IN (${roles.join(',')})
         `;
@@ -558,7 +555,6 @@ export class NotificacionesScheduler {
           INNER JOIN notificaciones n ON n.evento_id = e.id
           WHERE e.tipo_evento = ?
             AND JSON_EXTRACT(e.datos_adicionales, '$.empleado_id') = ?
-            AND YEAR(e.fecha_evento) = YEAR(CURDATE())
             AND DATE(e.fecha_evento) = CURDATE()
         `;
         params = [tipoEvento, entidadId];
@@ -570,13 +566,14 @@ export class NotificacionesScheduler {
       const existe = parseInt(result[0].total) > 0;
 
       if (existe) {
-        this.logger.debug(`✅ Ya existe notificación ${tipoEvento} para entidad ${entidadId} creada HOY`);
+        this.logger.debug(`✅ Ya existe notificación ${tipoEvento} para entidad ${entidadId} el día ${fecha}`);
       }
 
       return existe;
     } catch (error) {
       this.logger.error(`Error al verificar notificación existente: ${error.message}`);
-      return false;
+      // Retornamos true (seguro) para evitar crear duplicados si falla la consulta
+      return true;
     }
   }
 
@@ -732,6 +729,24 @@ export class NotificacionesScheduler {
   }
 
   /**
+   * Devuelve la fecha actual en Lima (UTC-5) en formato YYYY-MM-DD.
+   * NUNCA usar new Date().toISOString() para esto porque devuelve UTC
+   * y Lima está 5 horas atrás — después de las 7pm Lima el día UTC ya cambió.
+   */
+ private getFechaHoyLima(): string {
+  // Obtener hora actual en Lima (UTC-5)
+  const ahora = new Date();
+  const limaOffset = -5 * 60; // minutos
+  const utcMinutes = ahora.getTime() / 60000 + ahora.getTimezoneOffset();
+  const limaDate = new Date((utcMinutes + limaOffset) * 60000);
+  
+  const year = limaDate.getFullYear();
+  const month = String(limaDate.getMonth() + 1).padStart(2, '0');
+  const day = String(limaDate.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+  /**
    * ✅ Verifica si ya existe una notificación diaria de inconsistencias para una fecha
    */
   private async verificarNotificacionInconsistenciaHoy(fecha: string): Promise<boolean> {
@@ -754,7 +769,8 @@ export class NotificacionesScheduler {
       return existe;
     } catch (error) {
       this.logger.error(`Error al verificar notificación diaria: ${error.message}`);
-      return false;
+      // Retornamos true (seguro) para evitar crear duplicados si falla la consulta
+      return true;
     }
   }
 }

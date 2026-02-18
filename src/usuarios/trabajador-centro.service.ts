@@ -48,7 +48,7 @@ export class TrabajadorCentroService {
 
   async findAll() {
     const trabajadores = await this.trabajadorCentroRepository.find({
-      relations: ['rol', 'especialidad', 'cargo', 'sexo', 'estado_civil', 'parentesco_emergencia', 'distrito_rel', 'distrito_rel.provincia', 'nivel_educacion']
+      relations: ['rol', 'especialidad', 'cargo', 'sexo', 'estado_civil', 'parentesco_emergencia', 'distrito_rel', 'distrito_rel.provincia', 'nivel_educacion', 'jefe']
     });
 
     return trabajadores.map(trabajador => {
@@ -378,7 +378,7 @@ async update(id: number, dto: UpdateTrabajadorCentroDto): Promise<TrabajadorCent
 
     const trabajadorActualizado = await this.trabajadorCentroRepository.findOne({
       where: { id },
-      relations: ['rol', 'especialidad', 'cargo', 'sexo', 'estado_civil', 'parentesco_emergencia', 'distrito_rel', 'distrito_rel.provincia', 'nivel_educacion']
+      relations: ['rol', 'especialidad', 'cargo', 'sexo', 'estado_civil', 'parentesco_emergencia', 'distrito_rel', 'distrito_rel.provincia', 'nivel_educacion', 'jefe']
     });
 
     const { password, ...trabajadorSinPassword } = trabajadorActualizado;
@@ -576,5 +576,17 @@ async findTerapeutas(): Promise<any[]> {
 
   // Filtrar solo terapeutas (rol_id = 4)
   return terapeutas.filter(t => t.rol?.id === 4);
+}
+
+async findSubordinados(jefeId: number): Promise<{ id: number; nombres: string; apellidos: string }[]> {
+  return this.trabajadorCentroRepository.find({
+    where: {
+      jefe: { id: jefeId },
+      estado: true,
+    },
+    relations: ['jefe'],
+    select: ['id', 'nombres', 'apellidos'],
+    order: { apellidos: 'ASC', nombres: 'ASC' },
+  });
 }
 }

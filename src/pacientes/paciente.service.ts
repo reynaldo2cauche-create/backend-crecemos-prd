@@ -1,6 +1,6 @@
 import { Injectable, UnauthorizedException, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { Paciente } from './paciente.entity';
 import { CreatePacienteDto } from './dto/create-paciente.dto';
 import { UpdatePacienteDto } from './dto/update-paciente.dto';
@@ -226,6 +226,7 @@ tieneAccesoBeneficios(estadoPacienteId: number): boolean {
 
 async findAll(filters?: {
   terapeutaId?: number;
+  terapeutaIds?: number[];
   numeroDocumento?: string;
   nombre?: string;
   distritoId?: number;
@@ -251,10 +252,16 @@ async findAll(filters?: {
     )
     .leftJoinAndSelect('pacienteServicioGeneral.servicio', 'servicio');
 
-  // ⭐ FILTRO POR TERAPEUTA MEJORADO
-  if (filters?.terapeutaId) {
+  // ⭐ FILTRO POR TERAPEUTA — soporta un solo ID o array (para jefes con subordinados)
+  const idsParaFiltrar: number[] = filters?.terapeutaIds?.length
+    ? filters.terapeutaIds
+    : filters?.terapeutaId
+    ? [filters.terapeutaId]
+    : [];
+
+  if (idsParaFiltrar.length > 0) {
     queryBuilder
-      .innerJoin('paciente.pacienteServicios', 'ps_terapeuta', 
+      .innerJoin('paciente.pacienteServicios', 'ps_terapeuta',
         'ps_terapeuta.activo = :psActivo AND ps_terapeuta.estado = :psEstado',
         { psActivo: true, psEstado: 'ACTIVO' }
       )
@@ -263,8 +270,8 @@ async findAll(filters?: {
         { asigActivo: true, asigEstado: 'ACTIVO' }
       )
       .innerJoin('asignacion.terapeuta', 'terapeuta',
-        'terapeuta.id = :terapeutaId',
-        { terapeutaId: filters.terapeutaId }
+        'terapeuta.id IN (:...terapeutaIds)',
+        { terapeutaIds: idsParaFiltrar }
       );
   }
 

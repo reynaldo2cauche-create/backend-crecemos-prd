@@ -279,6 +279,12 @@ export class TrabajadorCentroController {
     return this.service.eliminarArchivo(+id, 'dni');
   }
 
+  @Get(':id/subordinados')
+@UseGuards(JwtAuthGuard)
+findSubordinados(@Param('id') id: string) {
+  return this.service.findSubordinados(+id);
+}
+
   // ============== ENDPOINTS CRUD BÁSICO ==============
   @Get(':id')
   findOne(@Param('id') id: string) {

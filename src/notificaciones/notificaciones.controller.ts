@@ -88,42 +88,44 @@ export class NotificacionesController {
     @Request() req,
     @Query('limite') limite?: number,
     @Query('offset') offset?: number,
+    @Query('fecha') fecha?: string,       // YYYY-MM-DD — filtra por día exacto en Lima
+    @Query('tipo') tipo?: string,         // ej: CUMPLEANOS_PACIENTE
   ) {
     const rolId = req.user?.rol?.id;
     const usuarioId = req.user?.id;
-
-  
 
     if (!rolId || !usuarioId) {
       return { message: 'Usuario sin rol asignado', notificaciones: [] };
     }
 
-    const limiteNum = limite ? parseInt(limite.toString()) : 20;
+    const limiteNum = limite ? parseInt(limite.toString()) : 15;
     const offsetNum = offset ? parseInt(offset.toString()) : 0;
 
     try {
-      const notificaciones = await this.notificacionesService.obtenerNotificacionesRecientes(
-        rolId,
-        usuarioId,
-        limiteNum,
-        offsetNum,
-      );
-
-      // 🔴 Obtener el TOTAL REAL de no leídas (para el contador)
-      const totalNoLeidas = await this.notificacionesService.contarNotificacionesPorRol(rolId, usuarioId);
-
-  
+      // Estos dos se ejecutan en paralelo para no sumar latencia
+      const [notificaciones, totalNoLeidas] = await Promise.all([
+        this.notificacionesService.obtenerNotificacionesRecientes(
+          rolId,
+          usuarioId,
+          limiteNum,
+          offsetNum,
+          fecha || null,
+          tipo  || null,
+        ),
+        // ✅ El contador SIEMPRE es el total real — sin filtros de fecha ni tipo
+        //    No importa qué esté viendo el usuario en pantalla
+        this.notificacionesService.contarNotificacionesPorRol(rolId, usuarioId),
+      ]);
 
       return {
         total: notificaciones.length,
-        total_no_leidas: totalNoLeidas, // 🔴 AQUÍ ESTÁ EL TOTAL REAL
+        total_no_leidas: totalNoLeidas, // total real, no el de la página actual
         rol_id: rolId,
         usuario_id: usuarioId,
         tiempo_actual: new Date(),
         limite: limiteNum,
         offset: offsetNum,
         tiene_mas: notificaciones.length === limiteNum,
-        
         notificaciones,
       };
     } catch (error) {

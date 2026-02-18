@@ -58,6 +58,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       apellidos: payload.apellidos,       // ✅ Para auditoría
       rol: payload.rol,                   // Objeto completo con { id, nombre, ... }
       institucion_id: payload.institucion_id,
+      cargo: payload.cargo || null,       // ✅ Para control de jefa terapeuta
     };
 
     console.log('👤 User que se retorna:', JSON.stringify(userResponse, null, 2));

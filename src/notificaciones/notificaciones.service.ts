@@ -122,12 +122,23 @@ export class NotificacionesService {
 async obtenerNotificacionesRecientes(
   rolId: number,
   usuarioId: number,
-  limite: number = 20,
-  offset: number = 0
+  limite: number = 15,
+  offset: number = 0,
+  fecha: string | null = null,  // YYYY-MM-DD en timezone Lima
+  tipo: string | null = null,   // tipo_notificacion exacto
 ): Promise<any[]> {
   try {
+    // Condiciones opcionales de filtro
+    const condFecha = fecha
+      ? `AND DATE(CONVERT_TZ(n.fecha_creacion, '+00:00', '-05:00')) = '${fecha}'`
+      : `AND n.fecha_creacion >= DATE_SUB(NOW(), INTERVAL 30 DAY)`;
+
+    const condTipo = tipo
+      ? `AND n.tipo_notificacion = '${tipo}'`
+      : '';
+
     const query = `
-      SELECT 
+      SELECT
         n.id,
         n.tipo_notificacion,
         n.titulo,
@@ -137,7 +148,7 @@ async obtenerNotificacionesRecientes(
         e.datos_adicionales,
         TIMESTAMPDIFF(MINUTE, n.fecha_creacion, NOW()) as minutos_transcurridos,
         nl.id as notif_leida_id,
-        CASE 
+        CASE
           WHEN nl.id IS NOT NULL THEN TRUE
           ELSE FALSE
         END as leida
@@ -146,7 +157,8 @@ async obtenerNotificacionesRecientes(
       INNER JOIN eventos_sistema e ON e.id = n.evento_id
       LEFT JOIN notificaciones_leidas nl ON nl.notificacion_id = n.id AND nl.usuario_id = ?
       WHERE nd.rol_id = ?
-        AND n.fecha_creacion >= DATE_SUB(NOW(), INTERVAL 30 DAY)
+        ${condFecha}
+        ${condTipo}
       ORDER BY n.fecha_creacion DESC
       LIMIT ? OFFSET ?
     `;
@@ -155,7 +167,7 @@ async obtenerNotificacionesRecientes(
       usuarioId,
       rolId,
       limite,
-      offset
+      offset,
     ]);
 
     // ============================================================
@@ -739,15 +751,15 @@ async notificarInconsistenciaAsistencia(
       let params: any[];
 
       if (tipoEvento === 'CUMPLEANOS_PACIENTE') {
+        // Usamos DATE(e.fecha_evento) = CURDATE() — ambos en el mismo timezone de sesión MySQL.
+        // Esto evita CONVERT_TZ que puede retornar NULL según la configuración del servidor.
         query = `
           SELECT COUNT(DISTINCT e.id) as total
           FROM eventos_sistema e
           INNER JOIN notificaciones n ON n.evento_id = e.id
           WHERE e.tipo_evento = ?
             AND JSON_EXTRACT(e.datos_adicionales, '$.paciente_id') = ?
-            AND YEAR(e.fecha_evento) = YEAR(CURDATE())
-            AND e.fecha_evento >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
-            AND e.fecha_evento <= DATE_ADD(CURDATE(), INTERVAL 7 DAY)
+            AND DATE(e.fecha_evento) = CURDATE()
         `;
         params = [tipoEvento, entidadId];
       } else if (tipoEvento === 'CUMPLEANOS_EMPLEADO') {
@@ -757,9 +769,7 @@ async notificarInconsistenciaAsistencia(
           INNER JOIN notificaciones n ON n.evento_id = e.id
           WHERE e.tipo_evento = ?
             AND JSON_EXTRACT(e.datos_adicionales, '$.empleado_id') = ?
-            AND YEAR(e.fecha_evento) = YEAR(CURDATE())
-            AND e.fecha_evento >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
-            AND e.fecha_evento <= DATE_ADD(CURDATE(), INTERVAL 7 DAY)
+            AND DATE(e.fecha_evento) = CURDATE()
         `;
         params = [tipoEvento, entidadId];
       } else if (tipoEvento === 'ANIVERSARIO_LABORAL') {
@@ -769,9 +779,7 @@ async notificarInconsistenciaAsistencia(
           INNER JOIN notificaciones n ON n.evento_id = e.id
           WHERE e.tipo_evento = ?
             AND JSON_EXTRACT(e.datos_adicionales, '$.empleado_id') = ?
-            AND YEAR(e.fecha_evento) = YEAR(CURDATE())
-            AND e.fecha_evento >= DATE_SUB(CURDATE(), INTERVAL 14 DAY)
-            AND e.fecha_evento <= DATE_ADD(CURDATE(), INTERVAL 14 DAY)
+            AND DATE(e.fecha_evento) = CURDATE()
         `;
         params = [tipoEvento, entidadId];
       } else {
@@ -784,7 +792,8 @@ async notificarInconsistenciaAsistencia(
       return existe;
     } catch (error) {
       this.logger.error(`Error al verificar evento existente: ${error.message}`);
-      return false;
+      // Retornamos true (seguro) para evitar crear duplicados si falla la consulta
+      return true;
     }
   }
 
