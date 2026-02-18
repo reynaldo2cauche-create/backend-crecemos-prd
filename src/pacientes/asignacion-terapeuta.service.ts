@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { AsignacionTerapeuta } from './asignacion-terapeuta.entity';
 import { CreateAsignacionTerapeutaDto } from './dto/create-asignacion-terapeuta.dto';
 import { PacienteServicio } from './paciente-servicio.entity';
@@ -152,4 +152,63 @@ export class AsignacionTerapeutaService {
     asignacionTerapeuta.activo = false;
     await this.asignacionTerapeutaRepository.save(asignacionTerapeuta);
   }
-} 
+
+  /**
+   * Retorna los IDs de todos los subordinados directos de un jefe.
+   * Si el trabajador no es jefe o no tiene subordinados, retorna [].
+   */
+  async getSubordinadosIds(jefeId: number): Promise<number[]> {
+    const jefe = await this.trabajadorCentroRepository.findOne({
+      where: { id: jefeId },
+      relations: ['cargo', 'subordinados'],
+    });
+
+    if (!jefe?.cargo?.es_jefe || !jefe.subordinados?.length) {
+      return [];
+    }
+
+    return jefe.subordinados.map((s) => s.id);
+  }
+
+  /**
+   * Retorna la lista completa de subordinados de un jefe (id, nombres, apellidos).
+   * Independientemente de si tienen asignaciones activas o no.
+   */
+  async getSubordinados(jefeId: number): Promise<{ id: number; nombres: string; apellidos: string }[]> {
+    const jefe = await this.trabajadorCentroRepository.findOne({
+      where: { id: jefeId },
+      relations: ['cargo', 'subordinados'],
+    });
+
+    if (!jefe?.cargo?.es_jefe || !jefe.subordinados?.length) {
+      return [];
+    }
+
+    return jefe.subordinados.map((s) => ({
+      id: s.id,
+      nombres: s.nombres,
+      apellidos: s.apellidos,
+    }));
+  }
+
+  /**
+   * Obtiene asignaciones activas de múltiples terapeutas a la vez.
+   * Usado por el jefe para ver su propia bandeja + la de sus subordinadas.
+   */
+  async findByTerapeutaIds(terapeutaIds: number[]): Promise<AsignacionTerapeuta[]> {
+    if (!terapeutaIds.length) return [];
+    return this.asignacionTerapeutaRepository.find({
+      relations: [
+        'pacienteServicio',
+        'pacienteServicio.paciente',
+        'pacienteServicio.servicio',
+        'terapeuta',
+      ],
+      where: {
+        terapeuta: { id: In(terapeutaIds) },
+        estado: 'ACTIVO',
+        activo: true,
+      },
+    });
+  }
+}

@@ -232,6 +232,7 @@ export class ArchivosDigitalesController {
     // Obtener información del usuario autenticado
     const trabajadorId = req?.user?.id;
     const rolTrabajador = req?.user?.rol?.nombre || req?.user?.rol; // Obtener el nombre del rol
+    const esJefe = req?.user?.cargo?.es_jefe === true; // Jefa terapeuta ve todos los archivos
 
     // Si se proporcionan ambos parámetros, buscar por terapeuta Y paciente
     if (pacienteId && terapeutaId && !isNaN(parseInt(pacienteId)) && !isNaN(parseInt(terapeutaId))) {
@@ -242,7 +243,8 @@ export class ArchivosDigitalesController {
       archivos = await this.archivosDigitalesService.findByPaciente(
         parseInt(pacienteId),
         trabajadorId,
-        rolTrabajador
+        rolTrabajador,
+        esJefe
       );
     }
     // Si solo se proporciona terapeutaId

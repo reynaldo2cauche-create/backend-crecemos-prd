@@ -80,7 +80,8 @@ export class ArchivosDigitalesService {
   async findByPaciente(
     pacienteId: number,
     trabajadorId?: number,
-    rolTrabajador?: string
+    rolTrabajador?: string,
+    esJefe?: boolean
   ): Promise<ArchivoDigital[]> {
     const query = this.archivoDigitalRepository
       .createQueryBuilder('archivo')
@@ -91,8 +92,9 @@ export class ArchivosDigitalesService {
       .where('archivo.paciente_id = :pacienteId', { pacienteId })
       .andWhere('archivo.activo = :activo', { activo: true });
 
-    // Si es TERAPEUTA: solo ve archivos que subió él mismo O archivos que subió admisión/admin
-    if (rolTrabajador && rolTrabajador.toLowerCase() === 'terapeuta' && trabajadorId) {
+    // Si es TERAPEUTA Y NO es jefa: solo ve archivos que subió él mismo O archivos que subió admisión/admin
+    // La jefa terapeuta (esJefe=true) ve TODOS los archivos del paciente
+    if (rolTrabajador && rolTrabajador.toLowerCase() === 'terapeuta' && trabajadorId && !esJefe) {
       query.andWhere(
         new Brackets((qb) => {
           qb.where('archivo.terapeuta_id = :trabajadorId', { trabajadorId })
@@ -102,7 +104,7 @@ export class ArchivosDigitalesService {
         }),
       );
     }
-    // Si es ADMIN o ADMISIÓN: ven TODO
+    // Si es ADMIN, ADMISIÓN o jefa terapeuta: ven TODO
 
     return await query.orderBy('archivo.fecha_creacion', 'DESC').getMany();
   }

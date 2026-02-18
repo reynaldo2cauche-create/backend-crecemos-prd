@@ -54,7 +54,69 @@ export class CitasService {
     return motivo.tipoCita.codigo;
   }
 
+  /**
+   * Verifica que el paciente no tenga una cita que se solape en el mismo horario.
+   * Lanza BadRequestException si existe conflicto.
+   */
+  private async verificarConflictoPaciente(
+    paciente_id: number,
+    fecha: string,
+    hora_inicio: string,
+    hora_fin: string,
+    excludeCitaId?: number,
+  ): Promise<void> {
+    // Convierte "HH:mm" o "HH:mm:ss" a minutos totales
+    const toMinutes = (time: string): number => {
+      if (!time) return 0;
+      const partes = time.split(':').map(Number);
+      return partes[0] * 60 + (partes[1] || 0);
+    };
+
+    const nuevaInicio = toMinutes(hora_inicio);
+    const nuevaFin = hora_fin ? toMinutes(hora_fin) : nuevaInicio + 40;
+
+    const query = this.citaRepo
+      .createQueryBuilder('cita')
+      .where('cita.paciente_id = :paciente_id', { paciente_id })
+      .andWhere('cita.fecha = :fecha', { fecha })
+      .andWhere('cita.flg_activo = 1');
+
+    if (excludeCitaId) {
+      query.andWhere('cita.id != :excludeId', { excludeId: excludeCitaId });
+    }
+
+    const citasExistentes = await query.getMany();
+
+    for (const cita of citasExistentes) {
+      const existInicio = toMinutes(cita.hora_inicio);
+      const existFin = cita.hora_fin
+        ? toMinutes(cita.hora_fin)
+        : existInicio + (cita.duracion_minutos || 40);
+
+      const hayConflicto =
+        (nuevaInicio >= existInicio && nuevaInicio < existFin) ||
+        (nuevaFin > existInicio && nuevaFin <= existFin) ||
+        (nuevaInicio <= existInicio && nuevaFin >= existFin);
+
+      if (hayConflicto) {
+        const ini = cita.hora_inicio.substring(0, 5);
+        const fin = cita.hora_fin?.substring(0, 5) ?? `${Math.floor(existFin / 60).toString().padStart(2, '0')}:${(existFin % 60).toString().padStart(2, '0')}`;
+        throw new BadRequestException(
+          `El paciente ya tiene una cita agendada en ese horario (${ini} - ${fin}). No se pueden superponer citas.`,
+        );
+      }
+    }
+  }
+
   async crear(dto: CrearCitaDto): Promise<any> {
+    // Validar que el paciente no tenga otra cita solapada ese día
+    await this.verificarConflictoPaciente(
+      dto.paciente_id,
+      dto.fecha,
+      dto.hora_inicio,
+      dto.hora_fin,
+    );
+
     const tipoCita = await this.determinarTipoCita(dto.motivo_id);
     console.log(`🔍 Creando cita tipo: ${tipoCita}`);
 
@@ -504,6 +566,15 @@ async listar(filtros: any = {}): Promise<any[]> {
   if (!dto.motivo_accion || dto.motivo_accion.trim() === '') {
     throw new BadRequestException('El motivo de la modificación es obligatorio');
   }
+
+  // Validar que el paciente no tenga otra cita solapada (excluyendo la cita actual)
+  await this.verificarConflictoPaciente(
+    dto.paciente_id,
+    dto.fecha,
+    dto.hora_inicio,
+    dto.hora_fin,
+    id,
+  );
 
   const tipoCita = await this.determinarTipoCita(dto.motivo_id);
   console.log(`🔍 Actualizando cita ID ${id}, tipo: ${tipoCita}`);

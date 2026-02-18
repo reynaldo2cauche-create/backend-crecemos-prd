@@ -1,5 +1,6 @@
 import { Controller, Post, Body, Get, Patch, Param, Query, UseGuards } from '@nestjs/common';
 import { PacienteService } from './paciente.service';
+import { AsignacionTerapeutaService } from './asignacion-terapeuta.service';
 import { CreatePacienteDto } from './dto/create-paciente.dto';
 import { UpdatePacienteDto } from './dto/update-paciente.dto';
 import { CreatePacienteCompletoDto } from './dto/create-paciente-completo.dto';
@@ -12,9 +13,12 @@ import { GeofencingGuard } from 'src/geofencing/geofencing.guard';
 import { RequiereUbicacion } from 'src/geofencing/requiere-ubicacion.decorator';
 
 @Controller('backend_api/pacientes')
-@UseGuards(JwtAuthGuard, GeofencingGuard) 
+@UseGuards(JwtAuthGuard, GeofencingGuard)
 export class PacienteController {
-  constructor(private readonly pacienteService: PacienteService) {}
+  constructor(
+    private readonly pacienteService: PacienteService,
+    private readonly asignacionTerapeutaService: AsignacionTerapeutaService,
+  ) {}
 
 
   @Public()
@@ -43,16 +47,32 @@ export class PacienteController {
 
   @Get()
   @RequiereUbicacion()
-  findAll(
+  async findAll(
     @Query('terapeutaId') terapeutaId?: string,
+    @Query('soloPropio') soloPropio?: string,
     @Query('numeroDocumento') numeroDocumento?: string,
     @Query('nombreCompleto') nombreCompleto?: string,
     @Query('distritoId') distritoId?: string,
     @Query('estadoId') estadoId?: string,
     @Query('servicioId') servicioId?: string,
   ) {
+    const parsedTerapeutaId = terapeutaId && !isNaN(Number(terapeutaId))
+      ? parseInt(terapeutaId, 10)
+      : undefined;
+
+    // Si viene terapeutaId y NO es soloPropio, verificar si es jefe y expandir a subordinados
+    let terapeutaIds: number[] | undefined;
+    if (parsedTerapeutaId && soloPropio !== 'true') {
+      const subordinadosIds = await this.asignacionTerapeutaService.getSubordinadosIds(parsedTerapeutaId);
+      if (subordinadosIds.length > 0) {
+        // Es jefe vista completa: incluir al propio jefe + todos sus subordinados
+        terapeutaIds = [parsedTerapeutaId, ...subordinadosIds];
+      }
+    }
+
     const parsedFilters = {
-      terapeutaId: terapeutaId && !isNaN(Number(terapeutaId)) ? parseInt(terapeutaId, 10) : undefined,
+      terapeutaId: terapeutaIds ? undefined : parsedTerapeutaId,
+      terapeutaIds: terapeutaIds,
       numeroDocumento: numeroDocumento,
       nombre: nombreCompleto,
       distritoId: distritoId && !isNaN(Number(distritoId)) ? parseInt(distritoId, 10) : undefined,

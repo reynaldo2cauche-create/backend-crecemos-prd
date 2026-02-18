@@ -27,7 +27,7 @@ export class AuthService {
   async validateUser(username: string, password: string): Promise<any> {
     const user = await this.trabajadorRepository.findOne({
       where: { username },
-      relations: ['institucion', 'rol'],
+      relations: ['institucion', 'rol', 'cargo'],
     });
 
     console.log('Usuario encontrado:', user);
@@ -68,6 +68,11 @@ export class AuthService {
       rol: user.rol,
       institucion_id: user.institucion?.id,
       session_version: nuevaVersion, // 🔒 Incluir versión de sesión en el JWT
+      cargo: user.cargo ? {
+        id: user.cargo.id,
+        nombre: user.cargo.nombre,
+        es_jefe: user.cargo.es_jefe,
+      } : null,
     };
 
     // Actualizar último acceso y session_version
@@ -135,6 +140,11 @@ export class AuthService {
         email: user.email,
         especialidad: user.especialidad,
         institucion: user.institucion,
+        cargo: user.cargo ? {
+          id: user.cargo.id,
+          nombre: user.cargo.nombre,
+          es_jefe: user.cargo.es_jefe,
+        } : null,
       },
     };
   }
