@@ -8,7 +8,7 @@ import {
   ManyToOne,
   JoinColumn
 } from 'typeorm';
-import { ReglaSorteo } from './regla-sorteo.entity';
+
 import { SorteoGanador } from './sorteo-ganador.entity';
 import { EstadoSorteo } from './estado-sorteo.entity';
 import { TrabajadorCentro } from 'src/usuarios/trabajador-centro.entity';
@@ -43,8 +43,7 @@ export class Sorteo {
   @JoinColumn({ name: 'estado_sorteo_id' })
   estadoSorteo: EstadoSorteo;
 
-  @OneToMany(() => ReglaSorteo, regla => regla.sorteo)
-  reglas: ReglaSorteo[];
+
 
   @OneToMany(() => SorteoGanador, ganador => ganador.sorteo)
   ganadores: SorteoGanador[];

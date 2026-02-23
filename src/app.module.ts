@@ -116,13 +116,35 @@ import { ProcesoLegalInfantil } from './procesos-legales-infantiles/entities/pro
 import { ProcesosLegalesInfantilesModule } from './procesos-legales-infantiles/procesos-legales-infantiles.module';
 import { SorteoModule } from './sorteos/sorteo.module';
 import { Sorteo } from './sorteos/entities/sorteo.entity';
-import { ReglaSorteo } from './sorteos/entities/regla-sorteo.entity';
 import { SorteoGanador } from './sorteos/entities/sorteo-ganador.entity';
 import { EstadoSorteo } from './sorteos/entities/estado-sorteo.entity';
 import { SorteoParticipante } from './sorteos/entities/sorteo-participante.entity';
-import { Compra } from './sorteos/entities/compra.entity';
+
 import { TipoCompra } from './sorteos/entities/tipo-compra.entity';
-import { Paquete } from './sorteos/entities/paquete.entity';
+import { Paquete } from './catalogos/paquete.entity';
+
+// ── Inventario ────────────────────────────────────────────────────────────────
+import { InventarioModule } from './inventario/inventario.module';
+import { CategoriaProducto } from './inventario/entities/categoria-producto.entity';
+import { Proveedor } from './inventario/entities/proveedor.entity';
+import { TipoProducto } from './inventario/entities/tipo-producto.entity';
+import { Producto } from './inventario/entities/producto.entity';
+
+import { CompraReposicion } from './inventario/entities/compra-reposicion.entity';
+import { CompraReposicionDetalle } from './inventario/entities/compra-reposicion-detalle.entity';
+
+// ── Ventas ────────────────────────────────────────────────────────────────────
+import { VentasModule } from './ventas/ventas.module';
+import { TipoVentaServicio } from './ventas/entities/tipo-venta-servicio.entity';
+import { TipoPagador } from './ventas/entities/tipo-pagador.entity';
+import { TipoDescuento } from './ventas/entities/tipo-descuento.entity';
+import { CompradorExterno } from './ventas/entities/comprador-externo.entity';
+import { VentaServicio } from './ventas/entities/venta-servicio.entity';
+import { VentaServicioDetalle } from './ventas/entities/venta-servicio-detalle.entity';
+import { VentaProducto } from './ventas/entities/venta-producto.entity';
+import { VentaProductoDetalle } from './ventas/entities/venta-producto-detalle.entity';
+import { ServicioTarifa } from './inventario/entities/servicio-tarifa.entity';
+import { TipoComprobante } from './ventas/entities/tipo-comprobante.entity';
 
 
 @Module({
@@ -266,13 +288,32 @@ import { Paquete } from './sorteos/entities/paquete.entity';
         NivelEducacion,
         ProcesoLegalInfantil,
         Sorteo,
-        ReglaSorteo,
+      
         SorteoGanador,
         EstadoSorteo,
         SorteoParticipante,
-        Compra,
-        TipoCompra,
-        Paquete
+
+
+        Paquete,
+        // Inventario
+        CategoriaProducto,
+        Proveedor,
+        Producto,
+        TipoProducto,
+        CompraReposicion,
+        CompraReposicionDetalle,
+        ServicioTarifa,
+        // Ventas
+        TipoVentaServicio,
+        TipoPagador,
+        TipoDescuento,
+        CompradorExterno,
+        VentaServicio,
+        VentaServicioDetalle,
+        VentaProducto,
+        VentaProductoDetalle,
+        TipoComprobante
+
       ],
         synchronize: false,   // true en desarrollo, false en producción - DESHABILITADO para evitar conflictos con foreign keys
           // Activar logs de SQL para debug
@@ -308,7 +349,9 @@ import { Paquete } from './sorteos/entities/paquete.entity';
     ConveniosModule,
     StaffModule,
     ProcesosLegalesInfantilesModule,
-    SorteoModule
+    SorteoModule,
+    InventarioModule,
+    VentasModule,
   ],
   controllers: [AppController],
   providers: [

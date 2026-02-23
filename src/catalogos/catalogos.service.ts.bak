@@ -16,7 +16,6 @@ import { Ocupaciones } from './ocupaciones.entity';
 import { EstadoCivil } from './estado-civil.entity';
 import { Parentesco } from './parentesco.entity';
 import { NivelEducacion } from './nivel-educacion.entity';
-import { Paquete } from './paquete.entity';
 
 
 @Injectable()
@@ -52,8 +51,6 @@ export class CatalogosService {
     private parentescoRepository: Repository<Parentesco>,
     @InjectRepository(NivelEducacion)
     private nivelEducacionRepository: Repository<NivelEducacion>,
-    @InjectRepository(Paquete)
-    private paqueteRepository: Repository<Paquete>,
   ) {}
 
   getTipoDocumento() {
@@ -155,11 +152,11 @@ export class CatalogosService {
       order: { nombre: 'ASC' }
     });
   }
-
+}
   getPaquetes() {
     return this.paqueteRepository.find({
       where: { flgActivo: true },
       order: { cantidadSesiones: 'ASC' }
     });
   }
-}
+

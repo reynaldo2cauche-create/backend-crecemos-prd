@@ -2,11 +2,11 @@ import { Injectable, NotFoundException, BadRequestException } from '@nestjs/comm
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Between, In, Not, IsNull, DataSource } from 'typeorm';
 import { Sorteo } from './entities/sorteo.entity';
-import { ReglaSorteo } from './entities/regla-sorteo.entity';
+
 import { SorteoGanador } from './entities/sorteo-ganador.entity';
 import { EstadoSorteo } from './entities/estado-sorteo.entity';
 import { SorteoParticipante } from './entities/sorteo-participante.entity';
-import { Compra } from './entities/compra.entity';
+
 import { Paciente } from '../pacientes/paciente.entity';
 import { TipoCompra } from './entities/tipo-compra.entity';
 import { Paquete } from './entities/paquete.entity';
@@ -31,16 +31,14 @@ export class SorteoService {
   constructor(
     @InjectRepository(Sorteo)
     private sorteoRepository: Repository<Sorteo>,
-    @InjectRepository(ReglaSorteo)
-    private reglaRepository: Repository<ReglaSorteo>,
+
     @InjectRepository(SorteoGanador)
     private ganadorRepository: Repository<SorteoGanador>,
     @InjectRepository(EstadoSorteo)
     private estadoSorteoRepository: Repository<EstadoSorteo>,
     @InjectRepository(SorteoParticipante)
     private participanteRepository: Repository<SorteoParticipante>,
-    @InjectRepository(Compra)
-    private compraRepository: Repository<Compra>,
+
     @InjectRepository(Paciente)
     private pacienteRepository: Repository<Paciente>,
     @InjectRepository(TipoCompra)
@@ -59,208 +57,208 @@ export class SorteoService {
    * 3. Individual: Se agrupa a 1 entrada por paciente por mes
    * 4. Paquetes: Según opciones_por_unidad en reglas_sorteo
    */
-  async obtenerPacientesElegibles(sorteoId: number): Promise<PacienteElegibleDto[]> {
-    const sorteo = await this.sorteoRepository.findOne({
-      where: { id: sorteoId },
-      relations: ['reglas', 'reglas.tipoCompra', 'reglas.paquete'],
-    });
+  // async obtenerPacientesElegibles(sorteoId: number): Promise<PacienteElegibleDto[]> {
+  //   const sorteo = await this.sorteoRepository.findOne({
+  //     where: { id: sorteoId },
+  //     relations: ['reglas', 'reglas.tipoCompra', 'reglas.paquete'],
+  //   });
 
-    if (!sorteo) {
-      throw new NotFoundException(`Sorteo con ID ${sorteoId} no encontrado`);
-    }
+  //   if (!sorteo) {
+  //     throw new NotFoundException(`Sorteo con ID ${sorteoId} no encontrado`);
+  //   }
 
-    if (!sorteo.reglas || sorteo.reglas.length === 0) {
-      throw new BadRequestException('El sorteo no tiene reglas configuradas');
-    }
+  //   if (!sorteo.reglas || sorteo.reglas.length === 0) {
+  //     throw new BadRequestException('El sorteo no tiene reglas configuradas');
+  //   }
 
-    const ganadoresPrevios = await this.ganadorRepository.find({
-      select: ['pacienteId'],
-    });
-    const idsExcluidos = ganadoresPrevios.map(g => g.pacienteId);
+  //   const ganadoresPrevios = await this.ganadorRepository.find({
+  //     select: ['pacienteId'],
+  //   });
+  //   const idsExcluidos = ganadoresPrevios.map(g => g.pacienteId);
 
-    const fechaInicio = new Date(sorteo.fechaInicio);
-    const fechaFin = new Date(sorteo.fechaFin);
+  //   const fechaInicio = new Date(sorteo.fechaInicio);
+  //   const fechaFin = new Date(sorteo.fechaFin);
 
-    const mesAnterior = new Date(fechaInicio);
-    mesAnterior.setMonth(mesAnterior.getMonth() - 1);
-    const ultimoDiaMesAnterior = new Date(mesAnterior.getFullYear(), mesAnterior.getMonth() + 1, 0);
+  //   const mesAnterior = new Date(fechaInicio);
+  //   mesAnterior.setMonth(mesAnterior.getMonth() - 1);
+  //   const ultimoDiaMesAnterior = new Date(mesAnterior.getFullYear(), mesAnterior.getMonth() + 1, 0);
 
-    console.log(`📅 Rango de elegibilidad: ${ultimoDiaMesAnterior.toISOString().split('T')[0]} - ${fechaFin.toISOString().split('T')[0]}`);
+  //   console.log(`📅 Rango de elegibilidad: ${ultimoDiaMesAnterior.toISOString().split('T')[0]} - ${fechaFin.toISOString().split('T')[0]}`);
 
-    const pacientesMap = new Map<number, PacienteElegibleDto>();
+  //   const pacientesMap = new Map<number, PacienteElegibleDto>();
 
-    for (const regla of sorteo.reglas) {
-      console.log(`🔍 Procesando regla: ${regla.tipoCompra.nombre} - ${regla.paquete?.nombre || 'Todos'}`);
+  //   for (const regla of sorteo.reglas) {
+  //     console.log(`🔍 Procesando regla: ${regla.tipoCompra.nombre} - ${regla.paquete?.nombre || 'Todos'}`);
 
-      const queryBuilder = this.compraRepository
-        .createQueryBuilder('compra')
-        .leftJoinAndSelect('compra.paciente', 'paciente')
-        .leftJoinAndSelect('compra.tipoCompra', 'tipoCompra')
-        .leftJoinAndSelect('compra.paquete', 'paquete')
-        .where('compra.tipoCompraId = :tipoCompraId', { tipoCompraId: regla.tipoCompraId })
-        .andWhere('compra.fechaCompra BETWEEN :inicio AND :fin', {
-          inicio: ultimoDiaMesAnterior.toISOString().split('T')[0],
-          fin: fechaFin.toISOString().split('T')[0],
-        })
-        .andWhere('paciente.estado_paciente_id != :estadoInactivo', { estadoInactivo: 5 })
-        .andWhere('paciente.mostrar_en_listado = :visible', { visible: true });
+  //     const queryBuilder = this.compraRepository
+  //       .createQueryBuilder('compra')
+  //       .leftJoinAndSelect('compra.paciente', 'paciente')
+  //       .leftJoinAndSelect('compra.tipoCompra', 'tipoCompra')
+  //       .leftJoinAndSelect('compra.paquete', 'paquete')
+  //       .where('compra.tipoCompraId = :tipoCompraId', { tipoCompraId: regla.tipoCompraId })
+  //       .andWhere('compra.fechaCompra BETWEEN :inicio AND :fin', {
+  //         inicio: ultimoDiaMesAnterior.toISOString().split('T')[0],
+  //         fin: fechaFin.toISOString().split('T')[0],
+  //       })
+  //       .andWhere('paciente.estado_paciente_id != :estadoInactivo', { estadoInactivo: 5 })
+  //       .andWhere('paciente.mostrar_en_listado = :visible', { visible: true });
 
-      if (regla.paqueteId) {
-        queryBuilder.andWhere('compra.paqueteId = :paqueteId', { paqueteId: regla.paqueteId });
-      }
+  //     if (regla.paqueteId) {
+  //       queryBuilder.andWhere('compra.paqueteId = :paqueteId', { paqueteId: regla.paqueteId });
+  //     }
 
-      if (idsExcluidos.length > 0) {
-        queryBuilder.andWhere('paciente.id NOT IN (:...idsExcluidos)', { idsExcluidos });
-      }
+  //     if (idsExcluidos.length > 0) {
+  //       queryBuilder.andWhere('paciente.id NOT IN (:...idsExcluidos)', { idsExcluidos });
+  //     }
 
-      const comprasElegibles = await queryBuilder.getMany();
+  //     const comprasElegibles = await queryBuilder.getMany();
 
-      console.log(`✅ Compras elegibles encontradas: ${comprasElegibles.length}`);
+  //     console.log(`✅ Compras elegibles encontradas: ${comprasElegibles.length}`);
 
-      for (const compra of comprasElegibles) {
-        const paciente = compra.paciente;
-        const key = paciente.id;
+  //     for (const compra of comprasElegibles) {
+  //       const paciente = compra.paciente;
+  //       const key = paciente.id;
 
-        if (!pacientesMap.has(key)) {
-          pacientesMap.set(key, {
-            id: paciente.id,
-            nombres: paciente.nombres,
-            apellido_paterno: paciente.apellido_paterno,
-            apellido_materno: paciente.apellido_materno,
-            numero_documento: paciente.numero_documento,
-            celular: paciente.celular,
-            correo: paciente.correo,
-            opciones: 0,
-          });
-        }
+  //       if (!pacientesMap.has(key)) {
+  //         pacientesMap.set(key, {
+  //           id: paciente.id,
+  //           nombres: paciente.nombres,
+  //           apellido_paterno: paciente.apellido_paterno,
+  //           apellido_materno: paciente.apellido_materno,
+  //           numero_documento: paciente.numero_documento,
+  //           celular: paciente.celular,
+  //           correo: paciente.correo,
+  //           opciones: 0,
+  //         });
+  //       }
 
-        const pacienteElegible = pacientesMap.get(key);
+  //       const pacienteElegible = pacientesMap.get(key);
 
-        if (regla.tipoCompra.nombre === 'INDIVIDUAL') {
-          if (pacienteElegible.opciones === 0) {
-            pacienteElegible.opciones = regla.opcionesPorUnidad;
-          }
-        } else {
-          pacienteElegible.opciones += regla.opcionesPorUnidad * compra.cantidad;
-        }
-      }
-    }
+  //       if (regla.tipoCompra.nombre === 'INDIVIDUAL') {
+  //         if (pacienteElegible.opciones === 0) {
+  //           pacienteElegible.opciones = regla.opcionesPorUnidad;
+  //         }
+  //       } else {
+  //         pacienteElegible.opciones += regla.opcionesPorUnidad * compra.cantidad;
+  //       }
+  //     }
+  //   }
 
-    const pacientesElegibles = Array.from(pacientesMap.values());
+  //   const pacientesElegibles = Array.from(pacientesMap.values());
 
-    console.log(`🎯 Total pacientes elegibles: ${pacientesElegibles.length}`);
-    console.log(`📊 Total opciones en sorteo: ${pacientesElegibles.reduce((sum, p) => sum + p.opciones, 0)}`);
+  //   console.log(`🎯 Total pacientes elegibles: ${pacientesElegibles.length}`);
+  //   console.log(`📊 Total opciones en sorteo: ${pacientesElegibles.reduce((sum, p) => sum + p.opciones, 0)}`);
 
-    return pacientesElegibles;
-  }
+  //   return pacientesElegibles;
+  // }
 
   /**
    * Calcula pacientes elegibles a partir de reglas y fechas, SIN guardar nada en BD.
    * @param dto Objeto con fecha_inicio, fecha_fin y reglas
    * @returns Array de pacientes elegibles con sus opciones
    */
-  async calcularPacientesElegibles(dto: {
-    fecha_inicio: string;
-    fecha_fin: string;
-    reglas: Array<{
-      tipo_compra_id: number;
-      paquete_id?: number;
-      opciones_por_unidad: number;
-    }>;
-  }): Promise<PacienteElegibleDto[]> {
-    const { fecha_inicio, fecha_fin, reglas } = dto;
+  // async calcularPacientesElegibles(dto: {
+  //   fecha_inicio: string;
+  //   fecha_fin: string;
+  //   reglas: Array<{
+  //     tipo_compra_id: number;
+  //     paquete_id?: number;
+  //     opciones_por_unidad: number;
+  //   }>;
+  // }): Promise<PacienteElegibleDto[]> {
+  //   const { fecha_inicio, fecha_fin, reglas } = dto;
 
-    if (!reglas || reglas.length === 0) {
-      throw new BadRequestException('Debe enviar al menos una regla');
-    }
+  //   if (!reglas || reglas.length === 0) {
+  //     throw new BadRequestException('Debe enviar al menos una regla');
+  //   }
 
-    const fechaInicio = new Date(fecha_inicio);
-    const fechaFin = new Date(fecha_fin);
+  //   const fechaInicio = new Date(fecha_inicio);
+  //   const fechaFin = new Date(fecha_fin);
 
-    const inicioPeriodo = fechaInicio;
-    const finPeriodo = fechaFin;
+  //   const inicioPeriodo = fechaInicio;
+  //   const finPeriodo = fechaFin;
 
-    // Excluir pacientes que ya han ganado antes (para evitar que ganen otra vez)
-    const ganadoresPrevios = await this.ganadorRepository.find({ select: ['pacienteId'] });
-    const idsExcluidos = ganadoresPrevios.map(g => g.pacienteId);
+  //   // Excluir pacientes que ya han ganado antes (para evitar que ganen otra vez)
+  //   const ganadoresPrevios = await this.ganadorRepository.find({ select: ['pacienteId'] });
+  //   const idsExcluidos = ganadoresPrevios.map(g => g.pacienteId);
 
-    const pacientesMap = new Map<number, PacienteElegibleDto>();
+  //   const pacientesMap = new Map<number, PacienteElegibleDto>();
 
-    for (const regla of reglas) {
-      const tipoCompra = await this.tipoCompraRepository.findOne({
-        where: { id: regla.tipo_compra_id }
-      });
-      if (!tipoCompra) continue;
+  //   for (const regla of reglas) {
+  //     const tipoCompra = await this.tipoCompraRepository.findOne({
+  //       where: { id: regla.tipo_compra_id }
+  //     });
+  //     if (!tipoCompra) continue;
 
-      const queryBuilder = this.compraRepository
-        .createQueryBuilder('compra')
-        .leftJoinAndSelect('compra.paciente', 'paciente')
-        .leftJoinAndSelect('compra.tipoCompra', 'tipoCompra')
-        .leftJoinAndSelect('compra.paquete', 'paquete')
-        .where('compra.tipoCompraId = :tipoCompraId', { tipoCompraId: regla.tipo_compra_id })
-        .andWhere('compra.fechaCompra BETWEEN :inicio AND :fin', {
-          inicio: inicioPeriodo.toISOString().split('T')[0],
-          fin: finPeriodo.toISOString().split('T')[0],
-        })
-        .andWhere('paciente.estado_paciente_id != :estadoInactivo', { estadoInactivo: 5 })
-        .andWhere('paciente.mostrar_en_listado = :visible', { visible: true });
+  //     const queryBuilder = this.compraRepository
+  //       .createQueryBuilder('compra')
+  //       .leftJoinAndSelect('compra.paciente', 'paciente')
+  //       .leftJoinAndSelect('compra.tipoCompra', 'tipoCompra')
+  //       .leftJoinAndSelect('compra.paquete', 'paquete')
+  //       .where('compra.tipoCompraId = :tipoCompraId', { tipoCompraId: regla.tipo_compra_id })
+  //       .andWhere('compra.fechaCompra BETWEEN :inicio AND :fin', {
+  //         inicio: inicioPeriodo.toISOString().split('T')[0],
+  //         fin: finPeriodo.toISOString().split('T')[0],
+  //       })
+  //       .andWhere('paciente.estado_paciente_id != :estadoInactivo', { estadoInactivo: 5 })
+  //       .andWhere('paciente.mostrar_en_listado = :visible', { visible: true });
 
-      if (regla.paquete_id) {
-        queryBuilder.andWhere('compra.paqueteId = :paqueteId', { paqueteId: regla.paquete_id });
-      }
+  //     if (regla.paquete_id) {
+  //       queryBuilder.andWhere('compra.paqueteId = :paqueteId', { paqueteId: regla.paquete_id });
+  //     }
 
-      if (idsExcluidos.length > 0) {
-        queryBuilder.andWhere('paciente.id NOT IN (:...idsExcluidos)', { idsExcluidos });
-      }
+  //     if (idsExcluidos.length > 0) {
+  //       queryBuilder.andWhere('paciente.id NOT IN (:...idsExcluidos)', { idsExcluidos });
+  //     }
 
-      const comprasElegibles = await queryBuilder.getMany();
+  //     const comprasElegibles = await queryBuilder.getMany();
 
-      for (const compra of comprasElegibles) {
-        const paciente = compra.paciente;
-        const key = paciente.id;
+  //     for (const compra of comprasElegibles) {
+  //       const paciente = compra.paciente;
+  //       const key = paciente.id;
 
-        if (!pacientesMap.has(key)) {
-          pacientesMap.set(key, {
-            id: paciente.id,
-            nombres: paciente.nombres,
-            apellido_paterno: paciente.apellido_paterno,
-            apellido_materno: paciente.apellido_materno,
-            numero_documento: paciente.numero_documento,
-            celular: paciente.celular,
-            correo: paciente.correo,
-            opciones: 0,
-          });
-        }
+  //       if (!pacientesMap.has(key)) {
+  //         pacientesMap.set(key, {
+  //           id: paciente.id,
+  //           nombres: paciente.nombres,
+  //           apellido_paterno: paciente.apellido_paterno,
+  //           apellido_materno: paciente.apellido_materno,
+  //           numero_documento: paciente.numero_documento,
+  //           celular: paciente.celular,
+  //           correo: paciente.correo,
+  //           opciones: 0,
+  //         });
+  //       }
 
-        const pacienteElegible = pacientesMap.get(key);
+  //       const pacienteElegible = pacientesMap.get(key);
 
-        if (tipoCompra.nombre === 'INDIVIDUAL') {
-          // Para individual, solo se asigna opciones una vez por paciente (no se suman)
-          if (pacienteElegible.opciones === 0) {
-            pacienteElegible.opciones = regla.opciones_por_unidad;
-          }
-        } else {
-          // Para paquetes, se multiplica por la cantidad de paquetes comprados
-          pacienteElegible.opciones += regla.opciones_por_unidad * compra.cantidad;
-        }
+  //       if (tipoCompra.nombre === 'INDIVIDUAL') {
+  //         // Para individual, solo se asigna opciones una vez por paciente (no se suman)
+  //         if (pacienteElegible.opciones === 0) {
+  //           pacienteElegible.opciones = regla.opciones_por_unidad;
+  //         }
+  //       } else {
+  //         // Para paquetes, se multiplica por la cantidad de paquetes comprados
+  //         pacienteElegible.opciones += regla.opciones_por_unidad * compra.cantidad;
+  //       }
 
-        console.log('================================='); 
-        console.log('📅 Fecha inicio del sorteo:', fecha_inicio);
-        console.log('📅 Fecha fin del sorteo:', fecha_fin);
+  //       console.log('================================='); 
+  //       console.log('📅 Fecha inicio del sorteo:', fecha_inicio);
+  //       console.log('📅 Fecha fin del sorteo:', fecha_fin);
         
-        console.log('🔍 Reglas recibidas:', JSON.stringify(reglas, null, 2));
-        console.log('🚫 IDs excluidos (ganadores previos):', idsExcluidos);
-        console.log('=================================');
-      }
-    }
+  //       console.log('🔍 Reglas recibidas:', JSON.stringify(reglas, null, 2));
+  //       console.log('🚫 IDs excluidos (ganadores previos):', idsExcluidos);
+  //       console.log('=================================');
+  //     }
+  //   }
 
-    console.log('📊 Pacientes elegibles encontrados:');
-    pacientesMap.forEach((p, id) => {
-      console.log(`   - ID: ${id}, Nombre: ${p.nombres} ${p.apellido_paterno}, Opciones: ${p.opciones}`);
-    });
+  //   console.log('📊 Pacientes elegibles encontrados:');
+  //   pacientesMap.forEach((p, id) => {
+  //     console.log(`   - ID: ${id}, Nombre: ${p.nombres} ${p.apellido_paterno}, Opciones: ${p.opciones}`);
+  //   });
 
-    return Array.from(pacientesMap.values());
-  }
+  //   return Array.from(pacientesMap.values());
+  // }
 
   /**
    * 📝 Crear un sorteo (CON o SIN reglas)
@@ -281,23 +279,6 @@ export class SorteoService {
 
     const sorteoGuardado = await this.sorteoRepository.save(sorteo);
 
-    // ✅ Si hay reglas, crearlas (sorteo automático)
-    // ✅ Si NO hay reglas, es sorteo manual
-    if (dto.reglas && dto.reglas.length > 0) {
-      const reglas = dto.reglas.map(r =>
-        this.reglaRepository.create({
-          sorteoId: sorteoGuardado.id,
-          tipoCompraId: r.tipo_compra_id,
-          paqueteId: r.paquete_id || null,
-          opcionesPorUnidad: r.opciones_por_unidad,
-        }),
-      );
-
-      await this.reglaRepository.save(reglas);
-      console.log(`✅ Sorteo AUTOMÁTICO creado con ${reglas.length} reglas por usuario ${userId}`);
-    } else {
-      console.log(`✅ Sorteo MANUAL creado sin reglas por usuario ${userId}`);
-    }
 
     // Retornar sorteo con reglas (si las tiene)
     return this.sorteoRepository.findOne({
@@ -365,8 +346,7 @@ export class SorteoService {
         fecha_sorteo: s.fechaSorteo,
         cantidad_ganadores: s.cantidadGanadores,
         total_ganadores_registrados: s.ganadores?.length || 0,
-        cantidad_reglas: s.reglas?.length || 0,
-        tipo_sorteo: (s.reglas?.length || 0) > 0 ? 'Automático' : 'Manual',
+      
         registrado_por: s.userCrea ? `${s.userCrea.nombres} ${s.userCrea.apellidos}` : 'Sistema',
         created_at: s.createdAt,
       })),
@@ -407,15 +387,10 @@ export class SorteoService {
       fecha_sorteo: sorteo.fechaSorteo,
       cantidad_ganadores: sorteo.cantidadGanadores,
       estado: sorteo.estadoSorteo?.nombre || 'desconocido',
-      tipo_sorteo: (sorteo.reglas?.length || 0) > 0 ? 'Automático' : 'Manual',
+     
       registrado_por: sorteo.userCrea ? `${sorteo.userCrea.nombres} ${sorteo.userCrea.apellidos}` : 'Sistema',
       created_at: sorteo.createdAt,
-      reglas: sorteo.reglas?.map(r => ({
-        id: r.id,
-        tipo_compra: r.tipoCompra?.nombre,
-        paquete: r.paquete?.nombre || null,
-        opciones_por_unidad: r.opcionesPorUnidad,
-      })) || [],
+ 
       ganadores: sorteo.ganadores
         ?.map(g => ({
           id: g.id,

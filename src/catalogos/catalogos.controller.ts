@@ -84,4 +84,9 @@ export class CatalogosController {
   getNivelEducacion() {
     return this.catalogosService.getNivelEducacion();
   }
+
+  @Get('paquetes')
+  getPaquetes() {
+    return this.catalogosService.getPaquetes();
+  }
 }

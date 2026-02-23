@@ -35,8 +35,8 @@ export class Cita {
   @JoinColumn({ name: 'servicio_id' })
   servicio: Servicio;
 
-  @Column({ type: 'int', nullable: true })
-  compra_id: number;
+  @Column({ type: 'int', nullable: true, comment: 'Línea de venta que financia esta cita' })
+  venta_servicio_detalle_id: number;
 
   @Column({ type: 'int' })
   motivo_id: number;
