@@ -17,10 +17,11 @@ import { Parentesco } from './parentesco.entity';
 import { NivelEducacion } from './nivel-educacion.entity';
 import { CatalogosService } from './catalogos.service';
 import { CatalogosController } from './catalogos.controller';
+import { Paquete } from './paquete.entity';
 
 @Module({
   imports: [TypeOrmModule.forFeature([
-    TipoDocumento, Sexo, Distrito, Provincia, RelacionResponsable, AreaServicio, Servicios, GradoEscolar, Atenciones, RelacionPadres, AntecedentesFamiliares, Ocupaciones, EstadoCivil, Parentesco, NivelEducacion
+    TipoDocumento, Sexo, Distrito, Provincia, Paquete,RelacionResponsable, AreaServicio, Servicios, GradoEscolar, Atenciones, RelacionPadres, AntecedentesFamiliares, Ocupaciones, EstadoCivil, Parentesco, NivelEducacion
   ])],
   providers: [CatalogosService],
   controllers: [CatalogosController],

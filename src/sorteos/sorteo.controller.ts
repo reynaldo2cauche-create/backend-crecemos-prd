@@ -58,19 +58,7 @@ export class SorteoController {
     return this.sorteoService.obtenerHistorial(+page, +limit);
   }
 
-  @Post('pacientes-elegibles')
-  @Roles('Administrador', 'Admision')
-  async calcularPacientesElegibles(@Body() dto: {
-    fecha_inicio: string;
-    fecha_fin: string;
-    reglas: Array<{
-      tipo_compra_id: number;
-      paquete_id?: number;
-      opciones_por_unidad: number;
-    }>;
-  }) {
-    return this.sorteoService.calcularPacientesElegibles(dto);
-  }
+
 
   /**
    * 📝 POST /sorteos/crear
@@ -121,13 +109,8 @@ export class SorteoController {
 
   /**
    * 🎯 GET /sorteos/:id/pacientes-elegibles
-   * Obtiene pacientes elegibles según las reglas del sorteo
-   */
-  @Get(':id/pacientes-elegibles')
-  @Roles('Administrador', 'Admision')
-  async obtenerPacientesElegibles(@Param('id') id: number) {
-    return this.sorteoService.obtenerPacientesElegibles(id);
-  }
+   * Obtiene pacientes elegibles según las reglas del sorteo*/
+
 
   /**
    * 📄 GET /sorteos/:id/pdf

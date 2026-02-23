@@ -12,7 +12,7 @@ import { TipoCita } from './entities/tipo-cita.entity';
 import { CrearCitaDto } from './dto/crear-cita.dto';
 import { HistorialCitasService } from './historial-citas.service';
 import { NotificacionesService } from '../notificaciones/notificaciones.service';
-import { CompraService } from '../sorteos/compra.service';
+
 
 @Injectable()
 export class CitasService {
@@ -37,8 +37,7 @@ export class CitasService {
     private historialService: HistorialCitasService,
     @Inject(forwardRef(() => NotificacionesService))
     private notificacionesService: NotificacionesService,
-    @Inject(forwardRef(() => CompraService))
-    private compraService: CompraService,
+
   ) {}
 
   private async determinarTipoCita(motivo_id: number): Promise<string> {
@@ -141,7 +140,7 @@ export class CitasService {
       paciente_id: dto.paciente_id,
       doctor_id: dto.doctor_id,
       servicio_id: dto.servicio_id,
-      compra_id: dto.compra_id || null, // 🛒 Vincular con compra
+      venta_servicio_detalle_id: dto.venta_servicio_detalle_id, // 🛒 Vincular con compra
       motivo_id: dto.motivo_id,
       estado_id: dto.estado_id,
       fecha: dto.fecha,
@@ -156,18 +155,7 @@ export class CitasService {
     const guardada = await this.citaRepo.save(cita);
     console.log(`✅ Cita normal creada: ID ${guardada.id}`);
 
-    // 🛒 Si la cita está vinculada a una compra, descontar sesión
-    if (dto.compra_id) {
-      try {
-        await this.compraService.usarSesion(dto.compra_id);
-        console.log(`✅ Sesión descontada de compra ID ${dto.compra_id}`);
-      } catch (error) {
-        // Si falla, eliminar la cita creada
-        await this.citaRepo.remove(guardada);
-        throw new BadRequestException(`Error al descontar sesión: ${error.message}`);
-      }
-    }
-
+ 
     // Registrar en historial
     await this.historialService.registrarHistorial(
       guardada.id,
