@@ -145,6 +145,8 @@ import { VentaProducto } from './ventas/entities/venta-producto.entity';
 import { VentaProductoDetalle } from './ventas/entities/venta-producto-detalle.entity';
 import { ServicioTarifa } from './inventario/entities/servicio-tarifa.entity';
 import { TipoComprobante } from './ventas/entities/tipo-comprobante.entity';
+import { ResponsablePaciente } from './pacientes/entities/responsable-paciente.entity';
+import { Responsable } from './pacientes/entities/responsable.entity';
 
 
 @Module({
@@ -199,6 +201,8 @@ import { TipoComprobante } from './ventas/entities/tipo-comprobante.entity';
         Postulacion,
         Paciente,
         PacienteServicio,
+        Responsable,
+        ResponsablePaciente,
         AsignacionTerapeuta,
         HistoriaClinica,
         ComentarioTerapia,

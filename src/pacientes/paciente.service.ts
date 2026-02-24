@@ -188,8 +188,8 @@ tieneAccesoBeneficios(estadoPacienteId: number): boolean {
       sexo: { id: dto.sexo_id },
       distrito: { id: dto.distrito_id },
       servicio: dto.servicio_id ? { id: dto.servicio_id } : null,
-      responsable_tipo_documento: dto.responsable_tipo_documento_id ? { id: dto.responsable_tipo_documento_id } : null,
-      responsable_relacion: dto.responsable_relacion_id ? { id: dto.responsable_relacion_id } : null,
+      // ❌ YA NO guardar datos del responsable en campos legacy de paciente
+      // ✅ Ahora se guardan en tablas responsable y responsable_paciente
       estado: estadoPaciente,
       user_id_crea: dto.user_id,
     });
@@ -218,6 +218,22 @@ tieneAccesoBeneficios(estadoPacienteId: number): boolean {
       pareja = await this.parejaPacienteService.create(savedPaciente.id, dto.pareja);
     }
 
+    // ✅ Crear responsable si viene con datos de responsable (paciente menor de edad)
+    if (dto.responsable_nombres && dto.responsable_numero_documento) {
+      await this.pacienteResponsableService.agregarResponsable(savedPaciente.id, {
+        nombres: dto.responsable_nombres,
+        apellido_paterno: dto.responsable_apellido_paterno,
+        apellido_materno: dto.responsable_apellido_materno,
+        tipo_documento_id: dto.responsable_tipo_documento_id,
+        numero_documento: dto.responsable_numero_documento,
+        responsable_relacion_id: dto.responsable_relacion_id,
+        telefono: dto.responsable_telefono,
+        email: dto.responsable_email,
+        tiene_proceso_legal: dto.responsable_tiene_proceso_legal || false,
+        proceso_legal_infantil_id: dto.responsable_proceso_legal_infantil_id || null,
+      });
+    }
+
     return {
       paciente: savedPaciente,
       pareja: pareja
@@ -238,8 +254,8 @@ async findAll(filters?: {
     .leftJoinAndSelect('paciente.tipo_documento', 'tipo_documento')
     .leftJoinAndSelect('paciente.sexo', 'sexo')
     .leftJoinAndSelect('paciente.distrito', 'distrito')
-    .leftJoinAndSelect('paciente.responsable_relacion', 'responsable_relacion')
-    .leftJoinAndSelect('paciente.responsable_tipo_documento', 'responsable_tipo_documento')
+    // ❌ YA NO cargar relaciones legacy de responsable
+    // ✅ Los responsables ahora se obtienen desde responsable_paciente
     .leftJoinAndSelect('paciente.estado', 'estado')
     .where('paciente.activo = :activo', { activo: true })
     .andWhere('paciente.mostrar_en_listado = :mostrarEnListado', { mostrarEnListado: true });
@@ -548,16 +564,14 @@ async findAll(filters?: {
     } as any;
   }
 
-  async findOneById(id: number): Promise<{ paciente: Paciente; parejas: any[] }> {
+  async findOneById(id: number): Promise<{ paciente: Paciente; parejas: any[]; responsables: any[] }> {
     const paciente = await this.pacienteRepository.findOne({
       where: { id, activo: true, mostrar_en_listado: true },
       relations: [
         'tipo_documento',
         'sexo',
         'distrito',
-        'servicio',
-        'responsable_relacion',
-        'responsable_tipo_documento'
+        'servicio'
       ]
     });
     if (!paciente) {
@@ -567,9 +581,13 @@ async findAll(filters?: {
     // Obtener las parejas del paciente
     const parejas = await this.parejaPacienteService.findByPaciente(id);
 
+    // ✅ Obtener los responsables desde las nuevas tablas
+    const responsables = await this.pacienteResponsableService.getResponsablesPorPaciente(id);
+
     return {
       paciente,
-      parejas
+      parejas,
+      responsables
     };
   }
 
@@ -682,18 +700,30 @@ async findAll(filters?: {
 
     // 🆕 Crear múltiples responsables en la tabla nueva si vienen
     if (dto.responsables && dto.responsables.length > 0) {
-      const responsablesParaCrear = dto.responsables.map(resp => ({
-        nombres: resp.nombre,
-        apellido_paterno: resp.apellido_paterno,
-        apellido_materno: resp.apellido_materno,
-        tipo_documento_id: resp.tipo_documento_id,
-        numero_documento: resp.numero_documento,
-        responsable_relacion_id: resp.relacion_id,
-        telefono: resp.telefono,
-        email: resp.email,
-        tiene_proceso_legal: resp.tiene_proceso_legal ?? false,
-        proceso_legal_infantil_id: resp.proceso_legal_infantil_id ?? null,
-      }));
+      const responsablesParaCrear = dto.responsables.map(resp => {
+        // 🆕 Si viene responsable_id, es un responsable existente → NO DUPLICAR
+        if (resp.responsable_id) {
+          return {
+            responsable_id: resp.responsable_id, // Reutilizar responsable existente
+            responsable_relacion_id: resp.relacion_id,
+            tiene_proceso_legal: resp.tiene_proceso_legal ?? false,
+            proceso_legal_infantil_id: resp.proceso_legal_infantil_id ?? null,
+          };
+        }
+        // Si NO viene responsable_id, es un responsable nuevo → CREAR
+        return {
+          nombres: resp.nombre,
+          apellido_paterno: resp.apellido_paterno,
+          apellido_materno: resp.apellido_materno,
+          tipo_documento_id: resp.tipo_documento_id,
+          numero_documento: resp.numero_documento,
+          responsable_relacion_id: resp.relacion_id,
+          telefono: resp.telefono,
+          email: resp.email,
+          tiene_proceso_legal: resp.tiene_proceso_legal ?? false,
+          proceso_legal_infantil_id: resp.proceso_legal_infantil_id ?? null,
+        };
+      });
 
       await this.pacienteResponsableService.agregarMultiplesResponsables(
         savedPaciente.id,

@@ -28,7 +28,8 @@ import { TransferenciaNotas } from './entities/transferencia-notas.entity';
 import { TrabajadorCentro } from '../usuarios/trabajador-centro.entity';
 import { ParejaPaciente } from './entities/pareja-paciente.entity';
 import { ParejaPacienteService } from './services/pareja-paciente.service';
-import { PacienteResponsable } from './entities/paciente-responsable.entity';
+import { Responsable } from './entities/responsable.entity';
+import { ResponsablePaciente } from './entities/responsable-paciente.entity';
 import { PacienteResponsableService } from './services/paciente-responsable.service';
 import { EstadoPacienteService } from './estado-paciente.service';
 import { EstadoPacienteController } from './estado-paciente.controller';
@@ -51,7 +52,8 @@ import { GeofencingModule } from 'src/geofencing/geofencing.module';
       TransferenciaNotas,
       TrabajadorCentro,
       ParejaPaciente,
-      PacienteResponsable,
+      Responsable,
+      ResponsablePaciente,
     ]),
     ConveniosModule,
     NotificacionesModule,
