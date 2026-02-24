@@ -71,29 +71,42 @@ export class ServicioDataDto {
 }
 
 export class ResponsableDataDto {
-  @IsString()
-  nombre: string;
+  // 🆕 ID del responsable existente (evita duplicados)
+  @IsOptional()
+  @IsNumber()
+  responsable_id?: number;
 
+  // Si viene responsable_id, estos campos son opcionales
+  @IsOptional()
   @IsString()
-  apellido_paterno: string;
+  nombre?: string;
 
+  @IsOptional()
   @IsString()
-  apellido_materno: string;
+  apellido_paterno?: string;
+
+  @IsOptional()
+  @IsString()
+  apellido_materno?: string;
+
+  @IsOptional()
+  @IsNumber()
+  tipo_documento_id?: number;
+
+  @IsOptional()
+  @IsString()
+  numero_documento?: string;
 
   @IsNumber()
-  tipo_documento_id: number;
+  relacion_id: number; // Siempre requerido
 
+  @IsOptional()
   @IsString()
-  numero_documento: string;
+  telefono?: string;
 
-  @IsNumber()
-  relacion_id: number;
-
-  @IsString()
-  telefono: string;
-
+  @IsOptional()
   @IsEmail()
-  email: string;
+  email?: string;
 
   @IsOptional()
   @IsString()

@@ -17,7 +17,9 @@ export class CreatePacienteDto {
   servicio_id?: number;
   motivo_consulta?: string;
   referido_por?: string;
-  responsable_nombre?: string;
+  // ✅ Datos del responsable (para pacientes menores de edad)
+  // Se guardan en tablas responsable y responsable_paciente
+  responsable_nombres?: string;
   responsable_apellido_paterno?: string;
   responsable_apellido_materno?: string;
   responsable_tipo_documento_id?: number;
@@ -25,6 +27,8 @@ export class CreatePacienteDto {
   responsable_relacion_id?: number;
   responsable_telefono?: string;
   responsable_email?: string;
+  responsable_tiene_proceso_legal?: boolean;
+  responsable_proceso_legal_infantil_id?: number;
   diagnostico_medico?: string;
   alergias?: string;
   medicamentos_actuales?: string;
