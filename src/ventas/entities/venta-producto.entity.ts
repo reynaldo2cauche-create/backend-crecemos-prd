@@ -12,6 +12,9 @@ export class VentaProducto {
   @PrimaryGeneratedColumn()
   id: number;
 
+  @Column({ length: 20, nullable: true, unique: true, comment: 'Código del comprobante (NV-0001, B001-00001, F001-00001)' })
+  codigo_comprobante: string;
+
   @Column({ name: 'tipo_comprador_id', comment: '1=Paciente, 2=Responsable, 3=Externo' })
   tipo_comprador_id: number;
 

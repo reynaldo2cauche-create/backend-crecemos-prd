@@ -27,6 +27,8 @@ export class VentaServicioService {
       .leftJoinAndSelect('detalles.servicio', 'servicio')
       .leftJoinAndSelect('detalles.tipo_venta', 'tipo_venta')
       .leftJoinAndSelect('detalles.paquete', 'paquete')
+      .leftJoinAndSelect('detalles.descuento_tipo', 'detalle_descuento_tipo')
+      .leftJoinAndSelect('detalles.paciente', 'detalle_paciente')
       .leftJoinAndSelect('v.tipo_comprobante', 'tipo_comprobante')
       .orderBy('v.created_at', 'DESC');
 
@@ -82,6 +84,9 @@ export class VentaServicioService {
       );
       const total = subtotal - descuentoMonto;
 
+      // 🆕 Generar código de comprobante
+      const codigoComprobante = await this.generarCodigoComprobante(manager, dto.tipo_comprobante_id);
+
       const venta = manager.create(VentaServicio, {
         tipo_pagador_id: dto.tipo_pagador_id,
         paciente_id: dto.paciente_id,
@@ -89,6 +94,7 @@ export class VentaServicioService {
         comprador_externo_id: dto.comprador_externo_id,
         fecha_venta: dto.fecha_venta,
         tipo_comprobante_id: dto.tipo_comprobante_id,
+        codigo_comprobante: codigoComprobante,
         subtotal,
         descuento_tipo_id: dto.descuento_tipo_id,
         descuento_valor: dto.descuento_valor ?? 0,
@@ -181,5 +187,54 @@ export class VentaServicioService {
       return Math.min(valor, base);
     }
     return 0;
+  }
+
+  /**
+   * Genera código de comprobante según tipo:
+   * - Nota de Venta (1): NV-0001, NV-0002, ...
+   * - Boleta (2):        B001-00001, B001-00002, ... (formato SUNAT)
+   * - Factura (3):       F001-00001, F001-00002, ... (formato SUNAT)
+   */
+  private async generarCodigoComprobante(manager: any, tipoComprobanteId: number): Promise<string> {
+    let prefijo: string;
+    let padding: number;
+
+    switch (tipoComprobanteId) {
+      case 1: // Nota de Venta
+        prefijo = 'NV-';
+        padding = 4;
+        break;
+      case 2: // Boleta
+        prefijo = 'B001-';
+        padding = 5;
+        break;
+      case 3: // Factura
+        prefijo = 'F001-';
+        padding = 5;
+        break;
+      default:
+        throw new BadRequestException(`Tipo de comprobante ${tipoComprobanteId} no válido`);
+    }
+
+    // Obtener el último código de este tipo (usando LIKE para el prefijo)
+    const ultimaVenta = await manager
+      .createQueryBuilder(VentaServicio, 'v')
+      .where('v.codigo_comprobante LIKE :prefijo', { prefijo: `${prefijo}%` })
+      .orderBy('v.id', 'DESC')
+      .getOne();
+
+    let siguienteNumero = 1;
+    if (ultimaVenta?.codigo_comprobante) {
+      // Extraer el número del código (ej: "NV-0001" -> 1, "B001-00001" -> 1)
+      const partes = ultimaVenta.codigo_comprobante.split('-');
+      const numeroActual = parseInt(partes[partes.length - 1], 10);
+      if (!isNaN(numeroActual)) {
+        siguienteNumero = numeroActual + 1;
+      }
+    }
+
+    // Generar código con padding (ej: 1 -> "0001" o "00001")
+    const numeroFormateado = siguienteNumero.toString().padStart(padding, '0');
+    return `${prefijo}${numeroFormateado}`;
   }
 }
