@@ -148,6 +148,17 @@ import { TipoComprobante } from './ventas/entities/tipo-comprobante.entity';
 import { ResponsablePaciente } from './pacientes/entities/responsable-paciente.entity';
 import { Responsable } from './pacientes/entities/responsable.entity';
 
+// ── Promociones ───────────────────────────────────────────────────────────────
+import { PromocionesModule } from './promociones/promociones.module';
+import { Promocion } from './promociones/entities/promocion.entity';
+import { PromocionRegla } from './promociones/entities/promocion-regla.entity';
+import { PromocionAlcance } from './promociones/entities/promocion-alcance.entity';
+import { VentaPromocionAplicada } from './promociones/entities/venta-promocion-aplicada.entity';
+import { TipoCondicionPromo } from './promociones/entities/tipo-condicion-promo.entity';
+import { TipoBeneficioPromo } from './promociones/entities/tipo-beneficio-promo.entity';
+import { TipoAlcancePromo } from './promociones/entities/tipo-alcance-promo.entity';
+import { TipoVentaPromo } from './promociones/entities/tipo-venta-promo.entity';
+
 
 @Module({
   imports: [
@@ -316,7 +327,16 @@ import { Responsable } from './pacientes/entities/responsable.entity';
         VentaServicioDetalle,
         VentaProducto,
         VentaProductoDetalle,
-        TipoComprobante
+        TipoComprobante,
+        // Promociones
+        Promocion,
+        PromocionRegla,
+        PromocionAlcance,
+        VentaPromocionAplicada,
+        TipoCondicionPromo,
+        TipoBeneficioPromo,
+        TipoAlcancePromo,
+        TipoVentaPromo,
 
       ],
         synchronize: false,   // true en desarrollo, false en producción - DESHABILITADO para evitar conflictos con foreign keys
@@ -356,6 +376,7 @@ import { Responsable } from './pacientes/entities/responsable.entity';
     SorteoModule,
     InventarioModule,
     VentasModule,
+    PromocionesModule,
   ],
   controllers: [AppController],
   providers: [

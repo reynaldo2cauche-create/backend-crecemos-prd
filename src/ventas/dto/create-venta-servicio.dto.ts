@@ -78,6 +78,12 @@ export class CreateVentaServicioDto {
   descuento_valor?: number;
 
   @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Type(() => Number)
+  descuento_promocion?: number;
+
+  @IsOptional()
   @IsString()
   nota?: string;
 

@@ -65,8 +65,10 @@ export class VentaProductoService {
 
       const detallesCalculados = dto.detalles.map((d) => this.calcularDetalle(d));
       const subtotal = detallesCalculados.reduce((s, d) => s + d.subtotal, 0);
-      const descuentoMonto = this.calcularDescuentoMonto(subtotal, dto.descuento_tipo_id, dto.descuento_valor);
-      const total = subtotal - descuentoMonto;
+      const descuentoGlobalMonto = this.calcularDescuentoMonto(subtotal, dto.descuento_tipo_id, dto.descuento_valor);
+      const descuentoPromoMonto = parseFloat((dto.descuento_promocion ?? 0).toFixed(2));
+      const descuentoMonto = parseFloat((descuentoGlobalMonto + descuentoPromoMonto).toFixed(2));
+      const total = Math.max(0, parseFloat((subtotal - descuentoMonto).toFixed(2)));
 
       // 🆕 Generar código de comprobante
       const codigoComprobante = await this.generarCodigoComprobante(manager, dto.tipo_comprobante_id);
