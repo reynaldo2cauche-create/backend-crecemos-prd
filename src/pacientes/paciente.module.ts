@@ -24,6 +24,7 @@ import { NotaEvolucion } from './entities/nota-evolucion.entity';
 import { NotaEvolucionService } from './services/nota-evolucion.service';
 import { NotaEvolucionController } from './controllers/nota-evolucion.controller';
 import { PacienteResponsableController } from './controllers/paciente-responsable.controller';
+import { ResponsablesController } from './controllers/responsables.controller';
 import { TransferenciaNotas } from './entities/transferencia-notas.entity';
 import { TrabajadorCentro } from '../usuarios/trabajador-centro.entity';
 import { ParejaPaciente } from './entities/pareja-paciente.entity';
@@ -80,6 +81,7 @@ import { GeofencingModule } from 'src/geofencing/geofencing.module';
     TerapeutaController,
     NotaEvolucionController,
     PacienteResponsableController,
+    ResponsablesController,
     EstadoPacienteController
   ]
 })

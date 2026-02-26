@@ -14,6 +14,45 @@ export class PacienteResponsableService {
   ) {}
 
   /**
+   * Obtener TODOS los responsables (para autocomplete en venta de servicios)
+   */
+  async getTodosLosResponsables() {
+    const responsables = await this.responsableRepo.find({
+      where: { activo: true },
+      relations: ['tipo_documento'],
+      order: { nombres: 'ASC' },
+    });
+
+    return responsables;
+  }
+
+  /**
+   * Obtener todos los pacientes a cargo de un responsable
+   */
+  async getPacientesPorResponsable(responsableId: number) {
+    const relaciones = await this.responsablePacienteRepo.find({
+      where: {
+        responsable_id: responsableId,
+        activo: true,
+      },
+      relations: [
+        'paciente',
+        'paciente.tipo_documento',
+        'paciente.sexo',
+        'paciente.distrito',
+        'responsable_relacion',
+      ],
+      order: { orden: 'ASC' },
+    });
+
+    // Retornar solo los pacientes (con info de la relación)
+    return relaciones.map(rel => ({
+      ...rel.paciente,
+      relacion: rel.responsable_relacion?.nombre || 'Sin relación',
+    }));
+  }
+
+  /**
    * Obtener todos los responsables de un paciente
    */
   async getResponsablesPorPaciente(pacienteId: number) {

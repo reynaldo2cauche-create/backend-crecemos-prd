@@ -208,6 +208,4 @@ async findAllIncludingInactive(@Query() query: any) {
   ) {
     return this.pacienteService.controlarVisibilidad(+id, dto.mostrarEnListado, dto.userId);
   }
-
- 
 }

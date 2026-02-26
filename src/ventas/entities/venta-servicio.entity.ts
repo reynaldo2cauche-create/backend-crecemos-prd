@@ -6,11 +6,15 @@ import { Paciente } from '../../pacientes/paciente.entity';
 import { PacienteResponsable } from '../../pacientes/entities/paciente-responsable.entity';
 import { VentaServicioDetalle } from './venta-servicio-detalle.entity';
 import { TipoComprobante } from './tipo-comprobante.entity';
+import { Responsable } from 'src/pacientes/entities/responsable.entity';
 
 @Entity('venta_servicio')
 export class VentaServicio {
   @PrimaryGeneratedColumn()
   id: number;
+
+  @Column({ length: 20, nullable: true, unique: true, comment: 'Código del comprobante (NV-0001, B001-00001, F001-00001)' })
+  codigo_comprobante: string;
 
   @Column({ name: 'tipo_pagador_id', comment: '1=Paciente, 2=Responsable, 3=Externo' })
   tipo_pagador_id: number;
@@ -29,9 +33,9 @@ export class VentaServicio {
   @Column({ name: 'responsable_id', nullable: true, comment: 'Rellenar si tipo_pagador_id = 2' })
   responsable_id: number;
 
-  @ManyToOne(() => PacienteResponsable, { nullable: true, onDelete: 'SET NULL' })
+  @ManyToOne(() => Responsable, { nullable: true, onDelete: 'SET NULL' })
   @JoinColumn({ name: 'responsable_id' })
-  responsable: PacienteResponsable;
+  responsable: Responsable;
 
   @Column({ name: 'comprador_externo_id', nullable: true, comment: 'Rellenar si tipo_pagador_id = 3' })
   comprador_externo_id: number;
