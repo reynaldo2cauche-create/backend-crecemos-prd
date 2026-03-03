@@ -4,6 +4,10 @@ import { DataSource, Repository } from 'typeorm';
 import { VentaServicio } from '../entities/venta-servicio.entity';
 import { VentaServicioDetalle } from '../entities/venta-servicio-detalle.entity';
 import { CreateVentaServicioDto, DetalleVentaServicioDto } from '../dto/create-venta-servicio.dto';
+// ✅ FIX: importar el repositorio de promociones aplicadas
+import { VentaPromocionAplicada } from '../../promociones/entities/venta-promocion-aplicada.entity';
+
+const TIPO_VENTA_SERVICIO = 2;
 
 @Injectable()
 export class VentaServicioService {
@@ -12,6 +16,9 @@ export class VentaServicioService {
     private readonly ventaRepo: Repository<VentaServicio>,
     @InjectRepository(VentaServicioDetalle)
     private readonly detalleRepo: Repository<VentaServicioDetalle>,
+    // ✅ FIX: inyectar el repositorio de VentaPromocionAplicada
+    @InjectRepository(VentaPromocionAplicada)
+    private readonly ventaPromoRepo: Repository<VentaPromocionAplicada>,
     private readonly dataSource: DataSource,
   ) {}
 
@@ -42,7 +49,31 @@ export class VentaServicioService {
       qb.andWhere('v.fecha_venta <= :hasta', { hasta: filtros.hasta });
     }
 
-    return qb.getMany();
+    const ventas = await qb.getMany();
+
+    // ✅ FIX: cargar las promociones aplicadas para TODAS las ventas de una vez
+    if (ventas.length > 0) {
+      const ventaIds = ventas.map((v) => v.id);
+      const promociones = await this.ventaPromoRepo.find({
+        where: ventaIds.map((id) => ({ tipo_venta_id: TIPO_VENTA_SERVICIO, venta_id: id })),
+        relations: ['promocion'],
+      });
+
+      // Agrupar por venta_id y asignar
+      const promosPorVenta = new Map<number, VentaPromocionAplicada[]>();
+      for (const p of promociones) {
+        if (!promosPorVenta.has(p.venta_id)) {
+          promosPorVenta.set(p.venta_id, []);
+        }
+        promosPorVenta.get(p.venta_id).push(p);
+      }
+
+      for (const venta of ventas) {
+        venta.promociones_aplicadas = promosPorVenta.get(venta.id) ?? [];
+      }
+    }
+
+    return ventas;
   }
 
   async findOne(id: number) {
@@ -51,10 +82,18 @@ export class VentaServicioService {
       relations: [
         'tipo_pagador', 'paciente', 'responsable', 'comprador_externo',
         'descuento_tipo', 'detalles', 'detalles.servicio', 'detalles.tipo_venta',
-        'detalles.paquete', 'detalles.descuento_tipo',
+        'detalles.paquete', 'detalles.descuento_tipo', 'detalles.paciente',
+        'tipo_comprobante',
       ],
     });
     if (!v) throw new NotFoundException(`Venta de servicio ${id} no encontrada`);
+
+    // ✅ FIX: cargar promociones aplicadas para este findOne también
+    v.promociones_aplicadas = await this.ventaPromoRepo.find({
+      where: { tipo_venta_id: TIPO_VENTA_SERVICIO, venta_id: id },
+      relations: ['promocion'],
+    });
+
     return v;
   }
 
@@ -86,7 +125,6 @@ export class VentaServicioService {
       const descuentoMonto = parseFloat((descuentoGlobalMonto + descuentoPromoMonto).toFixed(2));
       const total = Math.max(0, parseFloat((subtotal - descuentoMonto).toFixed(2)));
 
-      // 🆕 Generar código de comprobante
       const codigoComprobante = await this.generarCodigoComprobante(manager, dto.tipo_comprobante_id);
 
       const venta = manager.create(VentaServicio, {
@@ -101,13 +139,13 @@ export class VentaServicioService {
         descuento_tipo_id: dto.descuento_tipo_id,
         descuento_valor: dto.descuento_valor ?? 0,
         descuento_monto: descuentoMonto,
+        descuento_promocion: descuentoPromoMonto,
         total,
         nota: dto.nota,
         user_crea_id: dto.user_crea_id,
       });
       const savedVenta = await manager.save(venta);
 
-      const detallesGuardados = [];
       for (const d of detallesCalculados) {
         const detalle = manager.create(VentaServicioDetalle, {
           venta_id: savedVenta.id,
@@ -123,19 +161,21 @@ export class VentaServicioService {
           descuento_monto: d.descuento_monto,
           subtotal: d.subtotal,
         });
-        const savedDetalle = await manager.save(detalle);
-        detallesGuardados.push(savedDetalle);
+        await manager.save(detalle);
       }
 
-      // Cargar la venta completa con relaciones usando el manager de la transacción
       const ventaCompleta = await manager.findOne(VentaServicio, {
         where: { id: savedVenta.id },
         relations: [
           'tipo_pagador', 'paciente', 'responsable', 'comprador_externo',
           'descuento_tipo', 'detalles', 'detalles.servicio', 'detalles.tipo_venta',
-          'detalles.paquete', 'detalles.descuento_tipo',
+          'detalles.paquete', 'detalles.descuento_tipo', 'detalles.paciente',
+          'tipo_comprobante',
         ],
       });
+
+      // ✅ La venta recién creada aún no tiene promociones en BD (se registran después).
+      ventaCompleta.promociones_aplicadas = [];
 
       return ventaCompleta;
     });
@@ -157,16 +197,12 @@ export class VentaServicioService {
   // ── Helpers privados ─────────────────────────────────────────────────────────
 
   private calcularDetalle(d: DetalleVentaServicioDto) {
-    // Calcular subtotal antes del descuento
     const subtotalSinDescuento = d.precio_unitario * d.sesiones_totales;
-
-    // Calcular descuento sobre el subtotal
     const descuentoMonto = this.calcularDescuentoMonto(
       subtotalSinDescuento,
       d.descuento_tipo_id,
       d.descuento_valor,
     );
-
     return {
       ...d,
       descuento_monto: descuentoMonto,
@@ -174,43 +210,27 @@ export class VentaServicioService {
     };
   }
 
-  private calcularDescuentoMonto(
-    base: number,
-    tipoId?: number,
-    valor?: number,
-  ): number {
+  private calcularDescuentoMonto(base: number, tipoId?: number, valor?: number): number {
     if (!tipoId || !valor || valor <= 0) return 0;
-    if (tipoId === 1) {
-      // Porcentaje
-      return parseFloat(((base * valor) / 100).toFixed(2));
-    }
-    if (tipoId === 2) {
-      // Monto fijo
-      return Math.min(valor, base);
-    }
+    if (tipoId === 1) return parseFloat(((base * valor) / 100).toFixed(2));
+    if (tipoId === 2) return Math.min(valor, base);
     return 0;
   }
 
-  /**
-   * Genera código de comprobante según tipo:
-   * - Nota de Venta (1): NV-0001, NV-0002, ...
-   * - Boleta (2):        B001-00001, B001-00002, ... (formato SUNAT)
-   * - Factura (3):       F001-00001, F001-00002, ... (formato SUNAT)
-   */
   private async generarCodigoComprobante(manager: any, tipoComprobanteId: number): Promise<string> {
     let prefijo: string;
     let padding: number;
 
     switch (tipoComprobanteId) {
-      case 1: // Nota de Venta
+      case 1:
         prefijo = 'NV-';
         padding = 4;
         break;
-      case 2: // Boleta
+      case 2:
         prefijo = 'B001-';
         padding = 5;
         break;
-      case 3: // Factura
+      case 3:
         prefijo = 'F001-';
         padding = 5;
         break;
@@ -218,7 +238,6 @@ export class VentaServicioService {
         throw new BadRequestException(`Tipo de comprobante ${tipoComprobanteId} no válido`);
     }
 
-    // Obtener el último código de este tipo (usando LIKE para el prefijo)
     const ultimaVenta = await manager
       .createQueryBuilder(VentaServicio, 'v')
       .where('v.codigo_comprobante LIKE :prefijo', { prefijo: `${prefijo}%` })
@@ -227,7 +246,6 @@ export class VentaServicioService {
 
     let siguienteNumero = 1;
     if (ultimaVenta?.codigo_comprobante) {
-      // Extraer el número del código (ej: "NV-0001" -> 1, "B001-00001" -> 1)
       const partes = ultimaVenta.codigo_comprobante.split('-');
       const numeroActual = parseInt(partes[partes.length - 1], 10);
       if (!isNaN(numeroActual)) {
@@ -235,7 +253,6 @@ export class VentaServicioService {
       }
     }
 
-    // Generar código con padding (ej: 1 -> "0001" o "00001")
     const numeroFormateado = siguienteNumero.toString().padStart(padding, '0');
     return `${prefijo}${numeroFormateado}`;
   }

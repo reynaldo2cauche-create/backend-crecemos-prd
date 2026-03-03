@@ -91,8 +91,9 @@ export class HistorialCitasService {
    */
   private async guardarDatosAdicionales(citaId: number, historialId: number, usuarioId: number): Promise<void> {
     // Verificar si es reunión clínica
+    // Fix: buscar por id_cita, no por id de la tabla reunion
     const reunion = await this.reunionRepo.findOne({
-      where: { id: citaId },
+      where: { id_cita: citaId },
       relations: ['terapeutas', 'servicios'],
     });
 

@@ -208,6 +208,7 @@ export class AsistenciaService {
         INNER JOIN paciente p ON c.paciente_id = p.id
         WHERE c.doctor_id = ?
           AND c.fecha BETWEEN ? AND ?
+          AND c.flg_activo = 1
         ORDER BY c.fecha DESC, c.hora_inicio DESC
       `;
 
@@ -253,6 +254,7 @@ export class AsistenciaService {
         INNER JOIN trabajador_centro tc ON c.doctor_id = tc.id
         WHERE c.paciente_id = ?
           AND c.fecha BETWEEN ? AND ?
+          AND c.flg_activo = 1
         ORDER BY c.fecha DESC, c.hora_inicio DESC
       `;
 
@@ -388,6 +390,7 @@ export class AsistenciaService {
         INNER JOIN paciente p ON c.paciente_id = p.id
         INNER JOIN trabajador_centro tc ON c.doctor_id = tc.id
         WHERE c.fecha BETWEEN ? AND ?
+          AND c.flg_activo = 1
         ORDER BY c.fecha DESC, c.hora_inicio DESC
       `;
 

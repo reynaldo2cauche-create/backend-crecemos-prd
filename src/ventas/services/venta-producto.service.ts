@@ -5,6 +5,10 @@ import { VentaProducto } from '../entities/venta-producto.entity';
 import { VentaProductoDetalle } from '../entities/venta-producto-detalle.entity';
 import { CreateVentaProductoDto, DetalleVentaProductoDto } from '../dto/create-venta-producto.dto';
 import { Producto } from '../../inventario/entities/producto.entity';
+// ✅ FIX: importar el repositorio de promociones aplicadas
+import { VentaPromocionAplicada } from '../../promociones/entities/venta-promocion-aplicada.entity';
+
+const TIPO_VENTA_PRODUCTO = 1;
 
 @Injectable()
 export class VentaProductoService {
@@ -15,6 +19,9 @@ export class VentaProductoService {
     private readonly detalleRepo: Repository<VentaProductoDetalle>,
     @InjectRepository(Producto)
     private readonly productoRepo: Repository<Producto>,
+    // ✅ FIX: inyectar el repositorio de VentaPromocionAplicada
+    @InjectRepository(VentaPromocionAplicada)
+    private readonly ventaPromoRepo: Repository<VentaPromocionAplicada>,
     private readonly dataSource: DataSource,
   ) {}
 
@@ -35,7 +42,32 @@ export class VentaProductoService {
     if (filtros?.desde) qb.andWhere('v.fecha_venta >= :desde', { desde: filtros.desde });
     if (filtros?.hasta) qb.andWhere('v.fecha_venta <= :hasta', { hasta: filtros.hasta });
 
-    return qb.getMany();
+    const ventas = await qb.getMany();
+
+    // ✅ FIX: cargar las promociones aplicadas para TODAS las ventas de una vez
+    // (un solo query extra, no N queries — mucho más eficiente)
+    if (ventas.length > 0) {
+      const ventaIds = ventas.map((v) => v.id);
+      const promociones = await this.ventaPromoRepo.find({
+        where: ventaIds.map((id) => ({ tipo_venta_id: TIPO_VENTA_PRODUCTO, venta_id: id })),
+        relations: ['promocion'],
+      });
+
+      // Agrupar por venta_id y asignar
+      const promosPorVenta = new Map<number, VentaPromocionAplicada[]>();
+      for (const p of promociones) {
+        if (!promosPorVenta.has(p.venta_id)) {
+          promosPorVenta.set(p.venta_id, []);
+        }
+        promosPorVenta.get(p.venta_id).push(p);
+      }
+
+      for (const venta of ventas) {
+        venta.promociones_aplicadas = promosPorVenta.get(venta.id) ?? [];
+      }
+    }
+
+    return ventas;
   }
 
   async findOne(id: number) {
@@ -44,9 +76,17 @@ export class VentaProductoService {
       relations: [
         'tipo_comprador', 'paciente', 'responsable', 'comprador_externo',
         'descuento_tipo', 'detalles', 'detalles.producto', 'detalles.descuento_tipo',
+        'tipo_comprobante',
       ],
     });
     if (!v) throw new NotFoundException(`Venta de producto ${id} no encontrada`);
+
+    // ✅ FIX: cargar promociones aplicadas para este findOne también
+    v.promociones_aplicadas = await this.ventaPromoRepo.find({
+      where: { tipo_venta_id: TIPO_VENTA_PRODUCTO, venta_id: id },
+      relations: ['promocion'],
+    });
+
     return v;
   }
 
@@ -70,11 +110,9 @@ export class VentaProductoService {
       const descuentoMonto = parseFloat((descuentoGlobalMonto + descuentoPromoMonto).toFixed(2));
       const total = Math.max(0, parseFloat((subtotal - descuentoMonto).toFixed(2)));
 
-      // 🆕 Generar código de comprobante
       const codigoComprobante = await this.generarCodigoComprobante(manager, dto.tipo_comprobante_id);
 
       const venta = manager.create(VentaProducto, {
-        // FIX #1: el DTO usa tipo_comprador_id, no tipo_pagador_id
         tipo_comprador_id: dto.tipo_comprador_id,
         paciente_id: dto.paciente_id,
         responsable_id: dto.responsable_id,
@@ -86,6 +124,7 @@ export class VentaProductoService {
         descuento_tipo_id: dto.descuento_tipo_id,
         descuento_valor: dto.descuento_valor ?? 0,
         descuento_monto: descuentoMonto,
+        descuento_promocion: descuentoPromoMonto,
         total,
         nota: dto.nota,
         user_crea_id: dto.user_crea_id,
@@ -105,8 +144,6 @@ export class VentaProductoService {
         });
         await manager.save(detalle);
 
-        // FIX #2: usar la clase Producto (no el string 'producto')
-        // El string hace que TypeORM no resuelva el nombre real de la tabla
         await manager
           .createQueryBuilder()
           .update(Producto)
@@ -115,15 +152,21 @@ export class VentaProductoService {
           .execute();
       }
 
-      // FIX #3: usar el manager de la transacción para el findOne final,
-      // igual que hace venta-servicio.service.ts — evita leer datos aún no commiteados
-      return manager.findOne(VentaProducto, {
+      const ventaCompleta = await manager.findOne(VentaProducto, {
         where: { id: savedVenta.id },
         relations: [
           'tipo_comprador', 'paciente', 'responsable', 'comprador_externo',
           'descuento_tipo', 'detalles', 'detalles.producto', 'detalles.descuento_tipo',
+          'tipo_comprobante',
         ],
       });
+
+      // ✅ FIX: la venta recién creada aún no tiene promociones registradas en BD
+      // (el frontend las registra justo después con POST /promociones/registrar-aplicacion).
+      // Dejamos el array vacío aquí; el historial las mostrará en la siguiente consulta.
+      ventaCompleta.promociones_aplicadas = [];
+
+      return ventaCompleta;
     });
   }
 
@@ -146,26 +189,20 @@ export class VentaProductoService {
     return 0;
   }
 
-  /**
-   * Genera código de comprobante según tipo:
-   * - Nota de Venta (1): NV-0001, NV-0002, ...
-   * - Boleta (2):        B001-00001, B001-00002, ... (formato SUNAT)
-   * - Factura (3):       F001-00001, F001-00002, ... (formato SUNAT)
-   */
   private async generarCodigoComprobante(manager: any, tipoComprobanteId: number): Promise<string> {
     let prefijo: string;
     let padding: number;
 
     switch (tipoComprobanteId) {
-      case 1: // Nota de Venta
+      case 1:
         prefijo = 'NV-';
         padding = 4;
         break;
-      case 2: // Boleta
+      case 2:
         prefijo = 'B001-';
         padding = 5;
         break;
-      case 3: // Factura
+      case 3:
         prefijo = 'F001-';
         padding = 5;
         break;
@@ -173,7 +210,6 @@ export class VentaProductoService {
         throw new BadRequestException(`Tipo de comprobante ${tipoComprobanteId} no válido`);
     }
 
-    // Obtener el último código de este tipo (usando LIKE para el prefijo)
     const ultimaVenta = await manager
       .createQueryBuilder(VentaProducto, 'v')
       .where('v.codigo_comprobante LIKE :prefijo', { prefijo: `${prefijo}%` })
@@ -182,7 +218,6 @@ export class VentaProductoService {
 
     let siguienteNumero = 1;
     if (ultimaVenta?.codigo_comprobante) {
-      // Extraer el número del código (ej: "NV-0001" -> 1, "B001-00001" -> 1)
       const partes = ultimaVenta.codigo_comprobante.split('-');
       const numeroActual = parseInt(partes[partes.length - 1], 10);
       if (!isNaN(numeroActual)) {
@@ -190,7 +225,6 @@ export class VentaProductoService {
       }
     }
 
-    // Generar código con padding (ej: 1 -> "0001" o "00001")
     const numeroFormateado = siguienteNumero.toString().padStart(padding, '0');
     return `${prefijo}${numeroFormateado}`;
   }

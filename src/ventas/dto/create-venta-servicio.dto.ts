@@ -26,7 +26,7 @@ export class DetalleVentaServicioDto {
   sesiones_totales: number;
 
   @IsNumber({ maxDecimalPlaces: 2 })
-  @IsPositive()
+   @Min(0) 
   @Type(() => Number)
   precio_unitario: number;
 

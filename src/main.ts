@@ -1,5 +1,5 @@
 import { NestFactory } from '@nestjs/core';
-import { ValidationPipe } from '@nestjs/common';
+import { BadRequestException, ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { LoggingInterceptor } from './logging/logging.interceptor';
@@ -48,6 +48,13 @@ async function bootstrap() {
     },
     whitelist: true,
     forbidNonWhitelisted: false,
+    exceptionFactory: (errors) => {
+        const messages = errors.map(e =>
+          `${e.property}: ${Object.values(e.constraints || {}).join(', ')}`
+        );
+        console.error('❌ VALIDATION ERRORS:', messages);
+        return new BadRequestException(messages);
+      },
   }));
 
  

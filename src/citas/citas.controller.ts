@@ -42,6 +42,17 @@ async obtenerEstadisticas(@Query() query: any) {
   );
 }
 
+@Get('estadisticas/sesiones')
+async obtenerEstadisticasSesiones(@Query() query: any) {
+  const { fecha_desde, fecha_hasta, terapeuta_id, paciente_id } = query;
+  return this.citasService.obtenerEstadisticasSesiones(
+    fecha_desde,
+    fecha_hasta,
+    terapeuta_id ? +terapeuta_id : undefined,
+    paciente_id ? +paciente_id : undefined
+  );
+}
+
   // ✅ RUTAS CON PARÁMETROS AL FINAL
   @Get(':id/historial')
   async obtenerHistorial(@Param('id') id: string) {

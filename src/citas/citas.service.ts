@@ -471,7 +471,8 @@ async listar(filtros: any = {}): Promise<any[]> {
   }
 
   // 4. Filtrar citas normales
-  const idsReuniones = new Set(reunionesIds.map(r => r.id));
+  // Fix: usar id_cita (no id de la tabla reunion) para no duplicar citas como NORMAL
+  const idsReuniones = new Set(reunionesIds.map(r => r.id_cita ?? r.id));
   const idsVisitas = new Set(visitasIds.map(v => v.id_cita));
 
   const citasNormalesFiltered = citasNormales
@@ -550,10 +551,11 @@ async listar(filtros: any = {}): Promise<any[]> {
     return { ...cita, tipo_cita: 'NORMAL' };
   }
   async actualizar(id: number, dto: CrearCitaDto): Promise<any> {
-  // ✅ VALIDAR MOTIVO DE ACCIÓN (OBLIGATORIO PARA UPDATE)
+  // Motivo de modificación obligatorio
   if (!dto.motivo_accion || dto.motivo_accion.trim() === '') {
     throw new BadRequestException('El motivo de la modificación es obligatorio');
   }
+  const motivoAccionFinal = dto.motivo_accion.trim();
 
   // Validar que el paciente no tenga otra cita solapada (excluyendo la cita actual)
   await this.verificarConflictoPaciente(
@@ -566,7 +568,7 @@ async listar(filtros: any = {}): Promise<any[]> {
 
   const tipoCita = await this.determinarTipoCita(dto.motivo_id);
   console.log(`🔍 Actualizando cita ID ${id}, tipo: ${tipoCita}`);
-  console.log(`📝 Motivo de modificación: ${dto.motivo_accion}`);
+  console.log(`📝 Motivo de modificación: ${motivoAccionFinal}`);
 
   // Obtener la cita existente con todas sus relaciones ANTES de actualizar
   const citaAntigua = await this.citaRepo.findOne({
@@ -654,11 +656,11 @@ async listar(filtros: any = {}): Promise<any[]> {
   // Actualizar según tipo
   let resultado;
   if (tipoCita === 'NORMAL') {
-    resultado = await this.actualizarCitaNormal(id, dto);
+    resultado = await this.actualizarCitaNormal(id, { ...dto, motivo_accion: motivoAccionFinal });
   } else if (tipoCita === 'REUNION_CLINICA') {
-    resultado = await this.actualizarReunionClinica(id, dto);
+    resultado = await this.actualizarReunionClinica(id, { ...dto, motivo_accion: motivoAccionFinal });
   } else if (tipoCita === 'VISITA_ESCOLAR') {
-    resultado = await this.actualizarVisitaEscolar(id, dto);
+    resultado = await this.actualizarVisitaEscolar(id, { ...dto, motivo_accion: motivoAccionFinal });
   } else {
     throw new BadRequestException('Tipo de cita no soportado');
   }
@@ -698,7 +700,7 @@ async listar(filtros: any = {}): Promise<any[]> {
       datosAntiguos.doctor_id,         // 👈 terapeutaId (agregado)
       dto.fecha,                       // 👈 fechaNueva (corregido)
       dto.hora_inicio,                 // 👈 horaNueva (corregido)
-      dto.motivo_accion, 
+      motivoAccionFinal, 
     );
   } catch (error) {
     console.error('❌ Error al crear notificación de cita modificada:', error.message);
@@ -1257,6 +1259,192 @@ async obtenerEstadisticas(
     anioBase,
     esModoCalendario,
     terapeutaId: terapeutaId || null,
+  };
+}
+
+/**
+ * Obtener estadísticas de sesiones para el dashboard
+ * @param fechaDesde - Fecha inicio del rango (YYYY-MM-DD)
+ * @param fechaHasta - Fecha fin del rango (YYYY-MM-DD)
+ * @param terapeutaId - ID del terapeuta (opcional)
+ * @param pacienteId - ID del paciente (opcional)
+ */
+async obtenerEstadisticasSesiones(
+  fechaDesde: string,
+  fechaHasta: string,
+  terapeutaId?: number,
+  pacienteId?: number
+): Promise<any> {
+  console.log(`📊 Obteniendo estadísticas de sesiones`);
+  console.log(`   - Rango: ${fechaDesde} al ${fechaHasta}`);
+  console.log(`   - Terapeuta ID: ${terapeutaId || 'TODOS'} (tipo: ${typeof terapeutaId})`);
+  console.log(`   - Paciente ID: ${pacienteId || 'TODOS'} (tipo: ${typeof pacienteId})`);
+
+  // Query base
+  let queryBase = this.citaRepo
+    .createQueryBuilder('cita')
+    .where('cita.fecha >= :fechaDesde', { fechaDesde })
+    .andWhere('cita.fecha <= :fechaHasta', { fechaHasta })
+    .andWhere('cita.flg_activo = 1')
+    .andWhere('cita.motivo_id != 7'); // Excluir reuniones clínicas
+
+  if (terapeutaId) {
+    queryBase.andWhere('cita.doctor_id = :terapeutaId', { terapeutaId });
+  }
+
+  if (pacienteId) {
+    queryBase.andWhere('cita.paciente_id = :pacienteId', { pacienteId });
+  }
+
+  // Total de sesiones
+  const totalSesiones = await queryBase.getCount();
+
+  // Sesiones por terapeuta
+  const queryTerapeutas = this.citaRepo
+    .createQueryBuilder('cita')
+    .select('tc.id', 'terapeuta_id')
+    .addSelect('tc.nombres', 'terapeuta_nombres')
+    .addSelect('tc.apellidos', 'terapeuta_apellidos')
+    .addSelect('COUNT(cita.id)', 'total_sesiones')
+    .addSelect('COUNT(DISTINCT cita.paciente_id)', 'total_pacientes')
+    .innerJoin('cita.doctor', 'tc')
+    .where('cita.fecha >= :fechaDesde', { fechaDesde })
+    .andWhere('cita.fecha <= :fechaHasta', { fechaHasta })
+    .andWhere('cita.flg_activo = 1')
+    .andWhere('cita.motivo_id != 7');
+
+  if (terapeutaId) {
+    queryTerapeutas.andWhere('cita.doctor_id = :terapeutaIdFilter', { terapeutaIdFilter: terapeutaId });
+  }
+
+  if (pacienteId) {
+    queryTerapeutas.andWhere('cita.paciente_id = :pacienteIdFilter', { pacienteIdFilter: pacienteId });
+  }
+
+  const sesionesPorTerapeuta = await queryTerapeutas
+    .groupBy('tc.id')
+    .addGroupBy('tc.nombres')
+    .addGroupBy('tc.apellidos')
+    .orderBy('total_sesiones', 'DESC')
+    .getRawMany();
+
+  // Sesiones por paciente
+  const queryPacientes = this.citaRepo
+    .createQueryBuilder('cita')
+    .select('p.id', 'paciente_id')
+    .addSelect('p.nombres', 'paciente_nombres')
+    .addSelect('p.apellido_paterno', 'paciente_apellido_paterno')
+    .addSelect('p.apellido_materno', 'paciente_apellido_materno')
+    .addSelect('COUNT(cita.id)', 'total_sesiones')
+    .addSelect('tc.nombres', 'terapeuta_principal_nombres')
+    .addSelect('tc.apellidos', 'terapeuta_principal_apellidos')
+    .innerJoin('cita.paciente', 'p')
+    .innerJoin('cita.doctor', 'tc')
+    .where('cita.fecha >= :fechaDesde', { fechaDesde })
+    .andWhere('cita.fecha <= :fechaHasta', { fechaHasta })
+    .andWhere('cita.flg_activo = 1')
+    .andWhere('cita.motivo_id != 7');
+
+  if (terapeutaId) {
+    queryPacientes.andWhere('cita.doctor_id = :terapeutaId', { terapeutaId });
+  }
+
+  if (pacienteId) {
+    queryPacientes.andWhere('cita.paciente_id = :pacienteIdFilter', { pacienteIdFilter: pacienteId });
+  }
+
+  const sesionesPorPaciente = await queryPacientes
+    .groupBy('p.id')
+    .addGroupBy('p.nombres')
+    .addGroupBy('p.apellido_paterno')
+    .addGroupBy('p.apellido_materno')
+    .addGroupBy('tc.nombres')
+    .addGroupBy('tc.apellidos')
+    .orderBy('total_sesiones', 'DESC')
+    .limit(20)
+    .getRawMany();
+
+  // Sesiones por servicio
+  const queryServicios = this.citaRepo
+    .createQueryBuilder('cita')
+    .select('s.id', 'servicio_id')
+    .addSelect('s.nombre', 'servicio_nombre')
+    .addSelect('COUNT(cita.id)', 'total_sesiones')
+    .innerJoin('cita.servicio', 's')
+    .where('cita.fecha >= :fechaDesde', { fechaDesde })
+    .andWhere('cita.fecha <= :fechaHasta', { fechaHasta })
+    .andWhere('cita.flg_activo = 1')
+    .andWhere('cita.motivo_id != 7');
+
+  if (terapeutaId) {
+    queryServicios.andWhere('cita.doctor_id = :terapeutaId', { terapeutaId });
+  }
+
+  if (pacienteId) {
+    queryServicios.andWhere('cita.paciente_id = :pacienteId', { pacienteId });
+  }
+
+  const sesionesPorServicio = await queryServicios
+    .groupBy('s.id')
+    .addGroupBy('s.nombre')
+    .orderBy('total_sesiones', 'DESC')
+    .getRawMany();
+
+  // Calcular totales únicos
+  const totalTerapeutas = sesionesPorTerapeuta.length;
+  const queryTotalPacientes = this.citaRepo
+    .createQueryBuilder('cita')
+    .select('COUNT(DISTINCT cita.paciente_id)', 'total')
+    .where('cita.fecha >= :fechaDesde', { fechaDesde })
+    .andWhere('cita.fecha <= :fechaHasta', { fechaHasta })
+    .andWhere('cita.flg_activo = 1')
+    .andWhere('cita.motivo_id != 7');
+
+  if (terapeutaId) {
+    queryTotalPacientes.andWhere('cita.doctor_id = :terapeutaId', { terapeutaId });
+  }
+
+  if (pacienteId) {
+    queryTotalPacientes.andWhere('cita.paciente_id = :pacienteId', { pacienteId });
+  }
+
+  const totalPacientes = await queryTotalPacientes.getRawOne();
+
+  // Calcular promedio por día
+  const diasRango = Math.ceil((new Date(fechaHasta).getTime() - new Date(fechaDesde).getTime()) / (1000 * 60 * 60 * 24)) + 1;
+  const promedioPorDia = totalSesiones > 0 ? (totalSesiones / diasRango).toFixed(1) : '0';
+
+  return {
+    resumen: {
+      total_sesiones: totalSesiones,
+      total_terapeutas: totalTerapeutas,
+      total_pacientes: parseInt(totalPacientes.total) || 0,
+      promedio_por_dia: promedioPorDia,
+      rango_fechas: {
+        desde: fechaDesde,
+        hasta: fechaHasta,
+        dias: diasRango
+      }
+    },
+    sesiones_por_terapeuta: sesionesPorTerapeuta.map(t => ({
+      id: t.terapeuta_id,
+      nombre: `${t.terapeuta_nombres} ${t.terapeuta_apellidos}`,
+      total_sesiones: parseInt(t.total_sesiones),
+      total_pacientes: parseInt(t.total_pacientes),
+      porcentaje: totalSesiones > 0 ? ((parseInt(t.total_sesiones) / totalSesiones) * 100).toFixed(1) : '0'
+    })),
+    sesiones_por_paciente: sesionesPorPaciente.map(p => ({
+      id: p.paciente_id,
+      nombre: `${p.paciente_nombres} ${p.paciente_apellido_paterno} ${p.paciente_apellido_materno || ''}`.trim(),
+      total_sesiones: parseInt(p.total_sesiones),
+      terapeuta_principal: `${p.terapeuta_principal_nombres} ${p.terapeuta_principal_apellidos}`
+    })),
+    sesiones_por_servicio: sesionesPorServicio.map(s => ({
+      id: s.servicio_id,
+      nombre: s.servicio_nombre,
+      total_sesiones: parseInt(s.total_sesiones),
+      porcentaje: totalSesiones > 0 ? ((parseInt(s.total_sesiones) / totalSesiones) * 100).toFixed(1) : '0'
+    }))
   };
 }
 
