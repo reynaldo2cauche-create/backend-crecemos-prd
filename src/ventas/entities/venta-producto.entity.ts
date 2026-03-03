@@ -6,6 +6,8 @@ import { Paciente } from '../../pacientes/paciente.entity';
 import { PacienteResponsable } from '../../pacientes/entities/paciente-responsable.entity';
 import { VentaProductoDetalle } from './venta-producto-detalle.entity';
 import { TipoComprobante } from './tipo-comprobante.entity';
+// ✅ FIX: importar la entidad de promociones aplicadas
+import { VentaPromocionAplicada } from '../../promociones/entities/venta-promocion-aplicada.entity';
 
 @Entity('venta_producto')
 export class VentaProducto {
@@ -69,6 +71,9 @@ export class VentaProducto {
   @Column({ type: 'decimal', precision: 10, scale: 2, default: 0.00 })
   descuento_monto: number;
 
+  @Column({ type: 'decimal', precision: 10, scale: 2, default: 0.00, comment: 'Descuento por promociones automáticas' })
+  descuento_promocion: number;
+
   @Column({ type: 'decimal', precision: 10, scale: 2, comment: 'subtotal - descuento_monto' })
   total: number;
 
@@ -89,4 +94,11 @@ export class VentaProducto {
 
   @OneToMany(() => VentaProductoDetalle, (d) => d.venta, { cascade: true })
   detalles: VentaProductoDetalle[];
+
+  // ✅ FIX: relación con promociones aplicadas — permite traerlas en el mismo query
+  // Nota: VentaPromocionAplicada usa venta_id + tipo_venta_id (1=producto, 2=servicio).
+  // No podemos usar una FK directa con relación TypeORM porque venta_id es polimórfico.
+  // La estrategia correcta es hacer el join manual en el service (ver venta-producto.service.ts).
+  // Declaramos la propiedad como virtual para que el frontend la reciba serializada.
+  promociones_aplicadas?: VentaPromocionAplicada[];
 }

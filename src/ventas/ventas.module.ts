@@ -16,6 +16,9 @@ import { Servicios } from '../catalogos/servicios.entity';
 import { Paquete } from '../catalogos/paquete.entity';
 import { Producto } from '../inventario/entities/producto.entity';
 
+// ✅ FIX: importar VentaPromocionAplicada para poder inyectar su repositorio en los services
+import { VentaPromocionAplicada } from '../promociones/entities/venta-promocion-aplicada.entity';
+
 import { CompradorExternoService } from './services/comprador-externo.service';
 import { VentaServicioService } from './services/venta-servicio.service';
 import { VentaProductoService } from './services/venta-producto.service';
@@ -45,19 +48,21 @@ import { TipoComprobanteController } from './controllers/tipo-comprobante.contro
       Paquete,
       Producto,
       TipoComprobante,
+      // ✅ FIX: registrar VentaPromocionAplicada para que los services puedan inyectar su repo
+      VentaPromocionAplicada,
     ]),
   ],
   providers: [
     CompradorExternoService,
     VentaServicioService,
     VentaProductoService,
-    TipoComprobanteService
+    TipoComprobanteService,
   ],
   controllers: [
     CompradorExternoController,
     VentaServicioController,
     VentaProductoController,
-    TipoComprobanteController
+    TipoComprobanteController,
   ],
   exports: [VentaServicioService],
 })

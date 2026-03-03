@@ -22,11 +22,18 @@ const ALCANCE_CATEGORIA = 2;
 const ALCANCE_SERVICIO = 3;
 const ALCANCE_PAQUETE = 4;
 
+export interface ProductoRegalo {
+  producto_id: number;
+  nombre: string;
+  precio_unitario: number;
+}
+
 export interface PromocionAplicable {
   promocion: Promocion;
   itemsAplicables: ItemVentaDto[];
   descuento: number;
   mensaje: string;
+  producto_regalo?: ProductoRegalo | null;
 }
 
 @Injectable()
@@ -140,12 +147,23 @@ export class AplicadorPromocionService {
         itemsAplicables,
       );
 
-      if (descuento > 0) {
+      // Para producto regalo: construir el objeto regalo y agregarlo aunque descuento sea 0
+      const productoRegalo = regla.beneficio_tipo_id === BENEFICIO_PRODUCTO_REGALO && regla.beneficio_producto
+        ? {
+            producto_id: regla.beneficio_producto.id,
+            nombre: regla.beneficio_producto.nombre,
+            precio_unitario: parseFloat(String(regla.beneficio_valor ?? 0)),
+          }
+        : null;
+
+      if (descuento > 0 || productoRegalo) {
+        const descuentoFinal = productoRegalo ? productoRegalo.precio_unitario : descuento;
         return {
           promocion,
           itemsAplicables,
-          descuento,
-          mensaje: this.generarMensaje(promocion, regla, descuento),
+          descuento: descuentoFinal,
+          mensaje: this.generarMensaje(promocion, regla, descuentoFinal, productoRegalo),
+          producto_regalo: productoRegalo,
         };
       }
     }
@@ -256,9 +274,8 @@ export class AplicadorPromocionService {
       }
 
       case BENEFICIO_PRODUCTO_REGALO: {
-        // Este tipo de beneficio no genera descuento monetario directo
-        // Se debe agregar el producto como regalo (cantidad = 1, precio = 0)
-        return 0;
+        // El precio real se calcula desde beneficio_valor en evaluarPromocion
+        return -1;
       }
 
       default:
@@ -301,8 +318,11 @@ export class AplicadorPromocionService {
     promocion: Promocion,
     regla: any,
     descuento: number,
+    productoRegalo?: ProductoRegalo | null,
   ): string {
-    const beneficio = regla.beneficio_tipo.nombre;
+    if (productoRegalo) {
+      return `${promocion.nombre}: Regalo - ${productoRegalo.nombre} (S/ ${productoRegalo.precio_unitario.toFixed(2)})`;
+    }
     return `${promocion.nombre}: S/ ${descuento.toFixed(2)} de descuento`;
   }
 

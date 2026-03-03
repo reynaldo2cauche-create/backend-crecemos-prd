@@ -7,6 +7,8 @@ import { PacienteResponsable } from '../../pacientes/entities/paciente-responsab
 import { VentaServicioDetalle } from './venta-servicio-detalle.entity';
 import { TipoComprobante } from './tipo-comprobante.entity';
 import { Responsable } from 'src/pacientes/entities/responsable.entity';
+// ✅ FIX: importar la entidad de promociones aplicadas
+import { VentaPromocionAplicada } from '../../promociones/entities/venta-promocion-aplicada.entity';
 
 @Entity('venta_servicio')
 export class VentaServicio {
@@ -70,6 +72,9 @@ export class VentaServicio {
   @Column({ type: 'decimal', precision: 10, scale: 2, default: 0.00, comment: 'Monto calculado del descuento global' })
   descuento_monto: number;
 
+  @Column({ type: 'decimal', precision: 10, scale: 2, default: 0.00, comment: 'Descuento por promociones automáticas' })
+  descuento_promocion: number;
+
   @Column({ type: 'decimal', precision: 10, scale: 2, comment: 'subtotal - descuento_monto' })
   total: number;
 
@@ -90,4 +95,7 @@ export class VentaServicio {
 
   @OneToMany(() => VentaServicioDetalle, (d) => d.venta, { cascade: true })
   detalles: VentaServicioDetalle[];
+
+  // ✅ FIX: propiedad virtual para recibir las promociones aplicadas cargadas desde el service
+  promociones_aplicadas?: VentaPromocionAplicada[];
 }
