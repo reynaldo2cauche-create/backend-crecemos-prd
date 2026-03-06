@@ -1,19 +1,6 @@
 import { IsString, IsInt, IsArray, ValidateNested, IsDateString, Min, IsOptional } from 'class-validator';
 import { Type } from 'class-transformer';
 
-export class ReglaDto {
-  @IsInt()
-  tipo_compra_id: number;
-
-  @IsOptional()
-  @IsInt()
-  paquete_id?: number;
-
-  @IsInt()
-  @Min(1)
-  opciones_por_unidad: number;
-}
-
 export class GanadorDto {
   @IsInt()
   paciente_id: number;
@@ -42,15 +29,7 @@ export class CrearSorteoDto {
   @IsInt()
   @Min(1)
   cantidad_ganadores: number;
-
-  // ✅ REGLAS AHORA SON OPCIONALES (para sorteos manuales)
-  @IsOptional()
-  @IsArray()
-  @ValidateNested({ each: true })
-  @Type(() => ReglaDto)
-  reglas?: ReglaDto[];
 }
-
 
 export class RealizarSorteoDto extends CrearSorteoDto {
   @IsArray()

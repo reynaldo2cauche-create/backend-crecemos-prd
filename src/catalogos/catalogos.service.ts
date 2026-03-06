@@ -17,6 +17,8 @@ import { EstadoCivil } from './estado-civil.entity';
 import { Parentesco } from './parentesco.entity';
 import { NivelEducacion } from './nivel-educacion.entity';
 import { Paquete } from './paquete.entity';
+import { Modalidad } from './modalidad.entity';
+import { Frecuencia } from './frecuencia.entity';
 
 
 @Injectable()
@@ -54,6 +56,10 @@ export class CatalogosService {
     private nivelEducacionRepository: Repository<NivelEducacion>,
     @InjectRepository(Paquete)
     private paqueteRepository: Repository<Paquete>,
+    @InjectRepository(Modalidad)
+    private modalidadRepository: Repository<Modalidad>,
+    @InjectRepository(Frecuencia)
+    private frecuenciaRepository: Repository<Frecuencia>,
   ) {}
 
   getTipoDocumento() {
@@ -97,7 +103,7 @@ export class CatalogosService {
   }
 
   getServicios() {
-    return this.serviciosRepository.find({ where: { activo: true }, relations: ['area'] });
+    return this.serviciosRepository.find({ where: { activo: true }, relations: ['area', 'especialidad'] });
   }
 
   getGradoEscolar() {
@@ -160,6 +166,20 @@ export class CatalogosService {
     return this.paqueteRepository.find({
       where: { flgActivo: true },
       order: { cantidadSesiones: 'ASC' }
+    });
+  }
+
+  getModalidades() {
+    return this.modalidadRepository.find({
+      where: { activo: true },
+      order: { nombre: 'ASC' }
+    });
+  }
+
+  getFrecuencias() {
+    return this.frecuenciaRepository.find({
+      where: { activo: true },
+      order: { id: 'ASC' }
     });
   }
 }

@@ -6,11 +6,9 @@ import {
   Body,
   Param,
   Query,
-  Res,
   UseGuards,
   Request,
 } from '@nestjs/common';
-import { Response } from 'express';
 import { SorteoService } from './sorteo.service';
 import { CrearSorteoDto, RealizarSorteoDto } from './dto/crear-sorteo.dto';
 import { CrearSorteoManualDto, AgregarParticipanteDto, AgregarMultiplesParticipantesDto, FinalizarSorteoManualDto } from './dto/sorteo-manual.dto';
@@ -23,27 +21,7 @@ import { RolesGuard } from '../auth/roles.guard';
 export class SorteoController {
   constructor(private readonly sorteoService: SorteoService) {}
 
-  // ========== STATIC ROUTES (HIGH PRIORITY) ==========
 
-  /**
-   * 📦 GET /sorteos/paquetes
-   * Obtiene todos los paquetes activos
-   */
-  @Get('paquetes')
-  @UseGuards(JwtAuthGuard)
-  async obtenerPaquetes() {
-    return this.sorteoService.obtenerPaquetes();
-  }
-
-  /**
-   * 📋 GET /sorteos/tipos-compra
-   * Obtiene todos los tipos de compra
-   */
-  @Get('tipos-compra')
-  @UseGuards(JwtAuthGuard)
-  async obtenerTiposCompra() {
-    return this.sorteoService.obtenerTiposCompra();
-  }
 
   /**
    * 📚 GET /sorteos/historial
@@ -111,24 +89,6 @@ export class SorteoController {
    * 🎯 GET /sorteos/:id/pacientes-elegibles
    * Obtiene pacientes elegibles según las reglas del sorteo*/
 
-
-  /**
-   * 📄 GET /sorteos/:id/pdf
-   * Genera PDF de resultados del sorteo
-   */
-  @Get(':id/pdf')
-  @Roles('Administrador', 'Admision')
-  async generarPDF(@Param('id') id: number, @Res() res: Response) {
-    const buffer = await this.sorteoService.generarPDF(id);
-
-    res.set({
-      'Content-Type': 'application/pdf',
-      'Content-Disposition': `attachment; filename=sorteo_${id}.pdf`,
-      'Content-Length': buffer.length,
-    });
-
-    res.send(buffer);
-  }
 
   /**
    * 🔍 GET /sorteos/:id

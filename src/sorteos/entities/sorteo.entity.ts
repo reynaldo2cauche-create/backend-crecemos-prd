@@ -1,15 +1,9 @@
 import {
-  Entity,
-  PrimaryGeneratedColumn,
-  Column,
-  CreateDateColumn,
-  UpdateDateColumn,
-  OneToMany,
-  ManyToOne,
-  JoinColumn
+  Entity, PrimaryGeneratedColumn, Column, CreateDateColumn,
+  UpdateDateColumn, OneToMany, ManyToOne, JoinColumn
 } from 'typeorm';
-
 import { SorteoGanador } from './sorteo-ganador.entity';
+import { SorteoParticipante } from './sorteo-participante.entity';
 import { EstadoSorteo } from './estado-sorteo.entity';
 import { TrabajadorCentro } from 'src/usuarios/trabajador-centro.entity';
 
@@ -43,19 +37,18 @@ export class Sorteo {
   @JoinColumn({ name: 'estado_sorteo_id' })
   estadoSorteo: EstadoSorteo;
 
-
-
   @OneToMany(() => SorteoGanador, ganador => ganador.sorteo)
   ganadores: SorteoGanador[];
 
-  // ✅ Columnas de auditoría
+  @OneToMany(() => SorteoParticipante, participante => participante.sorteo)
+  participantes: SorteoParticipante[];
+
   @Column({ type: 'int', name: 'user_crea_id', nullable: true })
   userCreaId: number;
 
   @Column({ type: 'int', name: 'user_actua_id', nullable: true })
   userActuaId: number;
 
-  // ✅ Relaciones con trabajador_centro
   @ManyToOne(() => TrabajadorCentro, { nullable: true })
   @JoinColumn({ name: 'user_crea_id' })
   userCrea: TrabajadorCentro;
@@ -69,6 +62,4 @@ export class Sorteo {
 
   @UpdateDateColumn({ name: 'updated_at' })
   updatedAt: Date;
-
-  
 }
