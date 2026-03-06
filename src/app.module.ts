@@ -122,6 +122,13 @@ import { SorteoParticipante } from './sorteos/entities/sorteo-participante.entit
 
 import { TipoCompra } from './sorteos/entities/tipo-compra.entity';
 import { Paquete } from './catalogos/paquete.entity';
+import { Modalidad } from './catalogos/modalidad.entity';
+import { Frecuencia } from './catalogos/frecuencia.entity';
+import { IndicacionTerapeutica } from './historia-clinica/entities/indicacion-terapeutica.entity';
+import { IndicacionCita } from './historia-clinica/entities/indicacion-cita.entity';
+import { IndicacionReferencia } from './historia-clinica/entities/indicacion-referencia.entity';
+import { IndicacionRecomendaciones } from './historia-clinica/entities/indicacion-recomendaciones.entity';
+import { IndicacionMateriales } from './historia-clinica/entities/indicacion-materiales.entity';
 
 // ── Inventario ────────────────────────────────────────────────────────────────
 import { InventarioModule } from './inventario/inventario.module';
@@ -307,9 +314,16 @@ import { TipoVentaPromo } from './promociones/entities/tipo-venta-promo.entity';
         SorteoGanador,
         EstadoSorteo,
         SorteoParticipante,
-
+        TipoCompra,
 
         Paquete,
+        Modalidad,
+        Frecuencia,
+        IndicacionTerapeutica,
+        IndicacionCita,
+        IndicacionReferencia,
+        IndicacionRecomendaciones,
+        IndicacionMateriales,
         // Inventario
         CategoriaProducto,
         Proveedor,

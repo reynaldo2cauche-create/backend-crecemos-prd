@@ -89,4 +89,14 @@ export class CatalogosController {
   getPaquetes() {
     return this.catalogosService.getPaquetes();
   }
+
+  @Get('modalidades')
+  getModalidades() {
+    return this.catalogosService.getModalidades();
+  }
+
+  @Get('frecuencias')
+  getFrecuencias() {
+    return this.catalogosService.getFrecuencias();
+  }
 }
