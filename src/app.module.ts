@@ -49,6 +49,7 @@ import { ParejaPaciente } from './pacientes/entities/pareja-paciente.entity';
 import { PacienteResponsable } from './pacientes/entities/paciente-responsable.entity';
 import { HistoriaClinicaModule } from './historia-clinica/historia-clinica.module';
 import { CitasModule } from './citas/citas.module';
+import { BloqueosModule } from './bloqueos/bloqueos.module';
 import { ReporteEvolucion } from './historia-clinica/entities/reporte-evolucion.entity';
 import { EntrevistaPadres } from './historia-clinica/entities/entrevista-padres.entity';
 import { ArchivoDigital } from './historia-clinica/entities/archivo-digital.entity';
@@ -377,6 +378,7 @@ import { TipoVentaPromo } from './promociones/entities/tipo-venta-promo.entity';
     TrabajadorCentroModule,
     HistoriaClinicaModule,
     CitasModule,
+    BloqueosModule,
     PopupModule,
     RrhhModule,
     AuditoriaModule,

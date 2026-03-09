@@ -99,4 +99,9 @@ export class CatalogosController {
   getFrecuencias() {
     return this.catalogosService.getFrecuencias();
   }
+
+  @Get('tipo-bloqueo')
+  getTipoBloqueo() {
+    return this.catalogosService.getTipoBloqueo();
+  }
 }

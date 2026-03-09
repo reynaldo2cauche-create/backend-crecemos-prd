@@ -498,44 +498,85 @@ export class NotaEvolucionService {
         .getManyAndCount();
 
     } else if (terapeutaId) {
-      // Obtener las especialidades de los servicios que tiene asignados
-      // este terapeuta con el paciente (activos e históricos)
-      const especialidades = await this.asignacionRepository
-        .createQueryBuilder('asig')
-        .innerJoin('asig.pacienteServicio', 'ps')
-        .innerJoin('ps.servicio', 's')
-        .where('asig.terapeuta_id = :terapeutaId', { terapeutaId })
-        .andWhere('ps.paciente_id = :paciente_id', { paciente_id })
-        .andWhere('s.especialidad_id IS NOT NULL')
-        .select('DISTINCT s.especialidad_id', 'id')
-        .getRawMany();
+      // Verificar si el usuario es jefe de área
+      const esJefeDeArea = usuario?.rol?.id === 4 && usuario?.cargo?.es_jefe === true;
 
-      const especialidadIds = especialidades.map(e => e.id).filter(Boolean);
+      if (esJefeDeArea) {
+        console.log('👔 Usuario es JEFE DE ÁREA - filtrando por subordinados');
 
-      console.log('📋 Especialidades del terapeuta con este paciente:', especialidadIds);
+        // Obtener subordinados del jefe
+        const subordinados = await this.trabajadorRepository.find({
+          where: { jefe: { id: terapeutaId } },
+          select: ['id', 'nombres', 'apellidos']
+        });
 
-      if (especialidadIds.length === 0) {
-        console.log('⚠️ Sin asignaciones para este paciente - devolviendo vacío');
-        return { data: [], total: 0, page, totalPages: 0 };
+        const subordinadosIds = subordinados.map(s => s.id);
+        console.log('👥 Subordinados del jefe:', subordinadosIds, subordinados.map(s => `${s.nombres} ${s.apellidos}`));
+
+        if (subordinadosIds.length === 0) {
+          console.log('⚠️ Jefe sin subordinados - devolviendo vacío');
+          return { data: [], total: 0, page, totalPages: 0 };
+        }
+
+        // Ver todas las notas del paciente creadas por subordinados
+        [notas, total] = await this.notaEvolucionRepository
+          .createQueryBuilder('nota')
+          .leftJoinAndSelect('nota.servicio', 'servicio')
+          .leftJoinAndSelect('servicio.especialidad', 'especialidad')
+          .leftJoinAndSelect('nota.usuarioCreador', 'usuario')
+          .leftJoinAndSelect('usuario.especialidad', 'usuarioEspecialidad')
+          .leftJoinAndSelect('usuario.rol', 'rol')
+          .where('nota.paciente_id = :paciente_id', { paciente_id })
+          .andWhere('usuario.id IN (:...subordinadosIds)', { subordinadosIds })
+          .orderBy('nota.fecha_crea', 'DESC')
+          .take(limit)
+          .skip((page - 1) * limit)
+          .getManyAndCount();
+
+        console.log(`✅ Notas de subordinados visibles: ${total}`);
+
+      } else {
+        console.log('👨‍⚕️ Terapeuta regular - filtrando por especialidades');
+
+        // Obtener las especialidades de los servicios que tiene asignados
+        // este terapeuta con el paciente (activos e históricos)
+        const especialidades = await this.asignacionRepository
+          .createQueryBuilder('asig')
+          .innerJoin('asig.pacienteServicio', 'ps')
+          .innerJoin('ps.servicio', 's')
+          .where('asig.terapeuta_id = :terapeutaId', { terapeutaId })
+          .andWhere('ps.paciente_id = :paciente_id', { paciente_id })
+          .andWhere('s.especialidad_id IS NOT NULL')
+          .select('DISTINCT s.especialidad_id', 'id')
+          .getRawMany();
+
+        const especialidadIds = especialidades.map(e => e.id).filter(Boolean);
+
+        console.log('📋 Especialidades del terapeuta con este paciente:', especialidadIds);
+
+        if (especialidadIds.length === 0) {
+          console.log('⚠️ Sin asignaciones para este paciente - devolviendo vacío');
+          return { data: [], total: 0, page, totalPages: 0 };
+        }
+
+        // Ver todas las notas del paciente cuyos servicios tengan
+        // la misma especialidad_id que los servicios asignados al terapeuta
+        [notas, total] = await this.notaEvolucionRepository
+          .createQueryBuilder('nota')
+          .innerJoinAndSelect('nota.servicio', 'servicio')
+          .innerJoinAndSelect('servicio.especialidad', 'especialidad')
+          .leftJoinAndSelect('nota.usuarioCreador', 'usuario')
+          .leftJoinAndSelect('usuario.especialidad', 'usuarioEspecialidad')
+          .leftJoinAndSelect('usuario.rol', 'rol')
+          .where('nota.paciente_id = :paciente_id', { paciente_id })
+          .andWhere('especialidad.id IN (:...especialidadIds)', { especialidadIds })
+          .orderBy('nota.fecha_crea', 'DESC')
+          .take(limit)
+          .skip((page - 1) * limit)
+          .getManyAndCount();
+
+        console.log(`✅ Notas visibles: ${total}`);
       }
-
-      // Ver todas las notas del paciente cuyos servicios tengan
-      // la misma especialidad_id que los servicios asignados al terapeuta
-      [notas, total] = await this.notaEvolucionRepository
-        .createQueryBuilder('nota')
-        .innerJoinAndSelect('nota.servicio', 'servicio')
-        .innerJoinAndSelect('servicio.especialidad', 'especialidad')
-        .leftJoinAndSelect('nota.usuarioCreador', 'usuario')
-        .leftJoinAndSelect('usuario.especialidad', 'usuarioEspecialidad')
-        .leftJoinAndSelect('usuario.rol', 'rol')
-        .where('nota.paciente_id = :paciente_id', { paciente_id })
-        .andWhere('especialidad.id IN (:...especialidadIds)', { especialidadIds })
-        .orderBy('nota.fecha_crea', 'DESC')
-        .take(limit)
-        .skip((page - 1) * limit)
-        .getManyAndCount();
-
-      console.log(`✅ Notas visibles: ${total}`);
 
     } else {
       console.log('⚠️ Sin usuario identificado - devolviendo vacío');

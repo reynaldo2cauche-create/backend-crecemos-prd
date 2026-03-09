@@ -5,7 +5,7 @@ import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
 import { Auditable } from 'src/auditoria/decorators/auditable.decorator';
 
 @Controller('backend_api/pacientes/:pacienteId/responsables')
-@UseGuards(JwtAuthGuard)
+
 export class PacienteResponsableController {
   constructor(
     private readonly responsableService: PacienteResponsableService,
