@@ -125,6 +125,8 @@ import { TipoCompra } from './sorteos/entities/tipo-compra.entity';
 import { Paquete } from './catalogos/paquete.entity';
 import { Modalidad } from './catalogos/modalidad.entity';
 import { Frecuencia } from './catalogos/frecuencia.entity';
+import { TipoBloqueo } from './catalogos/tipo-bloqueo.entity';
+import { BloqueoHorarios } from './bloqueos/entities/bloqueo-horarios.entity';
 import { IndicacionTerapeutica } from './historia-clinica/entities/indicacion-terapeutica.entity';
 import { IndicacionCita } from './historia-clinica/entities/indicacion-cita.entity';
 import { IndicacionReferencia } from './historia-clinica/entities/indicacion-referencia.entity';
@@ -320,6 +322,8 @@ import { TipoVentaPromo } from './promociones/entities/tipo-venta-promo.entity';
         Paquete,
         Modalidad,
         Frecuencia,
+        TipoBloqueo,
+        BloqueoHorarios,
         IndicacionTerapeutica,
         IndicacionCita,
         IndicacionReferencia,

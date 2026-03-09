@@ -4,7 +4,7 @@ import { CreateBloqueoDto } from './dto/create-bloqueo.dto';
 import { UpdateBloqueoDto } from './dto/update-bloqueo.dto';
 import { VerificarBloqueoDto } from './dto/verificar-bloqueo.dto';
 
-@Controller('bloqueos')
+@Controller('backend_api/bloqueos')
 export class BloqueosController {
   constructor(private readonly bloqueosService: BloqueosService) {}
 
