@@ -20,10 +20,11 @@ import { CatalogosController } from './catalogos.controller';
 import { Paquete } from './paquete.entity';
 import { Modalidad } from './modalidad.entity';
 import { Frecuencia } from './frecuencia.entity';
+import { TipoBloqueo } from './tipo-bloqueo.entity';
 
 @Module({
   imports: [TypeOrmModule.forFeature([
-    TipoDocumento, Sexo, Distrito, Provincia, Paquete,RelacionResponsable, AreaServicio, Servicios, GradoEscolar, Atenciones, RelacionPadres, AntecedentesFamiliares, Ocupaciones, EstadoCivil, Parentesco, NivelEducacion, Modalidad, Frecuencia
+    TipoDocumento, Sexo, Distrito, Provincia, Paquete,RelacionResponsable, AreaServicio, Servicios, GradoEscolar, Atenciones, RelacionPadres, AntecedentesFamiliares, Ocupaciones, EstadoCivil, Parentesco, NivelEducacion, Modalidad, Frecuencia, TipoBloqueo
   ])],
   providers: [CatalogosService],
   controllers: [CatalogosController],

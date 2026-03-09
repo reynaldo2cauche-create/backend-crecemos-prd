@@ -19,6 +19,7 @@ import { NivelEducacion } from './nivel-educacion.entity';
 import { Paquete } from './paquete.entity';
 import { Modalidad } from './modalidad.entity';
 import { Frecuencia } from './frecuencia.entity';
+import { TipoBloqueo } from './tipo-bloqueo.entity';
 
 
 @Injectable()
@@ -60,6 +61,8 @@ export class CatalogosService {
     private modalidadRepository: Repository<Modalidad>,
     @InjectRepository(Frecuencia)
     private frecuenciaRepository: Repository<Frecuencia>,
+    @InjectRepository(TipoBloqueo)
+    private tipoBloqueoRepository: Repository<TipoBloqueo>,
   ) {}
 
   getTipoDocumento() {
@@ -178,6 +181,13 @@ export class CatalogosService {
 
   getFrecuencias() {
     return this.frecuenciaRepository.find({
+      where: { activo: true },
+      order: { id: 'ASC' }
+    });
+  }
+
+  getTipoBloqueo() {
+    return this.tipoBloqueoRepository.find({
       where: { activo: true },
       order: { id: 'ASC' }
     });
