@@ -21,7 +21,7 @@ export class HistorialCita {
   @JoinColumn({ name: 'cita_id' })
   cita: Cita;
 
-  @Column({ type: 'int', name: 'paciente_id' })
+  @Column({ type: 'int', name: 'paciente_id', nullable: true })
   paciente_id: number;
 
   @ManyToOne(() => Paciente)
