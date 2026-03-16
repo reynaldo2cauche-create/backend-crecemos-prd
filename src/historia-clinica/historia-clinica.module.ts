@@ -6,6 +6,7 @@ import { HistoriaClinicaService } from './historia-clinica.service';
 
 import { ReporteEvolucion } from './entities/reporte-evolucion.entity';
 import { EntrevistaPadres } from './entities/entrevista-padres.entity';
+import { EntrevistaAdultos } from './entities/entrevista-adultos.entity';
 import { HermanoEntrevista } from './entities/hermano-entrevista.entity';
 import { FamiliarEntrevista } from './entities/familiar-entrevista.entity';
 import { ArchivoDigital } from './entities/archivo-digital.entity';
@@ -26,6 +27,8 @@ import { TiposArchivoController } from './tipo-archivo.controller';
 import { TiposArchivoService } from './tipo-archivo.service';
 import { ArchivosDigitalesController } from './archivos-digitales.controller';
 import { ArchivosDigitalesService } from './archivos-digitales.service';
+import { EntrevistaAdultosController } from './entrevista-adultos.controller';
+import { EntrevistaAdultosService } from './entrevista-adultos.service';
 import { AuditoriaModule } from '../auditoria/auditoria.module';
 import { IndicacionTerapeutica } from './entities/indicacion-terapeutica.entity';
 import { IndicacionCita } from './entities/indicacion-cita.entity';
@@ -45,6 +48,7 @@ import { Especialidad } from '../usuarios/especialidad.entity';
     TypeOrmModule.forFeature([
       ReporteEvolucion,
       EntrevistaPadres,
+      EntrevistaAdultos,
       EvaluacionTerapiaOcupacional,
       HermanoEntrevista,
       FamiliarEntrevista,
@@ -69,8 +73,8 @@ import { Especialidad } from '../usuarios/especialidad.entity';
     ]),
     AuditoriaModule,
   ],
-  controllers: [HistoriaClinicaController,ArchivosOficialesController,ArchivosTerapiaController,TiposArchivoController,ArchivosDigitalesController,IndicacionTerapeuticaController],
-  providers: [HistoriaClinicaService, ArchivosTerapiaService, ArchivosOficialesService, TiposArchivoService,ArchivosDigitalesService,IndicacionTerapeuticaService],
-  exports: [HistoriaClinicaService, ArchivosTerapiaService, ArchivosOficialesService, TiposArchivoService,ArchivosDigitalesService,IndicacionTerapeuticaService],
+  controllers: [HistoriaClinicaController,ArchivosOficialesController,ArchivosTerapiaController,TiposArchivoController,ArchivosDigitalesController,IndicacionTerapeuticaController,EntrevistaAdultosController],
+  providers: [HistoriaClinicaService, ArchivosTerapiaService, ArchivosOficialesService, TiposArchivoService,ArchivosDigitalesService,IndicacionTerapeuticaService,EntrevistaAdultosService],
+  exports: [HistoriaClinicaService, ArchivosTerapiaService, ArchivosOficialesService, TiposArchivoService,ArchivosDigitalesService,IndicacionTerapeuticaService,EntrevistaAdultosService],
 })
 export class HistoriaClinicaModule {}

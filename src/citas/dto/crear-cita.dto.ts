@@ -1,9 +1,10 @@
 import { IsInt, IsString, IsOptional, IsArray, IsBoolean, IsObject } from 'class-validator';
 
 export class CrearCitaDto {
-  // Común para todos los tipos
+  // Común para todos los tipos (opcional para reuniones clínicas)
+  @IsOptional()
   @IsInt()
-  paciente_id: number;
+  paciente_id?: number;
 
   @IsInt()
   motivo_id: number;

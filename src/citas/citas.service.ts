@@ -108,13 +108,15 @@ export class CitasService {
   }
 
   async crear(dto: CrearCitaDto): Promise<any> {
-    // Validar que el paciente no tenga otra cita solapada ese día
-    await this.verificarConflictoPaciente(
-      dto.paciente_id,
-      dto.fecha,
-      dto.hora_inicio,
-      dto.hora_fin,
-    );
+    // Validar que el paciente no tenga otra cita solapada ese día (solo si hay paciente)
+    if (dto.paciente_id) {
+      await this.verificarConflictoPaciente(
+        dto.paciente_id,
+        dto.fecha,
+        dto.hora_inicio,
+        dto.hora_fin,
+      );
+    }
 
     const tipoCita = await this.determinarTipoCita(dto.motivo_id);
     console.log(`🔍 Creando cita tipo: ${tipoCita}`);
@@ -130,8 +132,11 @@ export class CitasService {
     throw new BadRequestException('Tipo de cita no soportado');
   }
 
-  
+
   private async crearCitaNormal(dto: CrearCitaDto): Promise<Cita> {
+    if (!dto.paciente_id) {
+      throw new BadRequestException('Se requiere paciente_id para cita normal');
+    }
     if (!dto.doctor_id || !dto.servicio_id) {
       throw new BadRequestException('Se requiere doctor_id y servicio_id para cita normal');
     }
@@ -272,6 +277,9 @@ async crearMultiples(citas: CrearCitaDto[]): Promise<any> {
   }
 
   private async crearVisitaEscolar(dto: CrearCitaDto): Promise<Cita> {
+    if (!dto.paciente_id) {
+      throw new BadRequestException('Se requiere paciente_id para visita escolar');
+    }
     if (!dto.doctor_id) {
       throw new BadRequestException('Se requiere doctor_id para visita escolar');
     }
@@ -557,14 +565,16 @@ async listar(filtros: any = {}): Promise<any[]> {
   }
   const motivoAccionFinal = dto.motivo_accion.trim();
 
-  // Validar que el paciente no tenga otra cita solapada (excluyendo la cita actual)
-  await this.verificarConflictoPaciente(
-    dto.paciente_id,
-    dto.fecha,
-    dto.hora_inicio,
-    dto.hora_fin,
-    id,
-  );
+  // Validar que el paciente no tenga otra cita solapada (excluyendo la cita actual, solo si hay paciente)
+  if (dto.paciente_id) {
+    await this.verificarConflictoPaciente(
+      dto.paciente_id,
+      dto.fecha,
+      dto.hora_inicio,
+      dto.hora_fin,
+      id,
+    );
+  }
 
   const tipoCita = await this.determinarTipoCita(dto.motivo_id);
   console.log(`🔍 Actualizando cita ID ${id}, tipo: ${tipoCita}`);
@@ -716,6 +726,9 @@ async listar(filtros: any = {}): Promise<any[]> {
 }
 
 private async actualizarCitaNormal(id: number, dto: CrearCitaDto): Promise<any> {
+  if (!dto.paciente_id) {
+    throw new BadRequestException('Se requiere paciente_id para cita normal');
+  }
   if (!dto.doctor_id || !dto.servicio_id) {
     throw new BadRequestException('Se requiere doctor_id y servicio_id para cita normal');
   }
@@ -890,6 +903,9 @@ private async actualizarReunionClinica(id: number, dto: CrearCitaDto): Promise<a
 }
 
 private async actualizarVisitaEscolar(id: number, dto: CrearCitaDto): Promise<any> {
+  if (!dto.paciente_id) {
+    throw new BadRequestException('Se requiere paciente_id para visita escolar');
+  }
   if (!dto.doctor_id) {
     throw new BadRequestException('Se requiere doctor_id para visita escolar');
   }
@@ -1006,9 +1022,11 @@ private async actualizarVisitaEscolar(id: number, dto: CrearCitaDto): Promise<an
 
     // 🔔 Disparar notificación de cita eliminada
     try {
+      // Determinar el tipo de cita para el nombre correcto
+      const tipoCita = await this.determinarTipoCita(cita.motivo_id);
       const pacienteNombre = cita.paciente
         ? `${cita.paciente.nombres} ${cita.paciente.apellido_paterno} ${cita.paciente.apellido_materno || ''}`.trim()
-        : 'Paciente desconocido';
+        : (tipoCita === 'REUNION_CLINICA' ? 'Reunión Interna' : 'Sin paciente');
 
       const terapeutaNombre = cita.doctor
         ? `${cita.doctor.nombres} ${cita.doctor.apellidos}`

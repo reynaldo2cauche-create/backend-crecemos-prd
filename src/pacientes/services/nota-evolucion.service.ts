@@ -511,14 +511,14 @@ export class NotaEvolucionService {
         });
 
         const subordinadosIds = subordinados.map(s => s.id);
+
+        // ✅ INCLUIR AL PROPIO JEFE para que vea sus propias notas también
+        const idsParaBuscar = [...subordinadosIds, terapeutaId];
+
         console.log('👥 Subordinados del jefe:', subordinadosIds, subordinados.map(s => `${s.nombres} ${s.apellidos}`));
+        console.log('✅ IDs totales a buscar (subordinados + jefe):', idsParaBuscar);
 
-        if (subordinadosIds.length === 0) {
-          console.log('⚠️ Jefe sin subordinados - devolviendo vacío');
-          return { data: [], total: 0, page, totalPages: 0 };
-        }
-
-        // Ver todas las notas del paciente creadas por subordinados
+        // Ver todas las notas del paciente creadas por el jefe y sus subordinados
         [notas, total] = await this.notaEvolucionRepository
           .createQueryBuilder('nota')
           .leftJoinAndSelect('nota.servicio', 'servicio')
@@ -527,7 +527,7 @@ export class NotaEvolucionService {
           .leftJoinAndSelect('usuario.especialidad', 'usuarioEspecialidad')
           .leftJoinAndSelect('usuario.rol', 'rol')
           .where('nota.paciente_id = :paciente_id', { paciente_id })
-          .andWhere('usuario.id IN (:...subordinadosIds)', { subordinadosIds })
+          .andWhere('usuario.id IN (:...idsParaBuscar)', { idsParaBuscar })
           .orderBy('nota.fecha_crea', 'DESC')
           .take(limit)
           .skip((page - 1) * limit)

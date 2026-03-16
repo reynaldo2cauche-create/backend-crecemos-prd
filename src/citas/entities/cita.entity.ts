@@ -14,7 +14,7 @@ export class Cita {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @Column({ type: 'int' })
+  @Column({ type: 'int', nullable: true })
   paciente_id: number;
 
   @ManyToOne(() => Paciente)

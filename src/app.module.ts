@@ -168,6 +168,7 @@ import { TipoCondicionPromo } from './promociones/entities/tipo-condicion-promo.
 import { TipoBeneficioPromo } from './promociones/entities/tipo-beneficio-promo.entity';
 import { TipoAlcancePromo } from './promociones/entities/tipo-alcance-promo.entity';
 import { TipoVentaPromo } from './promociones/entities/tipo-venta-promo.entity';
+import { EntrevistaAdultos } from './historia-clinica/entities/entrevista-adultos.entity';
 
 
 @Module({
@@ -206,7 +207,7 @@ import { TipoVentaPromo } from './promociones/entities/tipo-venta-promo.entity';
       },
     }),
     TypeOrmModule.forRoot({
-      //  type: 'mysql',
+      // type: 'mysql',
       // host: 'localhost',
       // port: 3306,
       // username: 'crecemos',
@@ -256,6 +257,7 @@ import { TipoVentaPromo } from './promociones/entities/tipo-venta-promo.entity';
         PacienteResponsable,
         ReporteEvolucion,
         EntrevistaPadres,
+        EntrevistaAdultos,
         ArchivoDigital,
         TipoArchivo,
         Atenciones,

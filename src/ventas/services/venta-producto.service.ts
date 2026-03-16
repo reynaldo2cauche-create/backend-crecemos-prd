@@ -50,7 +50,7 @@ export class VentaProductoService {
       const ventaIds = ventas.map((v) => v.id);
       const promociones = await this.ventaPromoRepo.find({
         where: ventaIds.map((id) => ({ tipo_venta_id: TIPO_VENTA_PRODUCTO, venta_id: id })),
-        relations: ['promocion'],
+        relations: ['promocion', 'promocion.reglas', 'promocion.reglas.beneficio_producto'],
       });
 
       // Agrupar por venta_id y asignar
@@ -84,7 +84,7 @@ export class VentaProductoService {
     // ✅ FIX: cargar promociones aplicadas para este findOne también
     v.promociones_aplicadas = await this.ventaPromoRepo.find({
       where: { tipo_venta_id: TIPO_VENTA_PRODUCTO, venta_id: id },
-      relations: ['promocion'],
+      relations: ['promocion', 'promocion.reglas', 'promocion.reglas.beneficio_producto'],
     });
 
     return v;
