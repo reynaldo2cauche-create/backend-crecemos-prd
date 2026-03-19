@@ -17,6 +17,15 @@ export class CitasController {
   ) {}
 
   // ✅ RUTAS ESPECÍFICAS PRIMERO
+  @Get('paciente/:pacienteId/sesiones-disponibles')
+  async obtenerSesionesDisponibles(
+    @Param('pacienteId') pacienteId: string,
+    @Query('servicioId') servicioId?: string
+  ) {
+    const servicioIdNum = servicioId ? parseInt(servicioId) : undefined;
+    return this.citasService.obtenerSesionesDisponiblesPorPaciente(+pacienteId, servicioIdNum);
+  }
+
   @Get('catalogos/motivos')
   async getMotivosCita() {
     return this.citasService.getMotivosCita();

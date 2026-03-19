@@ -20,6 +20,9 @@ import { MotivoCita } from '../catalogos/motivo-cita.entity';
 import { EstadoCita } from '../catalogos/estado-cita.entity';
 import { TipoCita } from '../catalogos/tipo-cita.entity';
 
+// Ventas
+import { VentaServicioDetalle } from '../ventas/entities/venta-servicio-detalle.entity';
+
 // Servicios y controladores
 import { CitasService } from './citas.service';
 import { HistorialCitasService } from './historial-citas.service';
@@ -48,7 +51,9 @@ import { SorteoModule } from '../sorteos/sorteo.module';
       // Catálogos
       MotivoCita,
       EstadoCita,
-      TipoCita
+      TipoCita,
+      // Ventas
+      VentaServicioDetalle
     ]),
     forwardRef(() => NotificacionesModule),
     forwardRef(() => SorteoModule),

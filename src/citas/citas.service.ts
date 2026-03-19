@@ -12,6 +12,7 @@ import { TipoCita } from './entities/tipo-cita.entity';
 import { CrearCitaDto } from './dto/crear-cita.dto';
 import { HistorialCitasService } from './historial-citas.service';
 import { NotificacionesService } from '../notificaciones/notificaciones.service';
+import { VentaServicioDetalle } from '../ventas/entities/venta-servicio-detalle.entity';
 
 
 @Injectable()
@@ -33,6 +34,8 @@ export class CitasService {
     private estadoRepo: Repository<EstadoCita>,
     @InjectRepository(TipoCita)
     private tipoRepo: Repository<TipoCita>,
+    @InjectRepository(VentaServicioDetalle)
+    private ventaDetalleRepo: Repository<VentaServicioDetalle>,
     @Inject(forwardRef(() => HistorialCitasService))
     private historialService: HistorialCitasService,
     @Inject(forwardRef(() => NotificacionesService))
@@ -140,6 +143,43 @@ export class CitasService {
     if (!dto.doctor_id || !dto.servicio_id) {
       throw new BadRequestException('Se requiere doctor_id y servicio_id para cita normal');
     }
+
+    // ✅ VALIDAR SESIONES DISPONIBLES
+    if (!dto.venta_servicio_detalle_id) {
+      throw new BadRequestException(
+        'Se requiere seleccionar una sesión/paquete comprado. El paciente debe tener sesiones disponibles para agendar una cita.'
+      );
+    }
+
+    // Verificar que la sesión existe y pertenece al paciente
+    const sesion = await this.ventaDetalleRepo.findOne({
+      where: { id: dto.venta_servicio_detalle_id }
+    });
+
+    if (!sesion) {
+      throw new BadRequestException('La sesión seleccionada no existe');
+    }
+
+    if (sesion.paciente_id !== dto.paciente_id) {
+      throw new BadRequestException('La sesión seleccionada no pertenece al paciente');
+    }
+
+    if (sesion.sesiones_usadas >= sesion.sesiones_totales) {
+      throw new BadRequestException(
+        `El paquete/sesión seleccionado ya no tiene sesiones disponibles (${sesion.sesiones_usadas}/${sesion.sesiones_totales} usadas)`
+      );
+    }
+
+    // ✅ INCREMENTAR SESIONES USADAS
+    await this.ventaDetalleRepo.update(
+      { id: dto.venta_servicio_detalle_id },
+      { sesiones_usadas: sesion.sesiones_usadas + 1 }
+    );
+
+    console.log(
+      `📦 Sesión incrementada: venta_servicio_detalle_id=${dto.venta_servicio_detalle_id}, ` +
+      `sesiones_usadas=${sesion.sesiones_usadas + 1}/${sesion.sesiones_totales}`
+    );
 
     const cita = this.citaRepo.create({
       paciente_id: dto.paciente_id,
@@ -1464,6 +1504,73 @@ async obtenerEstadisticasSesiones(
       porcentaje: totalSesiones > 0 ? ((parseInt(s.total_sesiones) / totalSesiones) * 100).toFixed(1) : '0'
     }))
   };
+}
+
+/**
+ * Obtiene las sesiones/paquetes disponibles de un paciente
+ * Devuelve solo las líneas de venta donde sesiones_usadas < sesiones_totales
+ */
+async obtenerSesionesDisponiblesPorPaciente(pacienteId: number, servicioId?: number): Promise<any[]> {
+  try {
+    const query = `
+      SELECT
+        vsd.id,
+        vsd.venta_id,
+        vsd.servicio_id,
+        s.nombre as servicio_nombre,
+        vsd.tipo_venta_id,
+        tvs.nombre as tipo_venta_nombre,
+        vsd.paquete_id,
+        p.nombre as paquete_nombre,
+        vsd.sesiones_totales,
+        vsd.sesiones_usadas,
+        (vsd.sesiones_totales - vsd.sesiones_usadas) as sesiones_disponibles,
+        vsd.precio_unitario,
+        vsd.subtotal,
+        vs.fecha_venta,
+        vs.codigo_comprobante,
+        tc.nombre as tipo_comprobante_nombre
+      FROM venta_servicio_detalle vsd
+      INNER JOIN venta_servicio vs ON vs.id = vsd.venta_id
+      INNER JOIN servicios s ON s.id = vsd.servicio_id
+      INNER JOIN tipo_venta_servicio tvs ON tvs.id = vsd.tipo_venta_id
+      INNER JOIN tipo_comprobante tc ON tc.id = vs.tipo_comprobante_id
+      LEFT JOIN paquetes p ON p.id = vsd.paquete_id
+      WHERE vsd.paciente_id = ?
+        AND vsd.sesiones_usadas < vsd.sesiones_totales
+        ${servicioId ? 'AND vsd.servicio_id = ?' : ''}
+      ORDER BY vs.fecha_venta DESC, vsd.id DESC
+    `;
+
+    const params = servicioId ? [pacienteId, servicioId] : [pacienteId];
+    const sesiones = await this.citaRepo.query(query, params);
+
+    console.log(`📦 Sesiones disponibles para paciente ${pacienteId}:`, sesiones.length);
+
+    return sesiones.map(s => ({
+      id: s.id,
+      venta_id: s.venta_id,
+      servicio_id: s.servicio_id,
+      servicio_nombre: s.servicio_nombre,
+      tipo_venta_id: s.tipo_venta_id,
+      tipo_venta_nombre: s.tipo_venta_nombre,
+      paquete_id: s.paquete_id,
+      paquete_nombre: s.paquete_nombre,
+      sesiones_totales: parseInt(s.sesiones_totales),
+      sesiones_usadas: parseInt(s.sesiones_usadas),
+      sesiones_disponibles: parseInt(s.sesiones_disponibles),
+      precio_unitario: parseFloat(s.precio_unitario),
+      subtotal: parseFloat(s.subtotal),
+      fecha_venta: s.fecha_venta,
+      codigo_comprobante: s.codigo_comprobante,
+      tipo_comprobante_nombre: s.tipo_comprobante_nombre,
+      // Descripción para mostrar en el modal
+      descripcion: `${s.servicio_nombre}${s.paquete_nombre ? ` - ${s.paquete_nombre}` : ''} (${s.sesiones_disponibles}/${s.sesiones_totales} disponibles) - ${s.codigo_comprobante || 'Sin código'}`
+    }));
+  } catch (error) {
+    console.error('❌ Error al obtener sesiones disponibles:', error);
+    throw error;
+  }
 }
 
 }
