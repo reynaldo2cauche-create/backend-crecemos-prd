@@ -170,6 +170,18 @@ async obtenerNotificacionesRecientes(
       offset,
     ]);
 
+    console.log('🔍 [SQL] Usuario ID:', usuarioId, 'Rol ID:', rolId);
+    console.log('🔍 [SQL] Query params - limite:', limite, 'offset:', offset);
+    console.log('🔍 [SQL] Notificaciones RAW del query:', notificaciones.length);
+    if (notificaciones.length > 0) {
+      console.log('🔍 [SQL] Primera notificación RAW:', {
+        id: notificaciones[0].id,
+        titulo: notificaciones[0].titulo,
+        leida_campo: notificaciones[0].leida,
+        notif_leida_id: notificaciones[0].notif_leida_id
+      });
+    }
+
     // ============================================================
 // PASO 1: AGREGAR LOGS EN EL BACKEND (notificaciones.service.ts)
 // ============================================================
@@ -231,8 +243,11 @@ const notificacionesProcesadas = notificaciones.map(notif => {
   return resultado;
 });
 
-// 🔴 AGREGAR ESTE LOG ANTES DE RETORNAR:
+// 🔴 LOGS DE DEBUG
 console.log('📦 TOTAL notificaciones procesadas:', notificacionesProcesadas.length);
+console.log('📊 Notificaciones NO leídas:', notificacionesProcesadas.filter(n => !n.leida).length);
+console.log('📊 Notificaciones leídas:', notificacionesProcesadas.filter(n => n.leida).length);
+
 const citasModificadas = notificacionesProcesadas.filter(n => n.tipo_notificacion === 'CITA_MODIFICADA');
 console.log('📝 Total CITA_MODIFICADA:', citasModificadas.length);
 citasModificadas.forEach(cm => {

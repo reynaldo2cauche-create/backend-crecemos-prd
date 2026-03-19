@@ -13,6 +13,7 @@ export class CitasController {
   constructor(
     private readonly citasService: CitasService,
     private readonly historialService: HistorialCitasService,
+
   ) {}
 
   // ✅ RUTAS ESPECÍFICAS PRIMERO
@@ -116,4 +117,6 @@ async obtenerEstadisticasSesiones(@Query() query: any) {
   ) {
     return this.citasService.eliminar(+id, body.usuario_id, body.motivo_accion);
   }
+
+  // ==========================================
 }

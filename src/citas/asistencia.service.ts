@@ -276,9 +276,9 @@ export class AsistenciaService {
    * Obtener inconsistencias de asistencia en un rango de fechas
    * LÓGICA:
    * - Para citas en el rango de fechas especificado
-   * - Validar 24 horas DESDE la hora de la cita (no desde ahora)
+   * - Validar después de las 9pm del día de la cita (21:00)
    * - Detectar:
-   *   1. Ninguno marcó (después de 24h desde la cita)
+   *   1. Ninguno marcó (después de las 9pm del día de la cita o citas de días anteriores)
    *   2. Solo uno marcó (falta el otro)
    *   3. Ambos marcaron pero estados diferentes (6 vs 7)
    */
@@ -303,10 +303,10 @@ export class AsistenciaService {
           TIMESTAMPDIFF(HOUR, CONCAT(c.fecha, ' ', c.hora_inicio), NOW()) as horas_transcurridas,
           -- Determinar el tipo de inconsistencia
           CASE
-            -- Caso 1: Ninguno marcó Y ya pasaron 24 horas DESDE LA HORA DE LA CITA
+            -- Caso 1: Ninguno marcó Y ya pasaron las 9pm del día de la cita (o la cita fue en días anteriores)
             WHEN (COALESCE(sa.recepcion_marco, 0) = 0
                   AND COALESCE(sa.terapeuta_marco, 0) = 0
-                  AND TIMESTAMPDIFF(HOUR, CONCAT(c.fecha, ' ', c.hora_inicio), NOW()) >= 24)
+                  AND (c.fecha < CURDATE() OR (c.fecha = CURDATE() AND CURTIME() >= '21:00:00')))
             THEN 'Ninguno marcó asistencia'
 
             -- Caso 2: Solo terapeuta marcó (6 o 7), falta recepción
@@ -410,7 +410,7 @@ export class AsistenciaService {
 
   /**
    * Verificar inconsistencias por falta de marcado (ejecutado automáticamente)
-   * Revisa citas que tienen más de 24 horas desde su fecha y aún no han sido marcadas
+   * Revisa citas que ya pasaron las 9pm del día de la cita (21:00) y aún no han sido marcadas
    */
   async verificarInconsistenciasPorTiempo(): Promise<void> {
     console.log('🔍 Verificando inconsistencias de asistencia por tiempo...');
@@ -436,8 +436,8 @@ export class AsistenciaService {
         LEFT JOIN seguimiento_asistencia sa ON sa.cita_id = c.id
         INNER JOIN paciente p ON c.paciente_id = p.id
         INNER JOIN trabajador_centro tc ON c.doctor_id = tc.id
-        WHERE CONCAT(c.fecha, ' ', c.hora_inicio) <= DATE_SUB(NOW(), INTERVAL 24 HOUR)
-          AND CONCAT(c.fecha, ' ', c.hora_inicio) >= DATE_SUB(NOW(), INTERVAL 7 DAY)
+        WHERE (c.fecha < CURDATE() OR (c.fecha = CURDATE() AND CURTIME() >= '21:00:00'))
+          AND c.fecha >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
           AND (
             sa.id IS NULL OR
             sa.recepcion_marco = 0 OR

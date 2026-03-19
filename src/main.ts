@@ -5,6 +5,16 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { LoggingInterceptor } from './logging/logging.interceptor';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { join } from 'path';
+import * as dns from 'dns';
+
+// Configurar servidores DNS públicos para resolver dominios
+dns.setServers([
+  '8.8.8.8',       // Google DNS
+  '8.8.4.4',       // Google DNS secundario
+  '1.1.1.1',       // Cloudflare DNS
+]);
+
+console.log('🌐 DNS configurado:', dns.getServers());
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);

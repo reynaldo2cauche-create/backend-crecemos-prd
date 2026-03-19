@@ -169,6 +169,14 @@ import { TipoBeneficioPromo } from './promociones/entities/tipo-beneficio-promo.
 import { TipoAlcancePromo } from './promociones/entities/tipo-alcance-promo.entity';
 import { TipoVentaPromo } from './promociones/entities/tipo-venta-promo.entity';
 import { EntrevistaAdultos } from './historia-clinica/entities/entrevista-adultos.entity';
+import { LibroReclamacionesModule } from './libro-reclamaciones/libro-reclamaciones.module';
+import { LibroReclamacion } from './libro-reclamaciones/entities/reclamo.entity';
+import { LibroReclamacionesEstado } from './libro-reclamaciones/entities/estado.entity';
+import { LibroReclamacionesTipoSolicitud } from './libro-reclamaciones/entities/tipo-solicitud.entity';
+import { LibroReclamacionesTipoBien } from './libro-reclamaciones/entities/tipo-bien.entity';
+import { LibroReclamacionesDocumento } from './libro-reclamaciones/entities/documento.entity';
+import { LibroReclamacionesSeguimiento } from './libro-reclamaciones/entities/seguimiento.entity';
+import { LibroReclamacionesConfig } from './libro-reclamaciones/entities/config.entity';
 
 
 @Module({
@@ -358,6 +366,15 @@ import { EntrevistaAdultos } from './historia-clinica/entities/entrevista-adulto
         TipoBeneficioPromo,
         TipoAlcancePromo,
         TipoVentaPromo,
+        // Libro de Reclamaciones
+        LibroReclamacion,
+        LibroReclamacionesEstado,
+        LibroReclamacionesTipoSolicitud,
+        LibroReclamacionesTipoBien,
+        LibroReclamacionesDocumento,
+        LibroReclamacionesSeguimiento,
+        LibroReclamacionesConfig,
+        EntrevistaAdultos,
 
       ],
         synchronize: false,   // true en desarrollo, false en producción - DESHABILITADO para evitar conflictos con foreign keys
@@ -399,6 +416,7 @@ import { EntrevistaAdultos } from './historia-clinica/entities/entrevista-adulto
     InventarioModule,
     VentasModule,
     PromocionesModule,
+    LibroReclamacionesModule,
   ],
   controllers: [AppController],
   providers: [
