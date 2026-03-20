@@ -25,6 +25,9 @@ export class ServicioTarifa {
   @Column({ type: 'decimal', precision: 10, scale: 2 })
   precio: number;
 
+  @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true, name: 'precio_paquete' })
+  precio_paquete: number;
+
   @Column({ type: 'tinyint', default: 1 })
   flg_activo: number;
 

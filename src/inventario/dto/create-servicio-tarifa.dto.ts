@@ -16,6 +16,12 @@ export class CreateServicioTarifaDto {
   precio: number;
 
   @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @IsPositive()
+  @Type(() => Number)
+  precio_paquete?: number;
+
+  @IsOptional()
   user_crea_id?: number;
 }
 
@@ -25,6 +31,12 @@ export class UpdateServicioTarifaDto {
   @Min(0)
   @Type(() => Number)
   precio: number;
+
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @IsPositive()
+  @Type(() => Number)
+  precio_paquete?: number;
 
   @IsOptional()
   user_actua_id?: number;

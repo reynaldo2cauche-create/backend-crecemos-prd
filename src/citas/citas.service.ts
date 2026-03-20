@@ -1507,10 +1507,17 @@ async obtenerEstadisticasSesiones(
 }
 
 /**
+<<<<<<< Updated upstream
  * Obtiene las sesiones/paquetes disponibles de un paciente
  * Devuelve solo las líneas de venta donde sesiones_usadas < sesiones_totales
  */
 async obtenerSesionesDisponiblesPorPaciente(pacienteId: number, servicioId?: number): Promise<any[]> {
+=======
+ * BUSCA AUTOMÁTICAMENTE el paquete/sesión activa del paciente
+ * Devuelve el primer paquete con sesiones disponibles (más reciente)
+ */
+async obtenerPaqueteActivoPaciente(pacienteId: number, servicioId?: number): Promise<any> {
+>>>>>>> Stashed changes
   try {
     const query = `
       SELECT
@@ -1540,6 +1547,7 @@ async obtenerSesionesDisponiblesPorPaciente(pacienteId: number, servicioId?: num
         AND vsd.sesiones_usadas < vsd.sesiones_totales
         ${servicioId ? 'AND vsd.servicio_id = ?' : ''}
       ORDER BY vs.fecha_venta DESC, vsd.id DESC
+<<<<<<< Updated upstream
     `;
 
     const params = servicioId ? [pacienteId, servicioId] : [pacienteId];
@@ -1569,6 +1577,43 @@ async obtenerSesionesDisponiblesPorPaciente(pacienteId: number, servicioId?: num
     }));
   } catch (error) {
     console.error('❌ Error al obtener sesiones disponibles:', error);
+=======
+      LIMIT 1
+    `;
+
+    const params = servicioId ? [pacienteId, servicioId] : [pacienteId];
+    const resultado = await this.citaRepo.query(query, params);
+
+    if (!resultado || resultado.length === 0) {
+      console.log(`❌ No hay paquete activo para paciente ${pacienteId}`);
+      return null;
+    }
+
+    const paquete = resultado[0];
+    console.log(`📦 Paquete activo encontrado para paciente ${pacienteId}:`, paquete);
+
+    return {
+      id: paquete.id,
+      venta_id: paquete.venta_id,
+      servicio_id: paquete.servicio_id,
+      servicio_nombre: paquete.servicio_nombre,
+      tipo_venta_id: paquete.tipo_venta_id,
+      tipo_venta_nombre: paquete.tipo_venta_nombre,
+      paquete_id: paquete.paquete_id,
+      paquete_nombre: paquete.paquete_nombre,
+      sesiones_totales: parseInt(paquete.sesiones_totales),
+      sesiones_usadas: parseInt(paquete.sesiones_usadas),
+      sesiones_disponibles: parseInt(paquete.sesiones_disponibles),
+      precio_unitario: parseFloat(paquete.precio_unitario),
+      subtotal: parseFloat(paquete.subtotal),
+      fecha_venta: paquete.fecha_venta,
+      codigo_comprobante: paquete.codigo_comprobante,
+      tipo_comprobante_nombre: paquete.tipo_comprobante_nombre,
+      descripcion: `${paquete.servicio_nombre}${paquete.paquete_nombre ? ` - ${paquete.paquete_nombre}` : ''} (${paquete.sesiones_disponibles}/${paquete.sesiones_totales} disponibles) - ${paquete.codigo_comprobante || 'Sin código'}`
+    };
+  } catch (error) {
+    console.error('❌ Error al obtener paquete activo:', error);
+>>>>>>> Stashed changes
     throw error;
   }
 }

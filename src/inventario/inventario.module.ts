@@ -19,6 +19,7 @@ import { CompraReposicionController } from './controllers/compra-reposicion.cont
 import { ServicioTarifa } from './entities/servicio-tarifa.entity';
 import { ServicioTarifaService } from './services/servicio-tarifa.service';
 import { ServicioTarifaController } from './controllers/servicio-tarifa.controller';
+import { Paquete } from '../catalogos/paquete.entity';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { ServicioTarifaController } from './controllers/servicio-tarifa.controll
       CompraReposicion,
       CompraReposicionDetalle,
       ServicioTarifa,
+      Paquete,
     ]),
   ],
   providers: [

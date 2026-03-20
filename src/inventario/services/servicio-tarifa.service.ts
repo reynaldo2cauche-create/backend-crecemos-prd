@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, ConflictException } from '@nestjs/common
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ServicioTarifa } from '../entities/servicio-tarifa.entity';
+import { Paquete } from '../../catalogos/paquete.entity';
 import { CreateServicioTarifaDto, UpdateServicioTarifaDto } from '../dto/create-servicio-tarifa.dto';
 
 @Injectable()
@@ -9,6 +10,8 @@ export class ServicioTarifaService {
   constructor(
     @InjectRepository(ServicioTarifa)
     private readonly repo: Repository<ServicioTarifa>,
+    @InjectRepository(Paquete)
+    private readonly paqueteRepo: Repository<Paquete>,
   ) {}
 
   private baseQuery() {
@@ -22,7 +25,23 @@ export class ServicioTarifaService {
   async findAll(soloActivas = true) {
     const qb = this.baseQuery();
     if (soloActivas) qb.where('t.flg_activo = 1');
-    return qb.getMany();
+    const tarifas = await qb.getMany();
+
+    // 🆕 Calcular cantidad_minima_paquete dinámicamente desde paquetes activos
+    const paquetesActivos = await this.paqueteRepo.find({
+      where: { flgActivo: true },
+      order: { cantidadSesiones: 'ASC' }
+    });
+
+    const cantidadMinimaPaquete = paquetesActivos.length > 0
+      ? paquetesActivos[0].cantidadSesiones
+      : 4; // fallback si no hay paquetes
+
+    // Agregar cantidad_minima_paquete a cada tarifa
+    return tarifas.map(tarifa => ({
+      ...tarifa,
+      cantidad_minima_paquete: cantidadMinimaPaquete,
+    }));
   }
 
   async findByServicio(servicioId: number) {
