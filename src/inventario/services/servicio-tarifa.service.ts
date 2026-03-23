@@ -20,6 +20,7 @@ export class ServicioTarifaService {
   private baseQuery() {
     return this.repo.createQueryBuilder('t')
       .leftJoinAndSelect('t.servicio', 'servicio')
+      .leftJoinAndSelect('servicio.area', 'area')
       .leftJoinAndSelect('t.motivo_cita', 'motivo_cita')
       .orderBy('servicio.nombre', 'ASC')
       .addOrderBy('motivo_cita.nombre', 'ASC');

@@ -144,42 +144,11 @@ export class CitasService {
       throw new BadRequestException('Se requiere doctor_id y servicio_id para cita normal');
     }
 
-    // ✅ VALIDAR SESIONES DISPONIBLES
-    if (!dto.venta_servicio_detalle_id) {
-      throw new BadRequestException(
-        'Se requiere seleccionar una sesión/paquete comprado. El paciente debe tener sesiones disponibles para agendar una cita.'
-      );
-    }
+  
 
-    // Verificar que la sesión existe y pertenece al paciente
-    const sesion = await this.ventaDetalleRepo.findOne({
-      where: { id: dto.venta_servicio_detalle_id }
-    });
 
-    if (!sesion) {
-      throw new BadRequestException('La sesión seleccionada no existe');
-    }
 
-    if (sesion.paciente_id !== dto.paciente_id) {
-      throw new BadRequestException('La sesión seleccionada no pertenece al paciente');
-    }
-
-    if (sesion.sesiones_usadas >= sesion.sesiones_totales) {
-      throw new BadRequestException(
-        `El paquete/sesión seleccionado ya no tiene sesiones disponibles (${sesion.sesiones_usadas}/${sesion.sesiones_totales} usadas)`
-      );
-    }
-
-    // ✅ INCREMENTAR SESIONES USADAS
-    await this.ventaDetalleRepo.update(
-      { id: dto.venta_servicio_detalle_id },
-      { sesiones_usadas: sesion.sesiones_usadas + 1 }
-    );
-
-    console.log(
-      `📦 Sesión incrementada: venta_servicio_detalle_id=${dto.venta_servicio_detalle_id}, ` +
-      `sesiones_usadas=${sesion.sesiones_usadas + 1}/${sesion.sesiones_totales}`
-    );
+    
 
     const cita = this.citaRepo.create({
       paciente_id: dto.paciente_id,
