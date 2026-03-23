@@ -175,11 +175,12 @@ export class LibroReclamacionesController {
   }
 
   /**
-   * SERVIR ARCHIVOS DE RECLAMOS (PÚBLICO)
-   * Endpoint para servir documentos adjuntos a reclamos
+   * SERVIR ARCHIVOS DE RECLAMOS (PROTEGIDO - SOLO ADMINISTRADORES)
+   * Endpoint para servir documentos adjuntos a reclamos con autenticación
    */
-  @Public()
-  @Get('publico/archivo/:filename')
+  @Get('admin/archivo/:filename')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('Administrador')
   async getArchivo(@Param('filename') filename: string, @Res() res: Response) {
     // La ruta completa del archivo en el servidor
     const rutaArchivo = path.join(process.cwd(), 'uploads', 'reclamos', filename);
@@ -204,7 +205,7 @@ export class LibroReclamacionesController {
     const mimeType = mimeTypes[ext] || 'application/octet-stream';
 
     res.setHeader('Content-Type', mimeType);
-    res.setHeader('Cache-Control', 'public, max-age=31536000');
+    res.setHeader('Cache-Control', 'private, max-age=3600');
 
     const fileStream = fs.createReadStream(rutaArchivo);
     fileStream.pipe(res);
