@@ -29,6 +29,8 @@ import { VentaProductoController } from './controllers/venta-producto.controller
 import { TipoComprobante } from './entities/tipo-comprobante.entity';
 import { TipoComprobanteService } from './services/tipo-comprobante.service';
 import { TipoComprobanteController } from './controllers/tipo-comprobante.controller';
+import { ServicioTarifa } from 'src/inventario/entities/servicio-tarifa.entity';
+import { ServicioPaquetePrecio } from 'src/inventario/entities/servicio-paquete-precio.entity';
 
 @Module({
   imports: [
@@ -44,7 +46,8 @@ import { TipoComprobanteController } from './controllers/tipo-comprobante.contro
       // Entidades externas necesarias para los repositorios
       Paciente,
       PacienteResponsable,
-      Servicios,
+      ServicioTarifa,
+      ServicioPaquetePrecio,
       Paquete,
       Producto,
       TipoComprobante,

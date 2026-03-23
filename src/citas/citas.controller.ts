@@ -16,24 +16,6 @@ export class CitasController {
 
   ) {}
 
-  // ✅ RUTAS ESPECÍFICAS PRIMERO
-<<<<<<< Updated upstream
-  @Get('paciente/:pacienteId/sesiones-disponibles')
-  async obtenerSesionesDisponibles(
-=======
-  @Get('paciente/:pacienteId/paquete-activo')
-  async obtenerPaqueteActivo(
->>>>>>> Stashed changes
-    @Param('pacienteId') pacienteId: string,
-    @Query('servicioId') servicioId?: string
-  ) {
-    const servicioIdNum = servicioId ? parseInt(servicioId) : undefined;
-<<<<<<< Updated upstream
-    return this.citasService.obtenerSesionesDisponiblesPorPaciente(+pacienteId, servicioIdNum);
-=======
-    return this.citasService.obtenerPaqueteActivoPaciente(+pacienteId, servicioIdNum);
->>>>>>> Stashed changes
-  }
 
   @Get('catalogos/motivos')
   async getMotivosCita() {

@@ -8,7 +8,7 @@ export class DetalleVentaServicioDto {
 
   @IsNumber()
   @Type(() => Number)
-  servicio_id: number;
+  servicio_tarifa_id: number;
 
   /** 1 = Sesión unitaria, 2 = Paquete */
   @IsNumber()
@@ -24,11 +24,6 @@ export class DetalleVentaServicioDto {
   @IsPositive()
   @Type(() => Number)
   sesiones_totales: number;
-
-  @IsNumber({ maxDecimalPlaces: 2 })
-   @Min(0) 
-  @Type(() => Number)
-  precio_unitario: number;
 
   @IsOptional()
   @IsNumber()

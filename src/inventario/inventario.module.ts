@@ -19,6 +19,9 @@ import { CompraReposicionController } from './controllers/compra-reposicion.cont
 import { ServicioTarifa } from './entities/servicio-tarifa.entity';
 import { ServicioTarifaService } from './services/servicio-tarifa.service';
 import { ServicioTarifaController } from './controllers/servicio-tarifa.controller';
+import { ServicioPaquetePrecio } from './entities/servicio-paquete-precio.entity';
+import { ServicioPaquetePrecioService } from './services/servicio-paquete-precio.service';
+import { ServicioPaquetePrecioController } from './controllers/servicio-paquete-precio.controller';
 import { Paquete } from '../catalogos/paquete.entity';
 
 @Module({
@@ -30,6 +33,7 @@ import { Paquete } from '../catalogos/paquete.entity';
       CompraReposicion,
       CompraReposicionDetalle,
       ServicioTarifa,
+      ServicioPaquetePrecio,
       Paquete,
     ]),
   ],
@@ -39,6 +43,7 @@ import { Paquete } from '../catalogos/paquete.entity';
     ProductoService,
     CompraReposicionService,
     ServicioTarifaService,
+    ServicioPaquetePrecioService,
   ],
   controllers: [
     CategoriaProductoController,
@@ -46,6 +51,7 @@ import { Paquete } from '../catalogos/paquete.entity';
     ProductoController,
     CompraReposicionController,
     ServicioTarifaController,
+    ServicioPaquetePrecioController,
   ],
   exports: [ProductoService],
 })

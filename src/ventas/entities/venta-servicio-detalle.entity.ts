@@ -5,6 +5,7 @@ import { TipoDescuento } from './tipo-descuento.entity';
 import { Paciente } from '../../pacientes/paciente.entity';
 import { Servicios } from '../../catalogos/servicios.entity';
 import { Paquete } from '../../catalogos/paquete.entity';
+import { ServicioTarifa } from '../../inventario/entities/servicio-tarifa.entity';
 
 @Entity('venta_servicio_detalle')
 export class VentaServicioDetalle {
@@ -25,12 +26,12 @@ export class VentaServicioDetalle {
   @JoinColumn({ name: 'paciente_id' })
   paciente: Paciente;
 
-  @Column({ name: 'servicio_id' })
-  servicio_id: number;
+  @Column({ name: 'servicio_tarifa_id', comment: 'Tarifa que incluye servicio + motivo_cita + precio' })
+  servicio_tarifa_id: number;
 
-  @ManyToOne(() => Servicios)
-  @JoinColumn({ name: 'servicio_id' })
-  servicio: Servicios;
+  @ManyToOne(() => ServicioTarifa)
+  @JoinColumn({ name: 'servicio_tarifa_id' })
+  servicio_tarifa: ServicioTarifa;
 
   @Column({ name: 'tipo_venta_id', comment: '1=Sesión unitaria, 2=Paquete' })
   tipo_venta_id: number;

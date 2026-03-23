@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, ConflictException } from '@nestjs/common
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ServicioTarifa } from '../entities/servicio-tarifa.entity';
+import { ServicioPaquetePrecio } from '../entities/servicio-paquete-precio.entity';
 import { Paquete } from '../../catalogos/paquete.entity';
 import { CreateServicioTarifaDto, UpdateServicioTarifaDto } from '../dto/create-servicio-tarifa.dto';
 
@@ -10,6 +11,8 @@ export class ServicioTarifaService {
   constructor(
     @InjectRepository(ServicioTarifa)
     private readonly repo: Repository<ServicioTarifa>,
+    @InjectRepository(ServicioPaquetePrecio)
+    private readonly servicioPaquetePrecioRepo: Repository<ServicioPaquetePrecio>,
     @InjectRepository(Paquete)
     private readonly paqueteRepo: Repository<Paquete>,
   ) {}
@@ -37,11 +40,26 @@ export class ServicioTarifaService {
       ? paquetesActivos[0].cantidadSesiones
       : 4; // fallback si no hay paquetes
 
-    // Agregar cantidad_minima_paquete a cada tarifa
-    return tarifas.map(tarifa => ({
-      ...tarifa,
-      cantidad_minima_paquete: cantidadMinimaPaquete,
-    }));
+    // 🆕 Obtener precios de paquetes para cada tarifa
+    const tarifasConPrecios = await Promise.all(
+      tarifas.map(async (tarifa) => {
+        const preciosPaquetes = await this.servicioPaquetePrecioRepo
+          .createQueryBuilder('spp')
+          .leftJoinAndSelect('spp.paquete', 'paquete')
+          .where('spp.servicio_tarifa_id = :tarifaId', { tarifaId: tarifa.id })
+          .andWhere('spp.flg_activo = 1')
+          .orderBy('paquete.cantidadSesiones', 'ASC')
+          .getMany();
+
+        return {
+          ...tarifa,
+          cantidad_minima_paquete: cantidadMinimaPaquete,
+          precios_paquetes: preciosPaquetes,
+        };
+      })
+    );
+
+    return tarifasConPrecios;
   }
 
   async findByServicio(servicioId: number) {
