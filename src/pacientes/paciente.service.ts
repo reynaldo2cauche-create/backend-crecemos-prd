@@ -1,6 +1,6 @@
-import { Injectable, UnauthorizedException, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, NotFoundException, ForbiddenException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { In, Repository, LessThan } from 'typeorm';
 import { Paciente } from './paciente.entity';
 import { CreatePacienteDto } from './dto/create-paciente.dto';
 import { UpdatePacienteDto } from './dto/update-paciente.dto';
@@ -15,9 +15,11 @@ import { CreatePacienteCompletoDto } from './dto/create-paciente-completo.dto';
 import { UpdateEstadoPacienteDto } from './dto/update-estado-paciente.dto';
 import { ConveniosService } from 'src/convenios/convenios.service';
 import { tieneAccesoBeneficios } from '../constants/estados-paciente.constants';
+import { Cita } from '../citas/entities/cita.entity';
 
 @Injectable()
 export class PacienteService {
+  private readonly logger = new Logger(PacienteService.name);
   // private readonly RECAPTCHA_SECRET_KEY = '6LdAwDErAAAAALQO3h8PbXQUmQbihEheROCTlmrC';
   private readonly RECAPTCHA_SECRET_KEY = '6Lck2jErAAAAAMYHs4pWwWGggJhgJ5_SrRlE4GrW';
 
@@ -31,6 +33,8 @@ export class PacienteService {
     private pacienteServicioRepository: Repository<PacienteServicio>,
     @InjectRepository(Servicios)
     private serviciosRepository: Repository<Servicios>,
+    @InjectRepository(Cita)
+    private citaRepository: Repository<Cita>,
     private parejaPacienteService: ParejaPacienteService,
     private pacienteResponsableService: PacienteResponsableService,
   ) {}
@@ -928,4 +932,106 @@ async findAll(filters?: {
       }))
     };
   }
+
+  /**
+   * Actualiza automáticamente el estado de pacientes a "Inactivo" cuando:
+   * - Han pasado más de 15 días desde su última cita
+   * - No tienen citas futuras programadas
+   *
+   * Este método debe ser llamado periódicamente (ej: diariamente por un cron job)
+   *
+   * @returns Objeto con cantidad de pacientes actualizados y sus IDs
+   */
+async actualizarPacientesInactivos(): Promise<{
+  actualizados: number;
+  pacientesIds: number[];
+  detalles: Array<{ id: number; nombre: string; ultimaCita: string }>;
+}> {
+  this.logger.log('🔄 Iniciando verificación de pacientes inactivos...');
+
+  const estadoInactivo = await this.estadoPacienteRepository.findOne({ where: { id: 5 } });
+  if (!estadoInactivo) {
+    this.logger.error('❌ No se encontró el estado "Inactivo" (id=5)');
+    throw new NotFoundException('Estado "Inactivo" no encontrado');
+  }
+
+  const fechaLimite = new Date();
+  fechaLimite.setDate(fechaLimite.getDate() - 15);
+  const fechaLimiteStr = fechaLimite.toISOString().split('T')[0];
+  const hoy = new Date().toISOString().split('T')[0];
+
+  this.logger.log(`📅 Fecha límite: ${fechaLimiteStr} (hace 15 días)`);
+  this.logger.log(`📅 Fecha hoy: ${hoy}`);
+
+  const pacientesActivos = await this.pacienteRepository
+    .createQueryBuilder('paciente')
+    .where('paciente.activo = :activo', { activo: true })
+    .andWhere('paciente.mostrar_en_listado = :mostrar', { mostrar: true })
+    .andWhere('(paciente.estado_paciente_id != :estadoInactivo OR paciente.estado_paciente_id IS NULL)', { estadoInactivo: 5 })
+    .getMany();
+
+  this.logger.log(`👥 Encontrados ${pacientesActivos.length} pacientes activos a verificar`);
+
+  const pacientesParaInactivar: Array<{ id: number; nombre: string; ultimaCita: string }> = [];
+
+  for (const paciente of pacientesActivos) {
+    const ultimaCita = await this.citaRepository
+      .createQueryBuilder('cita')
+      .where('cita.paciente_id = :pacienteId', { pacienteId: paciente.id })
+      .andWhere('cita.flg_activo = 1')
+      .orderBy('cita.fecha', 'DESC')
+      .addOrderBy('cita.hora_inicio', 'DESC')
+      .getOne();
+
+    if (!ultimaCita) continue;
+
+    const tieneCitasFuturas = await this.citaRepository
+      .createQueryBuilder('cita')
+      .where('cita.paciente_id = :pacienteId', { pacienteId: paciente.id })
+      .andWhere('cita.flg_activo = 1')
+      .andWhere('cita.fecha >= :hoy', { hoy })
+      .getCount();
+
+    if (tieneCitasFuturas > 0) continue;
+
+          // DESPUÉS
+        const fechaRaw = ultimaCita.fecha as unknown as string | Date;
+        const fechaUltimaCitaStr = fechaRaw instanceof Date
+          ? fechaRaw.toISOString().split('T')[0]
+          : String(fechaRaw).split('T')[0];
+
+        this.logger.log(`🔍 Paciente ${paciente.id} - última cita: "${fechaUltimaCitaStr}" | límite: "${fechaLimiteStr}" | ¿inactivar?: ${fechaUltimaCitaStr <= fechaLimiteStr}`);
+
+        if (fechaUltimaCitaStr <= fechaLimiteStr) {
+          pacientesParaInactivar.push({
+            id: paciente.id,
+            nombre: `${paciente.nombres} ${paciente.apellido_paterno} ${paciente.apellido_materno}`,
+            ultimaCita: fechaUltimaCitaStr,
+          });
+        }
+  }
+
+  this.logger.log(`🎯 Pacientes a inactivar: ${pacientesParaInactivar.length}`);
+
+  const pacientesIds: number[] = [];
+
+  for (const pacienteInfo of pacientesParaInactivar) {
+    await this.pacienteRepository.update(pacienteInfo.id, {
+      estado: { id: 5 },
+      fecha_actua: new Date(),
+      updated_at: new Date(),
+    });
+
+    pacientesIds.push(pacienteInfo.id);
+    this.logger.log(`✅ Paciente ID ${pacienteInfo.id} (${pacienteInfo.nombre}) → Inactivo. Última cita: ${pacienteInfo.ultimaCita}`);
+  }
+
+  this.logger.log(`✨ Proceso completado. Total actualizados: ${pacientesIds.length}`);
+
+  return {
+    actualizados: pacientesIds.length,
+    pacientesIds,
+    detalles: pacientesParaInactivar,
+  };
+}
 }

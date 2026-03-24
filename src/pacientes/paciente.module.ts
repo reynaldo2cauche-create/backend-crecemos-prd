@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Paciente } from './paciente.entity';
 import { PacienteService } from './paciente.service';
@@ -38,6 +38,8 @@ import { ConveniosModule } from 'src/convenios/convenios.module';
 import { NotificacionesModule } from 'src/notificaciones/notificaciones.module';
 import { NotificacionesService } from 'src/notificaciones/notificaciones.service';
 import { GeofencingModule } from 'src/geofencing/geofencing.module';
+import { Cita } from '../citas/entities/cita.entity';
+import { PacientesInactivosScheduler } from './pacientes-inactivos.task';
 
 @Module({
   imports: [
@@ -55,6 +57,7 @@ import { GeofencingModule } from 'src/geofencing/geofencing.module';
       ParejaPaciente,
       Responsable,
       ResponsablePaciente,
+      Cita,
     ]),
     ConveniosModule,
     NotificacionesModule,
@@ -70,6 +73,7 @@ import { GeofencingModule } from 'src/geofencing/geofencing.module';
     ParejaPacienteService,
     PacienteResponsableService,
     EstadoPacienteService,
+    PacientesInactivosScheduler,
   ],
   controllers: [
     PacienteController,
@@ -85,4 +89,4 @@ import { GeofencingModule } from 'src/geofencing/geofencing.module';
     EstadoPacienteController
   ]
 })
-export class PacienteModule {}
+export class PacienteModule{}

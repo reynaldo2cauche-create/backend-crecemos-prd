@@ -7,6 +7,7 @@ import { IndicacionReferencia } from './entities/indicacion-referencia.entity';
 import { IndicacionRecomendaciones } from './entities/indicacion-recomendaciones.entity';
 import { IndicacionMateriales } from './entities/indicacion-materiales.entity';
 import { CreateIndicacionTerapeuticaDto } from './dto/create-indicacion-terapeutica.dto';
+import { NotificacionesService } from '../notificaciones/notificaciones.service';
 
 @Injectable()
 export class IndicacionTerapeuticaService {
@@ -21,6 +22,7 @@ export class IndicacionTerapeuticaService {
     private readonly recomendacionesRepo: Repository<IndicacionRecomendaciones>,
     @InjectRepository(IndicacionMateriales)
     private readonly materialesRepo: Repository<IndicacionMateriales>,
+    private readonly notificacionesService: NotificacionesService,
   ) {}
 
   async create(dto: CreateIndicacionTerapeuticaDto): Promise<IndicacionTerapeutica> {
@@ -158,7 +160,39 @@ export class IndicacionTerapeuticaService {
       );
     }
 
-    return this.findOne(savedIndicacion.id);
+    const indicacionCompleta = await this.findOne(savedIndicacion.id);
+
+    // Crear notificación para Administrador y Admisión
+    try {
+      const terapeutaNombre = indicacionCompleta.trabajador?.nombres
+        ? `${indicacionCompleta.trabajador.nombres} ${indicacionCompleta.trabajador.apellidos || ''}`.trim()
+        : 'Terapeuta';
+
+      const pacienteNombre = indicacionCompleta.paciente?.nombres
+        ? `${indicacionCompleta.paciente.nombres} ${indicacionCompleta.paciente.apellido_paterno || ''} ${indicacionCompleta.paciente.apellido_materno || ''}`.trim()
+        : 'Paciente';
+
+      const fechaFormateada = new Date(indicacionCompleta.fecha).toLocaleDateString('es-PE', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric'
+      });
+
+      await this.notificacionesService.notificarIndicacionTerapeutica(
+        indicacionCompleta.id,
+        indicacionCompleta.trabajadorId,
+        terapeutaNombre,
+        indicacionCompleta.pacienteId,
+        pacienteNombre,
+        indicacionCompleta.servicio?.nombre || 'Servicio',
+        fechaFormateada,
+      );
+    } catch (error) {
+      // Log del error pero no bloqueamos la creación de la indicación
+      console.error('Error al crear notificación de indicación terapéutica:', error);
+    }
+
+    return indicacionCompleta;
   }
 
   async findByPaciente(pacienteId: number): Promise<IndicacionTerapeutica[]> {

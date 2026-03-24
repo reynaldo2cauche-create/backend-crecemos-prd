@@ -185,7 +185,6 @@ import { LibroReclamacionesConfig } from './libro-reclamaciones/entities/config.
     ConfigModule.forRoot({
       isGlobal: true, // Hace las variables accesibles en toda la aplicación
     }),
-    // ScheduleModule.forRoot(),
     ServeStaticModule.forRoot({
       rootPath: join(__dirname, '..', 'uploads'),  // Ruta de la carpeta de archivos
       serveRoot: '/uploads',  // URL base para acceder a los archivos

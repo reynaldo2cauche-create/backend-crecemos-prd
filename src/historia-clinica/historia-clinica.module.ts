@@ -41,6 +41,7 @@ import { Modalidad } from '../catalogos/modalidad.entity';
 import { Frecuencia } from '../catalogos/frecuencia.entity';
 import { MotivoCita } from '../catalogos/motivo-cita.entity';
 import { Especialidad } from '../usuarios/especialidad.entity';
+import { NotificacionesModule } from '../notificaciones/notificaciones.module';
 
 
 @Module({
@@ -72,6 +73,7 @@ import { Especialidad } from '../usuarios/especialidad.entity';
       Especialidad
     ]),
     AuditoriaModule,
+    NotificacionesModule,
   ],
   controllers: [HistoriaClinicaController,ArchivosOficialesController,ArchivosTerapiaController,TiposArchivoController,ArchivosDigitalesController,IndicacionTerapeuticaController,EntrevistaAdultosController],
   providers: [HistoriaClinicaService, ArchivosTerapiaService, ArchivosOficialesService, TiposArchivoService,ArchivosDigitalesService,IndicacionTerapeuticaService,EntrevistaAdultosService],

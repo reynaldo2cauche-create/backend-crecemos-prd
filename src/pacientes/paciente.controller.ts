@@ -1,6 +1,7 @@
-import { Controller, Post, Body, Get, Patch, Param, Query, UseGuards } from '@nestjs/common';
+import { Controller, Post, Body, Get, Patch, Param, Query, UseGuards, Request } from '@nestjs/common';
 import { PacienteService } from './paciente.service';
 import { AsignacionTerapeutaService } from './asignacion-terapeuta.service';
+import { PacientesInactivosScheduler } from './pacientes-inactivos.task';
 import { CreatePacienteDto } from './dto/create-paciente.dto';
 import { UpdatePacienteDto } from './dto/update-paciente.dto';
 import { CreatePacienteCompletoDto } from './dto/create-paciente-completo.dto';
@@ -18,6 +19,7 @@ export class PacienteController {
   constructor(
     private readonly pacienteService: PacienteService,
     private readonly asignacionTerapeutaService: AsignacionTerapeutaService,
+    private readonly pacientesInactivosScheduler: PacientesInactivosScheduler,
   ) {}
 
 
@@ -207,5 +209,51 @@ async findAllIncludingInactive(@Query() query: any) {
     @Body() dto: { mostrarEnListado: boolean; userId: number }
   ) {
     return this.pacienteService.controlarVisibilidad(+id, dto.mostrarEnListado, dto.userId);
+  }
+
+  /**
+   * Endpoint para forzar manualmente la actualización de pacientes inactivos
+   * POST /backend_api/pacientes/actualizar-inactivos
+   * ⚠️ Solo accesible para administradores
+   */
+  @Post('actualizar-inactivos')
+  @Auditable({
+    modulo: 'PACIENTES',
+    accion: 'ACTUALIZAR_PACIENTES_INACTIVOS',
+  })
+  async actualizarPacientesInactivos(@Request() req) {
+    const rolId = req.user?.rol?.id;
+    const usuarioId = req.user?.id;
+
+    // Verificar que sea administrador (rol_id = 1)
+    if (!rolId || rolId !== 1) {
+      return {
+        success: false,
+        message: 'No tienes permisos para ejecutar esta acción. Solo administradores.',
+      };
+    }
+
+    try {
+      console.log('🧪 Ejecutando actualización manual de pacientes inactivos...');
+
+      const resultado = await this.pacientesInactivosScheduler.ejecutarActualizacionAutomatica();
+
+      return {
+        success: true,
+        message: 'Actualización de pacientes inactivos ejecutada manualmente',
+        actualizados: resultado.actualizados,
+        pacientes_ids: resultado.pacientesIds,
+        detalles: resultado.detalles,
+        ejecutado_por: usuarioId,
+        fecha: new Date().toISOString(),
+      };
+    } catch (error) {
+      console.error('❌ Error al actualizar pacientes inactivos:', error);
+      return {
+        success: false,
+        message: 'Error al actualizar pacientes inactivos',
+        error: error.message,
+      };
+    }
   }
 }
