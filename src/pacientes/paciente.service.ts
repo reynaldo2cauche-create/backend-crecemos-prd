@@ -16,6 +16,7 @@ import { UpdateEstadoPacienteDto } from './dto/update-estado-paciente.dto';
 import { ConveniosService } from 'src/convenios/convenios.service';
 import { tieneAccesoBeneficios } from '../constants/estados-paciente.constants';
 import { Cita } from '../citas/entities/cita.entity';
+import { NotificacionesService } from 'src/notificaciones/notificaciones.service';
 
 @Injectable()
 export class PacienteService {
@@ -37,6 +38,7 @@ export class PacienteService {
     private citaRepository: Repository<Cita>,
     private parejaPacienteService: ParejaPacienteService,
     private pacienteResponsableService: PacienteResponsableService,
+    private readonly notificacionesService: NotificacionesService,
   ) {}
 
   /**
@@ -795,6 +797,37 @@ async findAll(filters?: {
     // Actualizar el estado del paciente y los campos de auditoría
     await this.pacienteRepository.update(id, updateData);
 
+    // 🔔 Crear notificación de cambio manual de estado
+    try {
+      const nombreCompleto = `${paciente.nombres} ${paciente.apellido_paterno} ${paciente.apellido_materno}`;
+      const estadoAnterior = paciente.estado?.nombre || 'Sin estado';
+      const estadoNuevo = estado.nombre;
+
+      const evento = await this.notificacionesService['crearEvento']({
+        tipo_evento: 'CAMBIO_ESTADO_PACIENTE_MANUAL',
+        descripcion: `El estado del paciente ${nombreCompleto} fue cambiado de "${estadoAnterior}" a "${estadoNuevo}"`,
+        usuario_id: dto.user_id_actua,
+        datos_adicionales: {
+          entidad_afectada: 'paciente',
+          entidad_id: id,
+          estado_anterior: estadoAnterior,
+          estado_nuevo: estadoNuevo
+        }
+      });
+
+      await this.notificacionesService['crearNotificacion']({
+        tipo_notificacion: 'CAMBIO_ESTADO_PACIENTE',
+        titulo: 'Estado de paciente actualizado',
+        mensaje: `El paciente ${nombreCompleto} cambió de estado de "${estadoAnterior}" a "${estadoNuevo}"`,
+        evento_id: evento.id,
+        roles_destino: [1, 2], // Admin y Admisión
+      });
+
+      this.logger.log(`📢 Notificación creada para cambio de estado de paciente ID ${id}`);
+    } catch (error) {
+      this.logger.error(`❌ Error al crear notificación de cambio de estado: ${error.message}`);
+    }
+
     // Retornar el paciente actualizado con sus relaciones
     return this.pacienteRepository.findOne({
       where: { id },
@@ -1021,6 +1054,33 @@ async actualizarPacientesInactivos(): Promise<{
       fecha_actua: new Date(),
       updated_at: new Date(),
     });
+
+    // 🔔 Crear notificación de cambio automático de estado
+    try {
+      const evento = await this.notificacionesService['crearEvento']({
+        tipo_evento: 'CAMBIO_ESTADO_PACIENTE_AUTOMATICO',
+        descripcion: `El paciente ${pacienteInfo.nombre} fue marcado como Inactivo automáticamente por inactividad de más de 15 días`,
+        usuario_id: 1, // Sistema
+        datos_adicionales: {
+          entidad_afectada: 'paciente',
+          entidad_id: pacienteInfo.id,
+          estado_nuevo: 'Inactivo',
+          ultima_cita: pacienteInfo.ultimaCita
+        }
+      });
+
+      await this.notificacionesService['crearNotificacion']({
+        tipo_notificacion: 'CAMBIO_ESTADO_PACIENTE',
+        titulo: 'Paciente marcado como Inactivo',
+        mensaje: `El paciente ${pacienteInfo.nombre} fue marcado automáticamente como Inactivo por presentar inactividad de más de 15 días. Última cita: ${new Date(pacienteInfo.ultimaCita).toLocaleDateString('es-PE')}`,
+        evento_id: evento.id,
+        roles_destino: [1, 2], // Admin y Admisión
+      });
+
+      this.logger.log(`📢 Notificación creada para paciente ID ${pacienteInfo.id}`);
+    } catch (error) {
+      this.logger.error(`❌ Error al crear notificación para paciente ${pacienteInfo.id}: ${error.message}`);
+    }
 
     pacientesIds.push(pacienteInfo.id);
     this.logger.log(`✅ Paciente ID ${pacienteInfo.id} (${pacienteInfo.nombre}) → Inactivo. Última cita: ${pacienteInfo.ultimaCita}`);
