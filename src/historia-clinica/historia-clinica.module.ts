@@ -42,6 +42,12 @@ import { Frecuencia } from '../catalogos/frecuencia.entity';
 import { MotivoCita } from '../catalogos/motivo-cita.entity';
 import { Especialidad } from '../usuarios/especialidad.entity';
 import { NotificacionesModule } from '../notificaciones/notificaciones.module';
+import { SolicitudInforme } from './entities/solicitud-informe.entity';
+import { ModalidadPago } from './entities/modalidad-pago.entity';
+import { EstadoPago } from './entities/estado-pago.entity';
+import { SolicitudInformeController } from './solicitud-informe.controller';
+import { SolicitudInformeService } from './solicitud-informe.service';
+import { VentaServicio } from '../ventas/entities/venta-servicio.entity';
 
 
 @Module({
@@ -62,6 +68,10 @@ import { NotificacionesModule } from '../notificaciones/notificaciones.module';
       IndicacionReferencia,
       IndicacionRecomendaciones,
       IndicacionMateriales,
+      SolicitudInforme,
+      ModalidadPago,
+      EstadoPago,
+      VentaServicio,
       Paciente,
       TrabajadorCentro,
       Servicios,
@@ -75,8 +85,8 @@ import { NotificacionesModule } from '../notificaciones/notificaciones.module';
     AuditoriaModule,
     NotificacionesModule,
   ],
-  controllers: [HistoriaClinicaController,ArchivosOficialesController,ArchivosTerapiaController,TiposArchivoController,ArchivosDigitalesController,IndicacionTerapeuticaController,EntrevistaAdultosController],
-  providers: [HistoriaClinicaService, ArchivosTerapiaService, ArchivosOficialesService, TiposArchivoService,ArchivosDigitalesService,IndicacionTerapeuticaService,EntrevistaAdultosService],
-  exports: [HistoriaClinicaService, ArchivosTerapiaService, ArchivosOficialesService, TiposArchivoService,ArchivosDigitalesService,IndicacionTerapeuticaService,EntrevistaAdultosService],
+  controllers: [HistoriaClinicaController,ArchivosOficialesController,ArchivosTerapiaController,TiposArchivoController,ArchivosDigitalesController,IndicacionTerapeuticaController,EntrevistaAdultosController,SolicitudInformeController],
+  providers: [HistoriaClinicaService, ArchivosTerapiaService, ArchivosOficialesService, TiposArchivoService,ArchivosDigitalesService,IndicacionTerapeuticaService,EntrevistaAdultosService,SolicitudInformeService],
+  exports: [HistoriaClinicaService, ArchivosTerapiaService, ArchivosOficialesService, TiposArchivoService,ArchivosDigitalesService,IndicacionTerapeuticaService,EntrevistaAdultosService,SolicitudInformeService],
 })
 export class HistoriaClinicaModule {}

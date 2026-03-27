@@ -384,6 +384,7 @@ async listar(filtros: any = {}): Promise<any[]> {
   const citasNormales = await this.citaRepo
     .createQueryBuilder('cita')
     .leftJoinAndSelect('cita.paciente', 'paciente')
+    .leftJoinAndSelect('paciente.responsables', 'responsables')
     .leftJoinAndSelect('cita.doctor', 'doctor')
     .leftJoinAndSelect('cita.servicio', 'servicio')
     .leftJoinAndSelect('cita.motivo', 'motivo')
@@ -438,7 +439,7 @@ async listar(filtros: any = {}): Promise<any[]> {
 
     const cita = await this.citaRepo.findOne({
       where: { id: idCitaBuscar },
-      relations: ['paciente', 'motivo', 'estado'],
+      relations: ['paciente', 'paciente.responsables', 'motivo', 'estado'],
     });
 
     if (cita) {
@@ -459,6 +460,7 @@ async listar(filtros: any = {}): Promise<any[]> {
     const cita = await this.citaRepo
       .createQueryBuilder('cita')
       .leftJoinAndSelect('cita.paciente', 'paciente')
+      .leftJoinAndSelect('paciente.responsables', 'responsables')
       .leftJoinAndSelect('cita.doctor', 'doctor')
       .leftJoinAndSelect('cita.servicio', 'servicio')
       .leftJoinAndSelect('cita.motivo', 'motivo')
@@ -513,7 +515,7 @@ async listar(filtros: any = {}): Promise<any[]> {
     // Buscar en citas base
     const cita = await this.citaRepo.findOne({
       where: { id },
-      relations: ['paciente', 'doctor', 'servicio', 'motivo', 'estado'],
+      relations: ['paciente', 'paciente.responsables', 'doctor', 'servicio', 'motivo', 'estado'],
     });
 
     if (!cita) {

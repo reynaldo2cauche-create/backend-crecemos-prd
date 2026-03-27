@@ -170,6 +170,9 @@ import { TipoBeneficioPromo } from './promociones/entities/tipo-beneficio-promo.
 import { TipoAlcancePromo } from './promociones/entities/tipo-alcance-promo.entity';
 import { TipoVentaPromo } from './promociones/entities/tipo-venta-promo.entity';
 import { EntrevistaAdultos } from './historia-clinica/entities/entrevista-adultos.entity';
+import { SolicitudInforme } from './historia-clinica/entities/solicitud-informe.entity';
+import { ModalidadPago } from './historia-clinica/entities/modalidad-pago.entity';
+import { EstadoPago } from './historia-clinica/entities/estado-pago.entity';
 import { LibroReclamacionesModule } from './libro-reclamaciones/libro-reclamaciones.module';
 import { LibroReclamacion } from './libro-reclamaciones/entities/reclamo.entity';
 import { LibroReclamacionesEstado } from './libro-reclamaciones/entities/estado.entity';
@@ -376,6 +379,9 @@ import { LibroReclamacionesConfig } from './libro-reclamaciones/entities/config.
         LibroReclamacionesSeguimiento,
         LibroReclamacionesConfig,
         EntrevistaAdultos,
+        SolicitudInforme,
+        ModalidadPago,
+        EstadoPago,
 
       ],
         synchronize: false,   // true en desarrollo, false en producción - DESHABILITADO para evitar conflictos con foreign keys
