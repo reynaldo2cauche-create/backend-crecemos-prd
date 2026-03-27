@@ -573,7 +573,7 @@ export class NotificacionesService {
     await this.crearNotificacion({
       tipo_notificacion: 'INDICACION_TERAPEUTICA',
       titulo: 'Nueva Indicación Terapéutica',
-      mensaje: `${terapeutaNombre} registró una indicación terapéutica para ${pacienteNombre} (${servicioNombre}). Fecha de indicación: ${fecha}. Registrada el ${fechaRegistro} a las ${horaRegistro}.`,
+      mensaje: `${terapeutaNombre} registró una indicación terapéutica para ${pacienteNombre} (${servicioNombre}). Fecha de indicación: ${fecha}.`,
       evento_id: evento.id,
       roles_destino: [ROL_ADMIN, ROL_ADMISION],
     });
@@ -620,7 +620,7 @@ export class NotificacionesService {
     await this.crearNotificacion({
       tipo_notificacion: 'DOCUMENTO_SUBIDO',
       titulo: 'Nuevo Documento Subido',
-      mensaje: `${usuarioAdmisionNombre} subió un documento (${tipoDocumento}) para ${pacienteNombre}. Subido el ${fechaSubida} a las ${horaSubida}.`,
+      mensaje: `${usuarioAdmisionNombre} subió un documento (${tipoDocumento}) para ${pacienteNombre}.`,
       evento_id: evento.id,
       roles_destino: [ROL_TERAPEUTA],
     });
@@ -662,7 +662,7 @@ export class NotificacionesService {
     await this.crearNotificacion({
       tipo_notificacion: 'DOCUMENTO_SUBIDO',
       titulo: 'Nuevo Documento Subido',
-      mensaje: `${usuarioAdmisionNombre} subió un documento (${tipoDocumento}) para ${pacienteNombre}. Subido el ${fechaSubida} a las ${horaSubida}.`,
+      mensaje: `${usuarioAdmisionNombre} subió un documento (${tipoDocumento}) para ${pacienteNombre}.`,
       evento_id: evento.id,
       roles_destino: [ROL_ADMIN],
     });
@@ -702,7 +702,7 @@ export class NotificacionesService {
     await this.crearNotificacion({
       tipo_notificacion: 'DOCUMENTO_SUBIDO',
       titulo: 'Nuevo Documento Subido',
-      mensaje: `${terapeutaNombre} subió un documento (${tipoDocumento}) para ${pacienteNombre}. Subido el ${fechaSubida} a las ${horaSubida}.`,
+      mensaje: `${terapeutaNombre} subió un documento (${tipoDocumento}) para ${pacienteNombre}.`,
       evento_id: evento.id,
       roles_destino: [ROL_ADMIN],
     });

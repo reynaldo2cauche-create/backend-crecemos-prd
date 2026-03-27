@@ -172,7 +172,10 @@ export class IndicacionTerapeuticaService {
         ? `${indicacionCompleta.paciente.nombres} ${indicacionCompleta.paciente.apellido_paterno || ''} ${indicacionCompleta.paciente.apellido_materno || ''}`.trim()
         : 'Paciente';
 
-      const fechaFormateada = new Date(indicacionCompleta.fecha).toLocaleDateString('es-PE', {
+      // Parsear la fecha como fecha local para evitar problemas de zona horaria
+      const fechaParts = indicacionCompleta.fecha.toString().split('T')[0].split('-');
+      const fechaLocal = new Date(parseInt(fechaParts[0]), parseInt(fechaParts[1]) - 1, parseInt(fechaParts[2]));
+      const fechaFormateada = fechaLocal.toLocaleDateString('es-PE', {
         day: '2-digit',
         month: '2-digit',
         year: 'numeric'
