@@ -17,7 +17,7 @@ export class TerapeutaController {
   @Get(':id/bandeja')
   async getBandeja(@Param('id') id: string) {
     const asignaciones = await this.asignacionTerapeutaService.findByTerapeuta(+id);
-    
+
     // Agrupar por paciente y servicio
     const bandeja = asignaciones.map(asignacion => ({
       paciente: asignacion.pacienteServicio.paciente,
@@ -27,6 +27,44 @@ export class TerapeutaController {
     }));
 
     return bandeja;
+  }
+
+  /**
+   * Retorna la lista de subordinados directos de un jefe.
+   * Devuelve id, nombres, apellidos de cada subordinado.
+   */
+  @Get(':id/subordinados')
+  async getSubordinados(@Param('id') id: string) {
+    return this.asignacionTerapeutaService.getSubordinados(+id);
+  }
+
+  /**
+   * Bandeja COMPLETA para un jefe: incluye sus propios pacientes
+   * + los pacientes de todas sus subordinadas.
+   * Si el trabajador no es jefe, devuelve solo su propia bandeja.
+   */
+  @Get(':id/bandeja-jefe')
+  async getBandejaJefe(@Param('id') id: string) {
+    const jefeId = +id;
+    const subordinadosIds = await this.asignacionTerapeutaService.getSubordinadosIds(jefeId);
+    const todosIds = subordinadosIds.length > 0
+      ? [jefeId, ...subordinadosIds]
+      : [jefeId];
+
+    const asignaciones = await this.asignacionTerapeutaService.findByTerapeutaIds(todosIds);
+
+    return asignaciones.map(asignacion => ({
+      paciente: asignacion.pacienteServicio.paciente,
+      servicio: asignacion.pacienteServicio.servicio,
+      pacienteServicio: asignacion.pacienteServicio,
+      asignacion: asignacion,
+      terapeuta: {
+        id: asignacion.terapeuta?.id,
+        nombres: asignacion.terapeuta?.nombres,
+        apellidos: asignacion.terapeuta?.apellidos,
+      },
+      esSubordinado: asignacion.terapeuta?.id !== jefeId,
+    }));
   }
 
   // Obtener historias clínicas del terapeuta

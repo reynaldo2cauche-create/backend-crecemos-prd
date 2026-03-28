@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { TipoDocumento } from './tipo-documento.entity';
 import { Sexo } from './sexo.entity';
 import { Distrito } from './distrito.entity';
+import { Provincia } from './provincia.entity';
 import { RelacionResponsable } from './relacion-responsable.entity';
 import { AreaServicio } from './area-servicio.entity';
 import { Servicios } from './servicios.entity';
@@ -12,8 +13,13 @@ import { Atenciones } from './atenciones.entity';
 import { RelacionPadres } from './relacion-padres.entity';
 import { AntecedentesFamiliares } from './antecedentes-familiares.entity';
 import { Ocupaciones } from './ocupaciones.entity';
-import { MotivoCita } from './motivo-cita.entity';
-import { EstadoCita } from './estado-cita.entity';
+import { EstadoCivil } from './estado-civil.entity';
+import { Parentesco } from './parentesco.entity';
+import { NivelEducacion } from './nivel-educacion.entity';
+import { Paquete } from './paquete.entity';
+import { Modalidad } from './modalidad.entity';
+import { Frecuencia } from './frecuencia.entity';
+import { TipoBloqueo } from './tipo-bloqueo.entity';
 
 
 @Injectable()
@@ -25,6 +31,8 @@ export class CatalogosService {
     private sexoRepository: Repository<Sexo>,
     @InjectRepository(Distrito)
     private distritoRepository: Repository<Distrito>,
+    @InjectRepository(Provincia)
+    private provinciaRepository: Repository<Provincia>,
     @InjectRepository(RelacionResponsable)
     private relacionResponsableRepository: Repository<RelacionResponsable>,
     @InjectRepository(AreaServicio)
@@ -41,10 +49,20 @@ export class CatalogosService {
     private antecedentesFamiliaresRepository: Repository<AntecedentesFamiliares>,
     @InjectRepository(Ocupaciones)
     private ocupacionesRepository: Repository<Ocupaciones>,
-    @InjectRepository(MotivoCita)
-    private motivoCitaRepository: Repository<MotivoCita>,
-    @InjectRepository(EstadoCita)
-    private estadoCitaRepository: Repository<EstadoCita>,
+    @InjectRepository(EstadoCivil)
+    private estadoCivilRepository: Repository<EstadoCivil>,
+    @InjectRepository(Parentesco)
+    private parentescoRepository: Repository<Parentesco>,
+    @InjectRepository(NivelEducacion)
+    private nivelEducacionRepository: Repository<NivelEducacion>,
+    @InjectRepository(Paquete)
+    private paqueteRepository: Repository<Paquete>,
+    @InjectRepository(Modalidad)
+    private modalidadRepository: Repository<Modalidad>,
+    @InjectRepository(Frecuencia)
+    private frecuenciaRepository: Repository<Frecuencia>,
+    @InjectRepository(TipoBloqueo)
+    private tipoBloqueoRepository: Repository<TipoBloqueo>,
   ) {}
 
   getTipoDocumento() {
@@ -55,8 +73,28 @@ export class CatalogosService {
     return this.sexoRepository.find({ where: { activo: true } });
   }
 
+  getProvincias() {
+    return this.provinciaRepository.find({
+      order: { nombre: 'ASC' }
+    });
+  }
+
   getDistrito() {
-    return this.distritoRepository.find({ where: { activo: true } });
+    return this.distritoRepository.find({
+      where: { activo: true },
+      relations: ['provincia'],
+      order: { nombre: 'ASC' }
+    });
+  }
+
+  getDistritosByProvincia(provinciaId: number) {
+    return this.distritoRepository.find({
+      where: {
+        activo: true,
+        id_provincia: provinciaId
+      },
+      order: { nombre: 'ASC' }
+    });
   }
 
   getRelacionResponsable() {
@@ -68,7 +106,7 @@ export class CatalogosService {
   }
 
   getServicios() {
-    return this.serviciosRepository.find({ where: { activo: true }, relations: ['area'] });
+    return this.serviciosRepository.find({ where: { activo: true }, relations: ['area', 'especialidad'] });
   }
 
   getGradoEscolar() {
@@ -100,23 +138,58 @@ export class CatalogosService {
   }
 
   getOcupaciones() {
-    return this.ocupacionesRepository.find({ 
+    return this.ocupacionesRepository.find({
       where: { activo: true },
       order: { nombre: 'ASC' }
     });
   }
 
-  getMotivosCita() {
-    return this.motivoCitaRepository.find({ 
+  getEstadoCivil() {
+    return this.estadoCivilRepository.find({
       where: { activo: true },
       order: { nombre: 'ASC' }
     });
   }
 
-  getEstadosCita() {
-    return this.estadoCitaRepository.find({ 
+  getParentesco() {
+    return this.parentescoRepository.find({
       where: { activo: true },
       order: { nombre: 'ASC' }
+    });
+  }
+
+  getNivelEducacion() {
+    return this.nivelEducacionRepository.find({
+      where: { activo: true },
+      order: { nombre: 'ASC' }
+    });
+  }
+
+  getPaquetes() {
+    return this.paqueteRepository.find({
+      where: { flgActivo: true },
+      order: { cantidadSesiones: 'ASC' }
+    });
+  }
+
+  getModalidades() {
+    return this.modalidadRepository.find({
+      where: { activo: true },
+      order: { nombre: 'ASC' }
+    });
+  }
+
+  getFrecuencias() {
+    return this.frecuenciaRepository.find({
+      where: { activo: true },
+      order: { id: 'ASC' }
+    });
+  }
+
+  getTipoBloqueo() {
+    return this.tipoBloqueoRepository.find({
+      where: { activo: true },
+      order: { id: 'ASC' }
     });
   }
 }

@@ -1,0 +1,124 @@
+### ============================================
+### TESTING API - Sistema de Bloqueos
+### ============================================
+### Usar con la extensión REST Client de VSCode
+### o copiar los comandos en Postman/Thunder Client
+
+@baseUrl = http://localhost:3000
+@trabajadorId = 1
+@userId = 1
+
+### ============================================
+### 1️⃣ OBTENER TIPOS DE BLOQUEO
+### ============================================
+GET {{baseUrl}}/backend_api/catalogos/tipo-bloqueo HTTP/1.1
+
+### ============================================
+### 2️⃣ CREAR BLOQUEO PUNTUAL - TODO EL DÍA
+### ============================================
+POST {{baseUrl}}/bloqueos HTTP/1.1
+Content-Type: application/json
+
+{
+  "trabajadorId": {{trabajadorId}},
+  "tipoBloqueoId": 1,
+  "fechaInicio": "2026-03-20",
+  "fechaFin": "2026-03-20",
+  "diaSemana": null,
+  "todoElDia": true,
+  "horaInicio": null,
+  "horaFin": null,
+  "motivo": "Día de cumpleaños - Permiso personal",
+  "userIdCrea": {{userId}}
+}
+
+### ============================================
+### 3️⃣ CREAR BLOQUEO PUNTUAL - HORARIO ESPECÍFICO
+### ============================================
+POST {{baseUrl}}/bloqueos HTTP/1.1
+Content-Type: application/json
+
+{
+  "trabajadorId": {{trabajadorId}},
+  "tipoBloqueoId": 1,
+  "fechaInicio": "2026-03-15",
+  "fechaFin": "2026-03-15",
+  "diaSemana": null,
+  "todoElDia": false,
+  "horaInicio": "14:00:00",
+  "horaFin": "16:00:00",
+  "motivo": "Cita médica particular",
+  "userIdCrea": {{userId}}
+}
+
+### ============================================
+### 4️⃣ CREAR BLOQUEO RECURRENTE - MARTES 8AM-10AM
+### ============================================
+POST {{baseUrl}}/bloqueos HTTP/1.1
+Content-Type: application/json
+
+{
+  "trabajadorId": {{trabajadorId}},
+  "tipoBloqueoId": 2,
+  "fechaInicio": "2026-03-01",
+  "fechaFin": "2026-03-31",
+  "diaSemana": 2,
+  "todoElDia": false,
+  "horaInicio": "08:00:00",
+  "horaFin": "10:00:00",
+  "motivo": "Curso de especialización en terapia cognitivo-conductual",
+  "userIdCrea": {{userId}}
+}
+
+### ============================================
+### 5️⃣ OBTENER TODOS LOS BLOQUEOS
+### ============================================
+GET {{baseUrl}}/bloqueos HTTP/1.1
+
+### ============================================
+### 6️⃣ OBTENER BLOQUEOS ACTIVOS/VIGENTES
+### ============================================
+GET {{baseUrl}}/bloqueos/activos HTTP/1.1
+
+### ============================================
+### 7️⃣ OBTENER BLOQUEOS DE UN TERAPEUTA
+### ============================================
+GET {{baseUrl}}/bloqueos/trabajador/{{trabajadorId}} HTTP/1.1
+
+### ============================================
+### 8️⃣ OBTENER UN BLOQUEO POR ID
+### ============================================
+GET {{baseUrl}}/bloqueos/1 HTTP/1.1
+
+### ============================================
+### 9️⃣ VERIFICAR SI HORARIO ESTÁ BLOQUEADO
+### ============================================
+POST {{baseUrl}}/bloqueos/verificar HTTP/1.1
+Content-Type: application/json
+
+{
+  "trabajadorId": {{trabajadorId}},
+  "fecha": "2026-03-15",
+  "hora": "14:30:00"
+}
+
+### ============================================
+### 🔟 OBTENER HORARIOS DISPONIBLES
+### ============================================
+GET {{baseUrl}}/bloqueos/disponibles/{{trabajadorId}}?fecha=2026-03-15&horaInicio=08:00:00&horaFin=18:00:00&intervalo=30 HTTP/1.1
+
+### ============================================
+### 1️⃣1️⃣ ACTUALIZAR BLOQUEO
+### ============================================
+PUT {{baseUrl}}/bloqueos/1 HTTP/1.1
+Content-Type: application/json
+
+{
+  "motivo": "Curso de especialización actualizado - Ahora incluye práctica clínica",
+  "userIdActua": {{userId}}
+}
+
+### ============================================
+### 1️⃣2️⃣ ELIMINAR BLOQUEO (SOFT DELETE)
+### ============================================
+DELETE {{baseUrl}}/bloqueos/1?userId={{userId}} HTTP/1.1

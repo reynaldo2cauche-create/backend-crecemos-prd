@@ -22,16 +22,20 @@ export class TrabajadorServicioController {
   getServiciosByTrabajador(@Param('trabajadorId') trabajadorId: string) {
     return this.service.getServiciosByTrabajador(+trabajadorId);
   }
-
+  // ✅ AGREGAR ESTE ENDPOINT NUEVO
+  @Get('activos')
+  getStaffActivos() {
+    return this.service.getStaffActivos();
+  }
   /**
    * POST /backend_api/trabajador-servicio
    * Asignar un servicio a un trabajador
    */
   @Post()
   asignarServicio(
-    @Body() data: { trabajadorId: number; servicioId: number; observaciones?: string; userId: number }
+    @Body() data: { trabajadorId: number; servicioId: number; observaciones?: string; userId: number; validarPaciente?: boolean }
   ) {
-    return this.service.asignarServicio(data.trabajadorId, data.servicioId, data.observaciones, data.userId);
+    return this.service.asignarServicio(data.trabajadorId, data.servicioId, data.observaciones, data.userId, data.validarPaciente || false);
   }
 
   /**

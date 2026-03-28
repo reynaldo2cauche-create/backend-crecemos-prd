@@ -110,18 +110,31 @@ export class ArchivosOficialesController {
     const trabajadorId = req.user?.id || 1;
     const rolTrabajador = req.user?.rol || 'admin';
 
-    const { buffer, mimetype, filename } = await this.archivosService.obtenerArchivo(
+    const { stream, mimetype, filename, fileSize } = await this.archivosService.obtenerArchivoStream(
       id,
       trabajadorId,
       rolTrabajador,
     );
 
+    // ✅ Configurar headers para streaming
     res.set({
       'Content-Type': mimetype,
-      'Content-Disposition': `inline; filename="${filename}"`,
+      'Content-Disposition': `inline; filename="${encodeURIComponent(filename)}"`,
+      'Content-Length': fileSize.toString(),
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
     });
 
-    res.send(buffer);
+    // ✅ Hacer pipe del stream a la respuesta
+    stream.pipe(res);
+
+    // ✅ Manejar errores del stream
+    stream.on('error', (error) => {
+      console.error('Error streaming archivo:', error);
+      if (!res.headersSent) {
+        res.status(500).json({ error: 'Error al enviar el archivo' });
+      }
+    });
   }
 
   @Delete(':id')
@@ -158,5 +171,21 @@ export class ArchivosOficialesController {
       success: true,
       data: resultado,
     };
+  }
+
+  @Get('descargar-validado/:id')
+  async descargarArchivoValidado(
+    @Param('id', ParseIntPipe) id: number,
+    @Res() res: Response,
+  ) {
+    const { stream, mimetype, filename, fileSize } = await this.archivosService.obtenerArchivoStreamPublico(id);
+
+    res.set({
+      'Content-Type': mimetype,
+      'Content-Disposition': `attachment; filename="${filename}"`,
+      'Content-Length': fileSize,
+    });
+
+    stream.pipe(res);
   }
 }

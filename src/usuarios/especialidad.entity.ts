@@ -5,7 +5,7 @@ export class Especialidad {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @Column({ unique: true })
+  @Column({ nullable: true })
   nombre: string;
 
   @Column({ nullable: true })

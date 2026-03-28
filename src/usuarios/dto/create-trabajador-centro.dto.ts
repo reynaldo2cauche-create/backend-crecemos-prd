@@ -41,6 +41,14 @@ export class CreateTrabajadorCentroDto {
   especialidad_id?: number;
 
   @IsOptional()
+  @IsNumber()
+  cargo_id?: number;
+
+  @IsOptional()
+  @IsNumber()
+  jefe_id?: number;
+
+  @IsOptional()
   @IsString()
   telefono?: string;
 
@@ -80,6 +88,100 @@ export class CreateTrabajadorCentroDto {
   @IsString()
   talla_zapatos?: string;
 
+  @IsOptional()
+  @IsString()
+  numero_colegiatura?: string;
+
+  // Datos personales adicionales
+  @IsOptional()
+  @IsString()
+  fecha_nacimiento?: string;
+
+  @IsOptional()
+  @IsNumber()
+  sexo_id?: number;
+
+  @IsOptional()
+  @IsNumber()
+  estado_civil_id?: number;
+
+  @IsOptional()
+  @IsNumber()
+  hijos?: number;
+
+  // Datos de contacto adicionales
+  @IsOptional()
+  @IsString()
+  pais?: string;
+
+  @IsOptional()
+  @IsString()
+  referencia_direccion?: string;
+
+  @IsOptional()
+  @IsNumber()
+  parentesco_emergencia_id?: number;
+
+  @IsOptional()
+  @IsNumber()
+  distrito_id?: number;
+
+  // Datos laborales adicionales
+  @IsOptional()
+  @IsString()
+  procedencia_laboral?: string;
+
+  @IsOptional()
+  @IsString()
+  area_laboral?: string;
+
+  @IsOptional()
+  @IsString()
+  empresa_anterior?: string;
+
+  @IsOptional()
+  @IsString()
+  motivo_renuncia?: string;
+
+  // Datos adicionales
+ @IsOptional()
+  @IsString()
+  hobbies?: string;
+
+  @IsOptional()
+  @IsString()
+  opciones_regalo?: string;
+
+  // Datos académicos principales
+  @IsOptional()
+  @IsNumber()
+  nivel_educacion_id?: number;
+
+  @IsOptional()
+  @IsString()
+  centro_estudios_principal?: string;
+
+  @IsOptional()
+  @IsString()
+  carrera_estudiada_principal?: string;
+
+  @IsOptional()
+  @IsString()
+  fecha_inicio_estudio?: string;
+
+  @IsOptional()
+  @IsString()
+  fecha_termino_estudio?: string;
+
+  // Archivos adjuntos
+  @IsOptional()
+  @IsString()
+  archivo_cv?: string;
+
+  @IsOptional()
+  @IsString()
+  archivo_dni?: string;
+
   // Campos de RRHH
   @IsOptional()
   @IsNumber()
@@ -96,4 +198,8 @@ export class CreateTrabajadorCentroDto {
   @IsOptional()
   @IsString()
   banco?: string;
+
+  @IsOptional()
+  @IsNumber()
+  user_id_actua?: number;
 } 

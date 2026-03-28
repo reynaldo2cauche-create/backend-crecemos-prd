@@ -23,11 +23,21 @@ import { Servicios } from '../catalogos/servicios.entity';
 import { NotaEvolucion } from './entities/nota-evolucion.entity';
 import { NotaEvolucionService } from './services/nota-evolucion.service';
 import { NotaEvolucionController } from './controllers/nota-evolucion.controller';
+import { PacienteResponsableController } from './controllers/paciente-responsable.controller';
+import { ResponsablesController } from './controllers/responsables.controller';
+import { TransferenciaNotas } from './entities/transferencia-notas.entity';
 import { TrabajadorCentro } from '../usuarios/trabajador-centro.entity';
 import { ParejaPaciente } from './entities/pareja-paciente.entity';
 import { ParejaPacienteService } from './services/pareja-paciente.service';
+import { Responsable } from './entities/responsable.entity';
+import { ResponsablePaciente } from './entities/responsable-paciente.entity';
+import { PacienteResponsableService } from './services/paciente-responsable.service';
 import { EstadoPacienteService } from './estado-paciente.service';
 import { EstadoPacienteController } from './estado-paciente.controller';
+import { ConveniosModule } from 'src/convenios/convenios.module';
+import { NotificacionesModule } from 'src/notificaciones/notificaciones.module';
+import { NotificacionesService } from 'src/notificaciones/notificaciones.service';
+import { GeofencingModule } from 'src/geofencing/geofencing.module';
 
 @Module({
   imports: [
@@ -40,9 +50,15 @@ import { EstadoPacienteController } from './estado-paciente.controller';
       EstadoPaciente,
       Servicios,
       NotaEvolucion,
+      TransferenciaNotas,
       TrabajadorCentro,
-      ParejaPaciente
-    ])
+      ParejaPaciente,
+      Responsable,
+      ResponsablePaciente,
+    ]),
+    ConveniosModule,
+    NotificacionesModule,
+    GeofencingModule,
   ],
   providers: [
     PacienteService,
@@ -52,8 +68,8 @@ import { EstadoPacienteController } from './estado-paciente.controller';
     ComentarioTerapiaService,
     NotaEvolucionService,
     ParejaPacienteService,
+    PacienteResponsableService,
     EstadoPacienteService,
-    
   ],
   controllers: [
     PacienteController,
@@ -64,6 +80,8 @@ import { EstadoPacienteController } from './estado-paciente.controller';
     RecepcionController,
     TerapeutaController,
     NotaEvolucionController,
+    PacienteResponsableController,
+    ResponsablesController,
     EstadoPacienteController
   ]
 })

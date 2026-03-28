@@ -1,24 +1,34 @@
 import { Controller, Post, Body, Get, Patch, Param, Query, UseGuards } from '@nestjs/common';
 import { PacienteService } from './paciente.service';
+import { AsignacionTerapeutaService } from './asignacion-terapeuta.service';
 import { CreatePacienteDto } from './dto/create-paciente.dto';
 import { UpdatePacienteDto } from './dto/update-paciente.dto';
 import { CreatePacienteCompletoDto } from './dto/create-paciente-completo.dto';
 import { UpdateEstadoPacienteDto } from './dto/update-estado-paciente.dto';
-import { ApiOperation, ApiQuery } from '@nestjs/swagger';
+import { ApiOperation, ApiQuery, ApiResponse,ApiParam } from '@nestjs/swagger';
 import { Auditable } from 'src/auditoria/decorators/auditable.decorator';
 import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
+import { Public } from 'src/auth/decorators/public.decorator';
+import { GeofencingGuard } from 'src/geofencing/geofencing.guard';
+import { RequiereUbicacion } from 'src/geofencing/requiere-ubicacion.decorator';
 
 @Controller('backend_api/pacientes')
-@UseGuards(JwtAuthGuard) 
+@UseGuards(JwtAuthGuard, GeofencingGuard)
 export class PacienteController {
-  constructor(private readonly pacienteService: PacienteService) {}
+  constructor(
+    private readonly pacienteService: PacienteService,
+    private readonly asignacionTerapeutaService: AsignacionTerapeutaService,
+  ) {}
 
+
+  @Public()
   @Post()
   create(@Body() dto: CreatePacienteDto) {
     return this.pacienteService.create(dto);
   }
 
 
+  @Public()
   @Post('completo')
   @Auditable({
     modulo: 'PACIENTES',
@@ -28,28 +38,53 @@ export class PacienteController {
     return this.pacienteService.createCompleto(dto);
   }
 
+  @Get('estadisticas')
+  @RequiereUbicacion()
+  @ApiOperation({ summary: 'Obtener estadísticas de pacientes del mes actual' })
+  getEstadisticas() {
+    return this.pacienteService.getEstadisticasMesActual();
+  }
+
   @Get()
-  findAll(
+  @RequiereUbicacion()
+  async findAll(
     @Query('terapeutaId') terapeutaId?: string,
+    @Query('soloPropio') soloPropio?: string,
     @Query('numeroDocumento') numeroDocumento?: string,
     @Query('nombreCompleto') nombreCompleto?: string,
     @Query('distritoId') distritoId?: string,
     @Query('estadoId') estadoId?: string,
     @Query('servicioId') servicioId?: string,
   ) {
+    const parsedTerapeutaId = terapeutaId && !isNaN(Number(terapeutaId))
+      ? parseInt(terapeutaId, 10)
+      : undefined;
+
+    // Si viene terapeutaId y NO es soloPropio, verificar si es jefe y expandir a subordinados
+    let terapeutaIds: number[] | undefined;
+    if (parsedTerapeutaId && soloPropio !== 'true') {
+      const subordinadosIds = await this.asignacionTerapeutaService.getSubordinadosIds(parsedTerapeutaId);
+      if (subordinadosIds.length > 0) {
+        // Es jefe vista completa: incluir al propio jefe + todos sus subordinados
+        terapeutaIds = [parsedTerapeutaId, ...subordinadosIds];
+      }
+    }
+
     const parsedFilters = {
-      terapeutaId: terapeutaId && !isNaN(Number(terapeutaId)) ? parseInt(terapeutaId, 10) : undefined,
+      terapeutaId: terapeutaIds ? undefined : parsedTerapeutaId,
+      terapeutaIds: terapeutaIds,
       numeroDocumento: numeroDocumento,
       nombre: nombreCompleto,
       distritoId: distritoId && !isNaN(Number(distritoId)) ? parseInt(distritoId, 10) : undefined,
       estadoId: estadoId && !isNaN(Number(estadoId)) ? parseInt(estadoId, 10) : undefined,
       servicioId: servicioId && !isNaN(Number(servicioId)) ? parseInt(servicioId, 10) : undefined,
     };
-    
+
     return this.pacienteService.findAll(parsedFilters);
   }
 
    @Get('all')
+   @RequiereUbicacion()
 @ApiOperation({ summary: 'Obtener todos los pacientes incluyendo activos e inactivos' })
 @ApiQuery({ name: 'terapeutaId', required: false, type: Number })
 @ApiQuery({ name: 'numeroDocumento', required: false, type: String })
@@ -101,9 +136,37 @@ async findAllIncludingInactive(@Query() query: any) {
     return this.pacienteService.buscarPacientes(query);
   }
 
+  @Public()
   @Get('check-documento/:numeroDocumento')
   checkDocumentoExists(@Param('numeroDocumento') numeroDocumento: string) {
     return this.pacienteService.checkDocumentoExists(numeroDocumento);
+  }
+  
+  @Public()
+  @Get('beneficios/:numeroDocumento')
+  @ApiOperation({
+    summary: 'Verificar paciente y obtener beneficios disponibles',
+    description: 'Valida que el paciente exista y esté activo, luego retorna los beneficios disponibles'
+  })
+  @ApiParam({
+    name: 'numeroDocumento',
+    description: 'Número de documento del paciente',
+    example: '12345678'
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Paciente verificado y beneficios obtenidos exitosamente'
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Paciente no encontrado'
+  })
+  @ApiResponse({
+    status: 403,
+    description: 'Paciente inactivo, sin acceso a beneficios'
+  })
+  verificarYObtenerBeneficios(@Param('numeroDocumento') numeroDocumento: string) {
+    return this.pacienteService.verificarPacienteYObtenerBeneficios(numeroDocumento);
   }
 
   @Patch(':id')
@@ -145,6 +208,4 @@ async findAllIncludingInactive(@Query() query: any) {
   ) {
     return this.pacienteService.controlarVisibilidad(+id, dto.mostrarEnListado, dto.userId);
   }
-
- 
 }

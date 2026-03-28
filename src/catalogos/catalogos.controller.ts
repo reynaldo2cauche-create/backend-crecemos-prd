@@ -1,4 +1,4 @@
-import { Controller, Get } from '@nestjs/common';
+import { Controller, Get, Param } from '@nestjs/common';
 import { CatalogosService } from './catalogos.service';
 
 @Controller('backend_api/catalogos')
@@ -15,9 +15,19 @@ export class CatalogosController {
     return this.catalogosService.getSexo();
   }
 
+  @Get('provincias')
+  getProvincias() {
+    return this.catalogosService.getProvincias();
+  }
+
   @Get('distrito')
   getDistrito() {
     return this.catalogosService.getDistrito();
+  }
+
+  @Get('distritos/provincia/:provinciaId')
+  getDistritosByProvincia(@Param('provinciaId') provinciaId: string) {
+    return this.catalogosService.getDistritosByProvincia(+provinciaId);
   }
 
   @Get('relacion-responsable')
@@ -60,13 +70,38 @@ export class CatalogosController {
     return this.catalogosService.getOcupaciones();
   }
 
-  @Get('motivos-cita')
-  getMotivosCita() {
-    return this.catalogosService.getMotivosCita();
+  @Get('estado-civil')
+  getEstadoCivil() {
+    return this.catalogosService.getEstadoCivil();
   }
 
-  @Get('estados-cita')
-  getEstadosCita() {
-    return this.catalogosService.getEstadosCita();
+  @Get('parentesco')
+  getParentesco() {
+    return this.catalogosService.getParentesco();
+  }
+
+  @Get('nivel-educacion')
+  getNivelEducacion() {
+    return this.catalogosService.getNivelEducacion();
+  }
+
+  @Get('paquetes')
+  getPaquetes() {
+    return this.catalogosService.getPaquetes();
+  }
+
+  @Get('modalidades')
+  getModalidades() {
+    return this.catalogosService.getModalidades();
+  }
+
+  @Get('frecuencias')
+  getFrecuencias() {
+    return this.catalogosService.getFrecuencias();
+  }
+
+  @Get('tipo-bloqueo')
+  getTipoBloqueo() {
+    return this.catalogosService.getTipoBloqueo();
   }
 }

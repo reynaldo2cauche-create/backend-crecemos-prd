@@ -1,15 +1,21 @@
 import { NestFactory } from '@nestjs/core';
-import { ValidationPipe } from '@nestjs/common';
+import { BadRequestException, ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { LoggingInterceptor } from './logging/logging.interceptor';
 import { NestExpressApplication } from '@nestjs/platform-express';
+import { join } from 'path';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
   // Confiar en proxies para obtener la IP real del cliente
   app.set('trust proxy', true);
+
+  // Servir archivos estáticos desde la carpeta uploads
+  app.useStaticAssets(join(__dirname, '..', 'uploads'), {
+    prefix: '/uploads/',
+  });
 
   // Configuración de Swagger
   const config = new DocumentBuilder()
@@ -42,6 +48,13 @@ async function bootstrap() {
     },
     whitelist: true,
     forbidNonWhitelisted: false,
+    exceptionFactory: (errors) => {
+        const messages = errors.map(e =>
+          `${e.property}: ${Object.values(e.constraints || {}).join(', ')}`
+        );
+        console.error('❌ VALIDATION ERRORS:', messages);
+        return new BadRequestException(messages);
+      },
   }));
 
  
