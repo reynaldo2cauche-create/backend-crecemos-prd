@@ -174,6 +174,8 @@ import { EntrevistaAdultos } from './historia-clinica/entities/entrevista-adulto
 import { SolicitudInforme } from './historia-clinica/entities/solicitud-informe.entity';
 import { ModalidadPago } from './historia-clinica/entities/modalidad-pago.entity';
 import { EstadoPago } from './historia-clinica/entities/estado-pago.entity';
+import { EstadoSolicitudInforme } from './historia-clinica/entities/estado-solicitud-informe.entity';
+import { RevisionInforme } from './historia-clinica/entities/revision-informe.entity';
 import { LibroReclamacionesModule } from './libro-reclamaciones/libro-reclamaciones.module';
 import { LibroReclamacion } from './libro-reclamaciones/entities/reclamo.entity';
 import { LibroReclamacionesEstado } from './libro-reclamaciones/entities/estado.entity';
@@ -384,6 +386,8 @@ import { LibroReclamacionesConfig } from './libro-reclamaciones/entities/config.
         SolicitudInforme,
         ModalidadPago,
         EstadoPago,
+        EstadoSolicitudInforme,
+        RevisionInforme,
 
       ],
         synchronize: false,   // true en desarrollo, false en producción - DESHABILITADO para evitar conflictos con foreign keys

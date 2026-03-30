@@ -75,6 +75,7 @@ import { EstadoSolicitudInforme } from './entities/estado-solicitud-informe.enti
       EstadoPago,
       EstadoSolicitudInforme,   // ← NUEVO
       RevisionInforme,
+      VentaServicio,            // ← AGREGADO
       Paciente,
       TrabajadorCentro,
       Servicios,

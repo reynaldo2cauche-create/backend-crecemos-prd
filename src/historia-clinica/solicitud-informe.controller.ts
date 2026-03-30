@@ -26,7 +26,7 @@ import {
   SubirArchivoDto,
   RevisarInformeDto,
   MarcarEntregadoDto,
-} from './dto/solicitud-informe.dtos';
+} from './dto/solicitud-informe.dto';
 
 // ─── Helper: configuración de Multer para subida de archivos ──────────────────
 const multerOptions = {
