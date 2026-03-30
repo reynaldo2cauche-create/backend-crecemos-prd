@@ -48,6 +48,8 @@ import { EstadoPago } from './entities/estado-pago.entity';
 import { SolicitudInformeController } from './solicitud-informe.controller';
 import { SolicitudInformeService } from './solicitud-informe.service';
 import { VentaServicio } from '../ventas/entities/venta-servicio.entity';
+import { RevisionInforme } from './entities/revision-informe.entity';
+import { EstadoSolicitudInforme } from './entities/estado-solicitud-informe.entity';
 
 
 @Module({
@@ -68,10 +70,11 @@ import { VentaServicio } from '../ventas/entities/venta-servicio.entity';
       IndicacionReferencia,
       IndicacionRecomendaciones,
       IndicacionMateriales,
-      SolicitudInforme,
+     SolicitudInforme,
       ModalidadPago,
       EstadoPago,
-      VentaServicio,
+      EstadoSolicitudInforme,   // ← NUEVO
+      RevisionInforme,
       Paciente,
       TrabajadorCentro,
       Servicios,

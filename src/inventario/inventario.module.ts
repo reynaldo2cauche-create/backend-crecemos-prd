@@ -22,6 +22,10 @@ import { ServicioTarifaController } from './controllers/servicio-tarifa.controll
 import { ServicioPaquetePrecio } from './entities/servicio-paquete-precio.entity';
 import { ServicioPaquetePrecioService } from './services/servicio-paquete-precio.service';
 import { ServicioPaquetePrecioController } from './controllers/servicio-paquete-precio.controller';
+import { DocumentoTarifa } from './entities/documento-tarifa.entity';
+import { DocumentoTarifaService } from './services/documento-tarifa.service';
+import { DocumentoTarifaController } from './controllers/documento-tarifa.controller';
+import { TipoArchivo } from '../historia-clinica/entities/tipo-archivo.entity';
 import { Paquete } from '../catalogos/paquete.entity';
 
 @Module({
@@ -34,6 +38,8 @@ import { Paquete } from '../catalogos/paquete.entity';
       CompraReposicionDetalle,
       ServicioTarifa,
       ServicioPaquetePrecio,
+      DocumentoTarifa,
+      TipoArchivo,
       Paquete,
     ]),
   ],
@@ -44,6 +50,7 @@ import { Paquete } from '../catalogos/paquete.entity';
     CompraReposicionService,
     ServicioTarifaService,
     ServicioPaquetePrecioService,
+    DocumentoTarifaService,
   ],
   controllers: [
     CategoriaProductoController,
@@ -52,7 +59,8 @@ import { Paquete } from '../catalogos/paquete.entity';
     CompraReposicionController,
     ServicioTarifaController,
     ServicioPaquetePrecioController,
+    DocumentoTarifaController,
   ],
-  exports: [ProductoService],
+  exports: [ProductoService, DocumentoTarifaService],
 })
 export class InventarioModule {}

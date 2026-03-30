@@ -5,6 +5,7 @@ import { TipoArchivo } from './tipo-archivo.entity';
 import { TrabajadorCentro } from '../../usuarios/trabajador-centro.entity';
 import { ModalidadPago } from './modalidad-pago.entity';
 import { EstadoPago } from './estado-pago.entity';
+import { EstadoSolicitudInforme } from './estado-solicitud-informe.entity';
 
 @Entity('solicitud_informe')
 export class SolicitudInforme {
@@ -63,7 +64,7 @@ export class SolicitudInforme {
     type: 'tinyint',
     unsigned: true,
     default: 1,
-    comment: 'Pendiente, Pagado, Anulado'
+    comment: 'Pendiente, Pagado, Anulado',
   })
   estado_pago_id: number;
 
@@ -73,6 +74,63 @@ export class SolicitudInforme {
 
   @Column({ type: 'text', nullable: true })
   nota: string;
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // CAMPOS WORKFLOW
+  // ──────────────────────────────────────────────────────────────────────────
+
+  @Column({
+    name: 'archivo_url',
+    type: 'varchar',
+    length: 500,
+    nullable: true,
+    comment: 'Ruta/URL del archivo subido por la terapeuta',
+  })
+  archivo_url: string;
+
+  @Column({
+    name: 'estado_solicitud_id',
+    type: 'tinyint',
+    unsigned: true,
+    default: 1,
+    comment: 'FK a estado_solicitud_informe',
+  })
+  estado_solicitud_id: number;
+
+  @ManyToOne(() => EstadoSolicitudInforme, { eager: true })
+  @JoinColumn({ name: 'estado_solicitud_id' })
+  estado_solicitud: EstadoSolicitudInforme;
+
+  @Column({
+    name: 'fecha_subida_archivo',
+    type: 'timestamp',
+    nullable: true,
+    comment: 'Fecha cuando la terapeuta subió el archivo',
+  })
+  fecha_subida_archivo: Date;
+
+  @Column({
+    name: 'fecha_revision',
+    type: 'timestamp',
+    nullable: true,
+    comment: 'Fecha de última revisión por la jefa',
+  })
+  fecha_revision: Date;
+
+  @Column({
+    name: 'revisor_id',
+    type: 'int',
+    unsigned: true,
+    nullable: true,
+    comment: 'FK a trabajador_centro (jefa que realizó la última revisión)',
+  })
+  revisor_id: number;
+
+  @ManyToOne(() => TrabajadorCentro, { eager: true, nullable: true })
+  @JoinColumn({ name: 'revisor_id' })
+  revisor: TrabajadorCentro;
+
+  // ──────────────────────────────────────────────────────────────────────────
 
   @Column({ nullable: true })
   user_crea_id: number;

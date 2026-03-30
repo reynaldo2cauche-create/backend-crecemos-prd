@@ -155,6 +155,7 @@ import { VentaProducto } from './ventas/entities/venta-producto.entity';
 import { VentaProductoDetalle } from './ventas/entities/venta-producto-detalle.entity';
 import { ServicioTarifa } from './inventario/entities/servicio-tarifa.entity';
 import { ServicioPaquetePrecio } from './inventario/entities/servicio-paquete-precio.entity';
+import { DocumentoTarifa } from './inventario/entities/documento-tarifa.entity';
 import { TipoComprobante } from './ventas/entities/tipo-comprobante.entity';
 import { ResponsablePaciente } from './pacientes/entities/responsable-paciente.entity';
 import { Responsable } from './pacientes/entities/responsable.entity';
@@ -351,6 +352,7 @@ import { LibroReclamacionesConfig } from './libro-reclamaciones/entities/config.
         CompraReposicionDetalle,
         ServicioTarifa,
         ServicioPaquetePrecio,
+        DocumentoTarifa,
         // Ventas
         TipoVentaServicio,
         TipoPagador,

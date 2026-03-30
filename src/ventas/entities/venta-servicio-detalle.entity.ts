@@ -19,6 +19,9 @@ export class VentaServicioDetalle {
   @JoinColumn({ name: 'venta_id' })
   venta: VentaServicio;
 
+  @Column({ name: 'tipo_item_venta', type: 'tinyint', default: 1, comment: '1=Servicio con cita, 2=Documento sin cita' })
+  tipoItemVenta: number;
+
   @Column({ name: 'paciente_id', comment: 'Paciente que recibe este servicio' })
   paciente_id: number;
 
@@ -26,12 +29,21 @@ export class VentaServicioDetalle {
   @JoinColumn({ name: 'paciente_id' })
   paciente: Paciente;
 
-  @Column({ name: 'servicio_tarifa_id', comment: 'Tarifa que incluye servicio + motivo_cita + precio' })
+  @Column({ name: 'servicio_tarifa_id', nullable: true, comment: 'Tarifa que incluye servicio + motivo_cita + precio (obligatorio si tipo_item_venta=1, NULL si tipo_item_venta=2)' })
   servicio_tarifa_id: number;
 
-  @ManyToOne(() => ServicioTarifa)
+  @ManyToOne(() => ServicioTarifa, { nullable: true })
   @JoinColumn({ name: 'servicio_tarifa_id' })
   servicio_tarifa: ServicioTarifa;
+
+  @Column({ name: 'motivo_cita_id', nullable: true, comment: 'Motivo de cita (copiado de servicio_tarifa para queries rápidas). NULL si tipo_item_venta=2' })
+  motivoCitaId: number;
+
+  @Column({ name: 'documento_tarifa_id', nullable: true, comment: 'Documento vendible (solo si tipo_item_venta=2, NULL si tipo_item_venta=1)' })
+  documentoTarifaId: number;
+
+  @Column({ name: 'descripcion_linea', length: 255, nullable: true, comment: 'Descripción legible para la boleta: "3 Sesiones de Evaluación", "1 Informe Verbal", "Informe Físico"' })
+  descripcionLinea: string;
 
   @Column({ name: 'tipo_venta_id', comment: '1=Sesión unitaria, 2=Paquete' })
   tipo_venta_id: number;

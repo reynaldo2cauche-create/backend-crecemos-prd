@@ -7,6 +7,7 @@ import { CreateVentaServicioDto, DetalleVentaServicioDto } from '../dto/create-v
 import { VentaPromocionAplicada } from '../../promociones/entities/venta-promocion-aplicada.entity';
 import { ServicioTarifa } from '../../inventario/entities/servicio-tarifa.entity';
 import { ServicioPaquetePrecio } from '../../inventario/entities/servicio-paquete-precio.entity';
+import { DocumentoTarifa } from '../../inventario/entities/documento-tarifa.entity';
 
 const TIPO_VENTA_SERVICIO = 2;
 
@@ -119,31 +120,79 @@ export class VentaServicioService {
       // Enriquecer cada detalle con precio_unitario desde servicio_tarifa
       const detallesEnriquecidos = await Promise.all(
         dto.detalles.map(async (d) => {
-          const tarifa = await manager.findOne(ServicioTarifa, {
-            where: { id: d.servicio_tarifa_id },
-          });
-          if (!tarifa) {
-            throw new BadRequestException(`ServicioTarifa ${d.servicio_tarifa_id} no encontrada`);
-          }
+          const tipoItem = d.tipo_item_venta ?? 1; // Default: Servicio con cita
+          let precioUnitario = 0;
+          let motivoCitaId = null;
+          let descripcionLinea = d.descripcion_linea;
 
-          // Precio: si es paquete, buscar configuración en servicio_paquete_precio
-          let precioUnitario = parseFloat(String(tarifa.precio));
+          if (tipoItem === 1) {
+            // TIPO 1: Servicio con cita
+            if (!d.servicio_tarifa_id) {
+              throw new BadRequestException('servicio_tarifa_id es obligatorio para tipo_item_venta=1');
+            }
 
-          if (d.tipo_venta_id === 2 && d.paquete_id) {
-            const config = await manager.findOne(ServicioPaquetePrecio, {
-              where: { servicio_tarifa_id: d.servicio_tarifa_id, paquete_id: d.paquete_id, flg_activo: 1 },
+            const tarifa = await manager.findOne(ServicioTarifa, {
+              where: { id: d.servicio_tarifa_id },
+              relations: ['motivo_cita', 'servicio'],
             });
-            if (config) {
-              const sesiones = d.sesiones_totales;
-              if (config.tipo_calculo === 'precio_total') {
-                precioUnitario = parseFloat(String(config.valor)) / sesiones;
-              } else if (config.tipo_calculo === 'descuento_porcentaje') {
-                precioUnitario = precioUnitario * (1 - parseFloat(String(config.valor)) / 100);
+            if (!tarifa) {
+              throw new BadRequestException(`ServicioTarifa ${d.servicio_tarifa_id} no encontrada`);
+            }
+
+            // Copiar motivo_cita_id desde servicio_tarifa (DESNORMALIZACIÓN)
+            motivoCitaId = tarifa.motivo_cita_id;
+
+            // Precio: si es paquete, buscar configuración en servicio_paquete_precio
+            precioUnitario = parseFloat(String(tarifa.precio));
+
+            if (d.tipo_venta_id === 2 && d.paquete_id) {
+              const config = await manager.findOne(ServicioPaquetePrecio, {
+                where: { servicio_tarifa_id: d.servicio_tarifa_id, paquete_id: d.paquete_id, flg_activo: 1 },
+              });
+              if (config) {
+                const sesiones = d.sesiones_totales;
+                if (config.tipo_calculo === 'precio_total') {
+                  precioUnitario = parseFloat(String(config.valor)) / sesiones;
+                } else if (config.tipo_calculo === 'descuento_porcentaje') {
+                  precioUnitario = precioUnitario * (1 - parseFloat(String(config.valor)) / 100);
+                }
               }
+            }
+
+            // Generar descripción automática si no viene del frontend
+            if (!descripcionLinea && tarifa.motivo_cita && tarifa.servicio) {
+              const sesionLabel = d.sesiones_totales === 1 ? 'Sesión' : 'Sesiones';
+              descripcionLinea = `${d.sesiones_totales} ${sesionLabel} de ${tarifa.motivo_cita.nombre} - ${tarifa.servicio.nombre}`;
+            }
+
+          } else if (tipoItem === 2) {
+            // TIPO 2: Documento sin cita
+            if (!d.documento_tarifa_id) {
+              throw new BadRequestException('documento_tarifa_id es obligatorio para tipo_item_venta=2');
+            }
+
+            const documento = await manager.findOne(DocumentoTarifa, {
+              where: { id: d.documento_tarifa_id, flgActivo: 1 },
+            });
+            if (!documento) {
+              throw new BadRequestException(`DocumentoTarifa ${d.documento_tarifa_id} no encontrado o inactivo`);
+            }
+
+            precioUnitario = parseFloat(String(documento.precio));
+
+            // Para documentos, descripcion_linea es el nombre del documento
+            if (!descripcionLinea) {
+              descripcionLinea = documento.nombre;
             }
           }
 
-          return { ...d, precio_unitario: precioUnitario };
+          return {
+            ...d,
+            tipo_item_venta: tipoItem,
+            motivo_cita_id: motivoCitaId,
+            precio_unitario: precioUnitario,
+            descripcion_linea: descripcionLinea,
+          };
         }),
       );
 
@@ -179,12 +228,16 @@ export class VentaServicioService {
       for (const d of detallesCalculados) {
         const detalle = manager.create(VentaServicioDetalle, {
           venta_id:            savedVenta.id,
+          tipoItemVenta:       d.tipo_item_venta ?? 1,
           paciente_id:         d.paciente_id,
-          servicio_tarifa_id:  d.servicio_tarifa_id,
+          servicio_tarifa_id:  d.servicio_tarifa_id ?? null,
+          motivoCitaId:        d.motivo_cita_id ?? null,
+          documentoTarifaId:   d.documento_tarifa_id ?? null,
+          descripcionLinea:    d.descripcion_linea ?? null,
           tipo_venta_id:       d.tipo_venta_id,
           paquete_id:          d.paquete_id,
           sesiones_totales:    d.sesiones_totales,
-          sesiones_usadas:     0,
+          sesiones_usadas:     d.tipo_item_venta === 2 ? 1 : 0, // Documentos se entregan inmediatamente
           precio_unitario:     d.precio_unitario,
           descuento_tipo_id:   d.descuento_tipo_id,
           descuento_valor:     d.descuento_valor ?? 0,
@@ -226,7 +279,7 @@ export class VentaServicioService {
 
   // ── Helpers privados ──────────────────────────────────────────────────────────
 
-  private calcularDetalle(d: DetalleVentaServicioDto & { precio_unitario: number }) {
+  private calcularDetalle(d: DetalleVentaServicioDto & { precio_unitario: number; tipo_item_venta?: number; motivo_cita_id?: number; descripcion_linea?: string; documento_tarifa_id?: number }) {
     const subtotalSinDescuento = d.precio_unitario * d.sesiones_totales;
     const descuentoMonto = this.calcularDescuentoMonto(subtotalSinDescuento, d.descuento_tipo_id, d.descuento_valor);
     return {

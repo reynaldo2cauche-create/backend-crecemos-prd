@@ -6,9 +6,29 @@ export class DetalleVentaServicioDto {
   @Type(() => Number)
   paciente_id: number;
 
+  /** 1=Servicio con cita, 2=Documento sin cita */
+  @IsOptional()
+  @IsNumber()
+  @IsIn([1, 2])
+  @Type(() => Number)
+  tipo_item_venta?: number = 1;
+
+  /** Obligatorio si tipo_item_venta=1, NULL si tipo_item_venta=2 */
+  @IsOptional()
   @IsNumber()
   @Type(() => Number)
-  servicio_tarifa_id: number;
+  servicio_tarifa_id?: number;
+
+  /** Solo si tipo_item_venta=2, NULL si tipo_item_venta=1 */
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  documento_tarifa_id?: number;
+
+  /** Descripción para la boleta: "3 Sesiones de Evaluación", "1 Informe Verbal", "Informe Físico" */
+  @IsOptional()
+  @IsString()
+  descripcion_linea?: string;
 
   /** 1 = Sesión unitaria, 2 = Paquete */
   @IsNumber()
