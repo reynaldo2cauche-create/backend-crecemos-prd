@@ -391,7 +391,7 @@ import { LibroReclamacionesConfig } from './libro-reclamaciones/entities/config.
 
       ],
         synchronize: false,   // true en desarrollo, false en producción - DESHABILITADO para evitar conflictos con foreign keys
-          // Activar logs de SQL para debug
+          // 🔍 Activar logs de SQL para debug
 
     }),
 

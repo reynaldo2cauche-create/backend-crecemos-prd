@@ -97,7 +97,7 @@ export class SolicitudInforme {
   })
   estado_solicitud_id: number;
 
-  @ManyToOne(() => EstadoSolicitudInforme, { eager: true })
+  @ManyToOne(() => EstadoSolicitudInforme)
   @JoinColumn({ name: 'estado_solicitud_id' })
   estado_solicitud: EstadoSolicitudInforme;
 

@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -22,6 +23,10 @@ import {
 
 import { NotificacionesService } from '../notificaciones/notificaciones.service';
 
+// ─────────────────────────────────────────────────────────────────────────────
+// CONSTANTES
+// ─────────────────────────────────────────────────────────────────────────────
+
 export const ESTADO_SOLICITUD = {
   PENDIENTE_SUBIDA:   1,
   PENDIENTE_REVISION: 2,
@@ -33,6 +38,78 @@ export const ESTADO_SOLICITUD = {
 const ROL_ADMIN     = 1;
 const ROL_ADMISION  = 2;
 const ROL_TERAPEUTA = 4;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TIPOS DE VISTA POR ROL
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Campos que NUNCA debe ver la terapeuta ni la jefa:
+ *  - modalidad_pago
+ *  - estado_pago
+ *  - monto / monto_pago (cualquier campo financiero en la entidad)
+ *  - venta_servicio (toda la relación de venta)
+ */
+const CAMPOS_OCULTOS_TERAPEUTA = [
+  'modalidad_pago',
+  'estado_pago',
+  'monto',
+  'monto_pago',
+  'precio',
+  'venta_servicio',
+  'venta_servicio_id',
+] as const;
+
+export type VistaRol = 'admin' | 'admision' | 'terapeuta' | 'jefa';
+
+/**
+ * Limpia del objeto los campos financieros/de venta.
+ * Se aplica cuando el rol es 'terapeuta' o 'jefa'.
+ */
+function sanitizarParaTerapeuta(solicitud: SolicitudInforme): Partial<SolicitudInforme> {
+  const obj: any = { ...solicitud };
+  for (const campo of CAMPOS_OCULTOS_TERAPEUTA) {
+    delete obj[campo];
+  }
+  return obj;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// HELPERS DE NOMBRE
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Construye un label legible del paciente a partir de la relación anidada.
+ * venta_servicio → paciente → nombre / apellido
+ */
+function nombrePaciente(s: SolicitudInforme): string {
+  const p = (s as any).venta_servicio?.paciente;
+  if (!p) return 'paciente desconocido';
+  const nombre = [p.nombre, p.apellido_paterno, p.apellido_materno]
+    .filter(Boolean)
+    .join(' ');
+  return nombre || `paciente #${p.id}`;
+}
+
+/**
+ * Nombre del tipo de informe (tipo_archivo.nombre o fallback).
+ */
+function nombreTipoInforme(s: SolicitudInforme): string {
+  return (s as any).tipo_archivo?.nombre ?? 'Informe';
+}
+
+/**
+ * Nombre del especialista asignado.
+ */
+function nombreEspecialista(s: SolicitudInforme): string {
+  const e = (s as any).especialista;
+  if (!e) return 'terapeuta';
+  return [e.nombre, e.apellido_paterno].filter(Boolean).join(' ') || `terapeuta #${e.id}`;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SERVICIO
+// ─────────────────────────────────────────────────────────────────────────────
 
 @Injectable()
 export class SolicitudInformeService {
@@ -55,11 +132,49 @@ export class SolicitudInformeService {
     private readonly notificacionesService: NotificacionesService,
   ) {}
 
-  // ════════════════════════════════════════════════════════════════
-  // CRUD BASE
-  // ════════════════════════════════════════════════════════════════
+  // ══════════════════════════════════════════════════════════════════════════
+  // QUERY BUILDER BASE  (reutilizado en todos los métodos)
+  // ══════════════════════════════════════════════════════════════════════════
 
-  async create(dto: CreateSolicitudInformeDto): Promise<SolicitudInforme> {
+  /**
+   * QueryBuilder completo con todas las relaciones necesarias.
+   * Los métodos que necesitan filtrar por paciente / especialista
+   * añaden el .where() correspondiente antes de llamar a getOne/getMany.
+   */
+  private baseQuery() {
+    return this.solicitudRepo
+      .createQueryBuilder('si')
+      .leftJoinAndSelect('si.tipo_archivo',          'tipo_archivo')
+      .leftJoinAndSelect('si.especialista',          'especialista')
+      .leftJoinAndSelect('especialista.cargo',       'cargo')
+      .leftJoinAndSelect('si.modalidad_pago',        'modalidad_pago')
+      .leftJoinAndSelect('si.estado_pago',           'estado_pago')
+      .leftJoinAndSelect('si.estado_solicitud',      'estado_solicitud')
+      .leftJoinAndSelect('si.revisor',               'revisor')
+      .leftJoinAndSelect('si.venta_servicio',        'venta_servicio')
+      .leftJoinAndSelect('venta_servicio.paciente',  'paciente');
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // CRUD BASE
+  // ══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * Solo Admin (ROL 1) o Admisión (ROL 2) pueden crear.
+   * Si se pasa rolCreador se valida aquí; de lo contrario se confía en el guard.
+   */
+  async create(
+    dto: CreateSolicitudInformeDto,
+    rolCreador?: number,
+  ): Promise<SolicitudInforme> {
+    // Validación de rol
+    if (rolCreador !== undefined && rolCreador !== ROL_ADMIN && rolCreador !== ROL_ADMISION) {
+      throw new ForbiddenException(
+        'Solo el Administrador o Admisión pueden crear solicitudes de informe.',
+      );
+    }
+
+    // Unicidad por venta
     if (dto.venta_servicio_id) {
       const existe = await this.solicitudRepo.findOne({
         where: { venta_servicio_id: dto.venta_servicio_id },
@@ -67,7 +182,7 @@ export class SolicitudInformeService {
       if (existe) {
         throw new BadRequestException(
           `Esta venta ya fue utilizada para la solicitud #${existe.id}. ` +
-          'No se puede reutilizar la misma venta para crear múltiples solicitudes.',
+          'No se puede reutilizar la misma venta.',
         );
       }
     }
@@ -78,63 +193,65 @@ export class SolicitudInformeService {
     });
     const resultado = await this.solicitudRepo.save(solicitud);
 
+    // Necesitamos el objeto completo para construir mensajes descriptivos
+    const completa = await this.findOne(resultado.id);
+    const paciente  = nombrePaciente(completa);
+    const informe   = nombreTipoInforme(completa);
+    const terapeuta = nombreEspecialista(completa);
+
+    // Fecha límite de entrega (si existe en el DTO)
+    const fechaLimite = (dto as any).fecha_limite_entrega
+      ? new Date((dto as any).fecha_limite_entrega).toLocaleDateString('es-PE', {
+          day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'America/Lima',
+        })
+      : null;
+    const textoFecha = fechaLimite ? ` La fecha límite de entrega es el ${fechaLimite}.` : '';
+
     try {
       const evento = await this.notificacionesService.crearEvento({
         tipo_evento: 'SOLICITUD_INFORME_CREADA',
-        descripcion: `Nueva solicitud de informe asignada al especialista #${resultado.especialista_id}`,
+        descripcion: `Nueva solicitud de "${informe}" para el paciente ${paciente} asignada a ${terapeuta}`,
         usuario_id:  resultado.especialista_id,
         datos_adicionales: {
           solicitud_id:            resultado.id,
           especialista_id:         resultado.especialista_id,
+          paciente_nombre:         paciente,
+          tipo_informe:            informe,
+          fecha_limite:            fechaLimite,
           terapeutas_destinatarios: [resultado.especialista_id],
         },
       });
 
       await this.notificacionesService.crearNotificacion({
         tipo_notificacion: 'SOLICITUD_INFORME',
-        titulo:   'Nueva solicitud de informe',
-        mensaje:  'Se te ha asignado una nueva solicitud de informe. Por favor, sube el archivo correspondiente.',
+        titulo:   `Nueva solicitud: ${informe} — ${paciente}`,
+        mensaje:  `Se te asignó la elaboración del "${informe}" para el paciente ${paciente}.${textoFecha} Por favor, sube el archivo cuando esté listo.`,
         evento_id: evento.id,
         roles_destino: [ROL_TERAPEUTA],
       });
     } catch (err) {
-      console.error('⚠️  Error al enviar notificación a terapeuta:', err);
+      console.error('⚠️  Error al notificar nueva solicitud al terapeuta:', err);
     }
 
-    return resultado;
+    return completa;
   }
 
+  // ──────────────────────────────────────────────────────────────────────────
+  // FIND ALL  (solo Admin y Admisión — ven todo)
+  // ──────────────────────────────────────────────────────────────────────────
+
   async findAll(): Promise<SolicitudInforme[]> {
-    return this.solicitudRepo
-      .createQueryBuilder('si')
-      .leftJoinAndSelect('si.tipo_archivo',     'tipo_archivo')
-      .leftJoinAndSelect('si.especialista',     'especialista')
-      .leftJoinAndSelect('especialista.cargo',  'cargo')        // cargo.es_jefe
-      .leftJoinAndSelect('si.modalidad_pago',   'modalidad_pago')
-      .leftJoinAndSelect('si.estado_pago',      'estado_pago')
-      .leftJoinAndSelect('si.estado_solicitud', 'estado_solicitud')
-      .leftJoinAndSelect('si.revisor',          'revisor')
-      .leftJoinAndSelect('si.venta_servicio',   'venta_servicio')
+    return this.baseQuery()
       .orderBy('si.fecha_solicitud', 'DESC')
       .getMany();
   }
 
-  /**
-   * findOne usa QueryBuilder para cargar especialista → cargo (con es_jefe).
-   * Los métodos del workflow lo llaman internamente, así que también obtienen el cargo.
-   */
+  // ──────────────────────────────────────────────────────────────────────────
+  // FIND ONE  (interno — siempre con todas las relaciones)
+  // ──────────────────────────────────────────────────────────────────────────
+
   async findOne(id: number): Promise<SolicitudInforme> {
-    const s = await this.solicitudRepo
-      .createQueryBuilder('si')
-      .leftJoinAndSelect('si.tipo_archivo',        'tipo_archivo')
-      .leftJoinAndSelect('si.especialista',        'especialista')
-      .leftJoinAndSelect('especialista.cargo',     'cargo')       // cargo.es_jefe
-      .leftJoinAndSelect('si.modalidad_pago',      'modalidad_pago')
-      .leftJoinAndSelect('si.estado_pago',         'estado_pago')
-      .leftJoinAndSelect('si.estado_solicitud',    'estado_solicitud')
-      .leftJoinAndSelect('si.revisor',             'revisor')
-      .leftJoinAndSelect('si.venta_servicio',      'venta_servicio')
-      .leftJoinAndSelect('venta_servicio.paciente','paciente')
+    const s = await this.baseQuery()
       .where('si.id = :id', { id })
       .getOne();
 
@@ -143,43 +260,75 @@ export class SolicitudInformeService {
   }
 
   /**
-   * Solicitudes de un paciente.
-   * Incluye especialista → cargo para que el front pueda leer cargo.es_jefe
-   * y mostrar el botón "Revisar" cuando corresponde.
+   * findOne expuesto al controlador con sanitización por rol.
+   *
+   * - 'admin' | 'admision' → ven todo
+   * - 'terapeuta' | 'jefa' → sin datos financieros ni de venta
    */
-  async findByPaciente(pacienteId: number): Promise<SolicitudInforme[]> {
-    return this.solicitudRepo
-      .createQueryBuilder('si')
-      .leftJoinAndSelect('si.servicio',            'servicio')
-      .leftJoinAndSelect('si.tipo_archivo',        'tipo_archivo')
-      .leftJoinAndSelect('si.especialista',        'especialista')
-      .leftJoinAndSelect('especialista.cargo',     'cargo')       // cargo.es_jefe
-      .leftJoinAndSelect('si.modalidad_pago',      'modalidad_pago')
-      .leftJoinAndSelect('si.estado_pago',         'estado_pago')
-      .leftJoinAndSelect('si.estado_solicitud',    'estado_solicitud')
-      .leftJoinAndSelect('si.revisor',             'revisor')
-      .leftJoinAndSelect('si.venta_servicio',      'venta_servicio')
-      .leftJoinAndSelect('venta_servicio.paciente','paciente')
+  async findOneByRol(
+    id: number,
+    vista: VistaRol,
+  ): Promise<SolicitudInforme | Partial<SolicitudInforme>> {
+    const s = await this.findOne(id);
+    if (vista === 'terapeuta' || vista === 'jefa') {
+      return sanitizarParaTerapeuta(s);
+    }
+    return s;
+  }
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // FIND BY PACIENTE
+  // ──────────────────────────────────────────────────────────────────────────
+
+  async findByPaciente(
+    pacienteId: number,
+    vista: VistaRol = 'admin',
+  ): Promise<Array<SolicitudInforme | Partial<SolicitudInforme>>> {
+    const solicitudes = await this.baseQuery()
       .where('paciente.id = :pacienteId', { pacienteId })
       .orderBy('si.fecha_solicitud', 'DESC')
       .getMany();
+
+    if (vista === 'terapeuta' || vista === 'jefa') {
+      return solicitudes.map(sanitizarParaTerapeuta);
+    }
+    return solicitudes;
   }
 
-  async findByEspecialista(especialistaId: number): Promise<SolicitudInforme[]> {
-    return this.solicitudRepo
-      .createQueryBuilder('si')
-      .leftJoinAndSelect('si.tipo_archivo',    'tipo_archivo')
-      .leftJoinAndSelect('si.especialista',    'especialista')
-      .leftJoinAndSelect('especialista.cargo', 'cargos')         // cargo.es_jefe
-      .leftJoinAndSelect('si.estado_solicitud','estado_solicitud')
+  // ──────────────────────────────────────────────────────────────────────────
+  // FIND BY ESPECIALISTA  (terapeuta ve sus propias solicitudes — sin datos fin.)
+  // ──────────────────────────────────────────────────────────────────────────
+
+  /**
+   * La terapeuta (y la jefa) solo ven:
+   *  - tipo_archivo (nombre del informe a elaborar)
+   *  - estado_solicitud
+   *  - archivo_url (para saber si ya subió algo)
+   *  - fecha_solicitud
+   *  - fecha_limite_entrega
+   *  - comentarios de revisión (en endpoint separado)
+   *  - nombre del paciente (de venta_servicio → paciente)
+   *
+   * Todo lo financiero se elimina con sanitizarParaTerapeuta.
+   */
+  async findByEspecialista(
+    especialistaId: number,
+  ): Promise<Partial<SolicitudInforme>[]> {
+    const solicitudes = await this.baseQuery()
       .where('si.especialista_id = :especialistaId', { especialistaId })
       .orderBy('si.fecha_solicitud', 'DESC')
       .getMany();
+
+    return solicitudes.map(sanitizarParaTerapeuta);
   }
 
+  // ──────────────────────────────────────────────────────────────────────────
+  // UPDATE / DELETE  (solo Admin y Admisión)
+  // ──────────────────────────────────────────────────────────────────────────
+
   async update(id: number, dto: UpdateSolicitudInformeDto): Promise<SolicitudInforme> {
-    const solicitud = await this.findOne(id);
-    return this.solicitudRepo.save(this.solicitudRepo.merge(solicitud, dto));
+    await this.solicitudRepo.update(id, dto);
+    return this.findOne(id);
   }
 
   async remove(id: number): Promise<void> {
@@ -187,11 +336,11 @@ export class SolicitudInformeService {
     await this.solicitudRepo.remove(s);
   }
 
-  // ════════════════════════════════════════════════════════════════
+  // ══════════════════════════════════════════════════════════════════════════
   // WORKFLOW – PASO 1: TERAPEUTA SUBE EL ARCHIVO
-  // ════════════════════════════════════════════════════════════════
+  // ══════════════════════════════════════════════════════════════════════════
 
-  async subirArchivo(id: number, dto: SubirArchivoDto): Promise<SolicitudInforme> {
+  async subirArchivo(id: number, dto: SubirArchivoDto): Promise<Partial<SolicitudInforme>> {
     const solicitud = await this.findOne(id);
 
     if (solicitud.estado_solicitud_id === ESTADO_SOLICITUD.APROBADO) {
@@ -201,43 +350,68 @@ export class SolicitudInformeService {
       throw new BadRequestException('El informe ya fue entregado al paciente.');
     }
 
-    solicitud.archivo_url          = dto.archivo_url;
-    solicitud.fecha_subida_archivo = new Date();
-    solicitud.estado_solicitud_id  = ESTADO_SOLICITUD.PENDIENTE_REVISION;
-    if (dto.user_actua_id) solicitud.user_actua_id = dto.user_actua_id;
+    await this.solicitudRepo.update(id, {
+      archivo_url:          dto.archivo_url,
+      fecha_subida_archivo: new Date(),
+      estado_solicitud_id:  ESTADO_SOLICITUD.PENDIENTE_REVISION,
+      user_actua_id:        dto.user_actua_id,
+    });
 
-    const resultado = await this.solicitudRepo.save(solicitud);
+    // Datos descriptivos para notificación
+    const paciente  = nombrePaciente(solicitud);
+    const informe   = nombreTipoInforme(solicitud);
+    const terapeuta = nombreEspecialista(solicitud);
 
     try {
       const evento = await this.notificacionesService.crearEvento({
         tipo_evento: 'INFORME_PENDIENTE_REVISION',
-        descripcion: `Informe subido para revisión - solicitud #${id}`,
+        descripcion: `${terapeuta} subió el "${informe}" del paciente ${paciente}. Pendiente de revisión.`,
         usuario_id:  dto.user_actua_id ?? solicitud.especialista_id,
         datos_adicionales: {
           solicitud_id:    id,
           especialista_id: solicitud.especialista_id,
+          paciente_nombre: paciente,
+          tipo_informe:    informe,
+          terapeuta_nombre: terapeuta,
         },
       });
 
       await this.notificacionesService.crearNotificacion({
         tipo_notificacion: 'SOLICITUD_INFORME',
-        titulo:   'Informe listo para revisión',
-        mensaje:  `La terapeuta subió el informe de la solicitud #${id}. Está pendiente de tu revisión.`,
+        titulo:   `Informe listo para revisar: ${informe} — ${paciente}`,
+        mensaje:  `${terapeuta} subió el "${informe}" del paciente ${paciente}. Por favor, revísalo y aprueba o rechaza el documento.`,
         evento_id: evento.id,
-        roles_destino: [ROL_ADMIN],
+        roles_destino: [ROL_ADMIN],  // La jefa tiene rol ADMIN o puede ser ROL_TERAPEUTA con es_jefe=true
+        // Si la jefa tiene un rol propio (ej. ROL_JEFA = 5), cambiar aquí
       });
     } catch (err) {
-      console.error('⚠️  Error al notificar a la jefa:', err);
+      console.error('⚠️  Error al notificar a la jefa sobre archivo subido:', err);
     }
 
-    return resultado;
+    // La terapeuta recibe de vuelta su vista (sin datos financieros)
+    const actualizada = await this.findOne(id);
+    return sanitizarParaTerapeuta(actualizada);
   }
 
-  // ════════════════════════════════════════════════════════════════
-  // WORKFLOW – PASO 2: JEFA REVISA EL INFORME (APRUEBA / RECHAZA)
-  // ════════════════════════════════════════════════════════════════
+  // ══════════════════════════════════════════════════════════════════════════
+  // WORKFLOW – PASO 2: JEFA REVISA (APRUEBA / RECHAZA)
+  // ══════════════════════════════════════════════════════════════════════════
 
-  async revisarInforme(id: number, dto: RevisarInformeDto): Promise<SolicitudInforme> {
+  /**
+   * Solo puede revisar quien tenga cargo.es_jefe = true.
+   * Si se pasa esJefe = false se lanza ForbiddenException.
+   */
+  async revisarInforme(
+    id: number,
+    dto: RevisarInformeDto,
+    esJefe: boolean = true,
+  ): Promise<Partial<SolicitudInforme>> {
+    if (!esJefe) {
+      throw new ForbiddenException(
+        'Solo la jefa / supervisora puede aprobar o rechazar informes.',
+      );
+    }
+
     const solicitud = await this.findOne(id);
 
     if (solicitud.estado_solicitud_id !== ESTADO_SOLICITUD.PENDIENTE_REVISION) {
@@ -253,10 +427,11 @@ export class SolicitudInformeService {
 
     if (dto.estado_id === ESTADO_SOLICITUD.RECHAZADO && !dto.comentario?.trim()) {
       throw new BadRequestException(
-        'El comentario es obligatorio cuando se rechaza un informe.',
+        'El comentario es obligatorio al rechazar un informe.',
       );
     }
 
+    // Guardar revisión en historial
     const revision = this.revisionRepo.create({
       solicitud_informe_id: id,
       revisor_id:           dto.revisor_id,
@@ -266,20 +441,30 @@ export class SolicitudInformeService {
     });
     await this.revisionRepo.save(revision);
 
-    solicitud.estado_solicitud_id = dto.estado_id;
-    solicitud.fecha_revision      = new Date();
-    solicitud.revisor_id          = dto.revisor_id;
-    const resultado = await this.solicitudRepo.save(solicitud);
+    // Actualizar solicitud
+    await this.solicitudRepo.update(id, {
+      estado_solicitud_id: dto.estado_id,
+      fecha_revision:      new Date(),
+      revisor_id:          dto.revisor_id,
+    });
+
+    // Datos descriptivos
+    const paciente  = nombrePaciente(solicitud);
+    const informe   = nombreTipoInforme(solicitud);
+    const terapeuta = nombreEspecialista(solicitud);
 
     try {
       if (dto.estado_id === ESTADO_SOLICITUD.RECHAZADO) {
+        // ── Notificar al TERAPEUTA que fue rechazado ──────────────────────
         const evento = await this.notificacionesService.crearEvento({
           tipo_evento: 'INFORME_RECHAZADO',
-          descripcion: `Informe de solicitud #${id} rechazado por revisor`,
+          descripcion: `El "${informe}" del paciente ${paciente} fue rechazado. Requiere correcciones.`,
           usuario_id:  dto.revisor_id,
           datos_adicionales: {
             solicitud_id:            id,
             especialista_id:         solicitud.especialista_id,
+            paciente_nombre:         paciente,
+            tipo_informe:            informe,
             comentario:              dto.comentario,
             terapeutas_destinatarios: [solicitud.especialista_id],
           },
@@ -287,23 +472,30 @@ export class SolicitudInformeService {
 
         await this.notificacionesService.crearNotificacion({
           tipo_notificacion: 'SOLICITUD_INFORME',
-          titulo:   'Informe rechazado – requiere correcciones',
-          mensaje:  `Tu informe de la solicitud #${id} fue rechazado. Comentario: "${dto.comentario}". Por favor, corrígelo y vuelve a subir el archivo.`,
+          titulo:   `Informe rechazado: ${informe} — ${paciente}`,
+          mensaje:  `Tu "${informe}" del paciente ${paciente} fue rechazado. Motivo: "${dto.comentario}". Por favor, corrígelo y vuelve a subir el archivo.`,
           evento_id: evento.id,
           roles_destino: [ROL_TERAPEUTA],
         });
+
       } else {
+        // ── Notificar a ADMISIÓN que puede entregar ────────────────────────
         const evento = await this.notificacionesService.crearEvento({
           tipo_evento: 'INFORME_APROBADO',
-          descripcion: `Informe de solicitud #${id} aprobado, listo para entrega`,
+          descripcion: `El "${informe}" del paciente ${paciente} fue aprobado. Listo para entregar.`,
           usuario_id:  dto.revisor_id,
-          datos_adicionales: { solicitud_id: id },
+          datos_adicionales: {
+            solicitud_id:    id,
+            paciente_nombre: paciente,
+            tipo_informe:    informe,
+            terapeuta_nombre: terapeuta,
+          },
         });
 
         await this.notificacionesService.crearNotificacion({
           tipo_notificacion: 'SOLICITUD_INFORME',
-          titulo:   'Informe aprobado – listo para entrega',
-          mensaje:  `El informe de la solicitud #${id} fue aprobado. Ya puede ser entregado al paciente.`,
+          titulo:   `Informe aprobado para entrega: ${informe} — ${paciente}`,
+          mensaje:  `El "${informe}" del paciente ${paciente} elaborado por ${terapeuta} fue aprobado. Ya puede ser entregado al paciente.`,
           evento_id: evento.id,
           roles_destino: [ROL_ADMISION],
         });
@@ -312,12 +504,14 @@ export class SolicitudInformeService {
       console.error('⚠️  Error al enviar notificación de revisión:', err);
     }
 
-    return resultado;
+    // La jefa ve su vista (igual que la terapeuta: sin datos financieros)
+    const actualizada = await this.findOne(id);
+    return sanitizarParaTerapeuta(actualizada);
   }
 
-  // ════════════════════════════════════════════════════════════════
+  // ══════════════════════════════════════════════════════════════════════════
   // WORKFLOW – PASO 3: ADMISIÓN MARCA COMO ENTREGADO
-  // ════════════════════════════════════════════════════════════════
+  // ══════════════════════════════════════════════════════════════════════════
 
   async marcarEntregado(id: number, dto: MarcarEntregadoDto): Promise<SolicitudInforme> {
     const solicitud = await this.findOne(id);
@@ -328,15 +522,44 @@ export class SolicitudInformeService {
       );
     }
 
-    solicitud.estado_solicitud_id = ESTADO_SOLICITUD.ENTREGADO;
-    if (dto.user_actua_id) solicitud.user_actua_id = dto.user_actua_id;
+    await this.solicitudRepo.update(id, {
+      estado_solicitud_id: ESTADO_SOLICITUD.ENTREGADO,
+      ...(dto.user_actua_id ? { user_actua_id: dto.user_actua_id } : {}),
+    });
 
-    return this.solicitudRepo.save(solicitud);
+    const paciente = nombrePaciente(solicitud);
+    const informe  = nombreTipoInforme(solicitud);
+
+    // Notificación informativa al Admin (opcional, útil para trazabilidad)
+    try {
+      const evento = await this.notificacionesService.crearEvento({
+        tipo_evento: 'INFORME_ENTREGADO',
+        descripcion: `El "${informe}" del paciente ${paciente} fue entregado.`,
+        usuario_id:  dto.user_actua_id ?? 0,
+        datos_adicionales: {
+          solicitud_id:    id,
+          paciente_nombre: paciente,
+          tipo_informe:    informe,
+        },
+      });
+
+      await this.notificacionesService.crearNotificacion({
+        tipo_notificacion: 'SOLICITUD_INFORME',
+        titulo:   `Informe entregado: ${informe} — ${paciente}`,
+        mensaje:  `El "${informe}" del paciente ${paciente} ha sido entregado correctamente. Solicitud #${id} completada.`,
+        evento_id: evento.id,
+        roles_destino: [ROL_ADMIN],
+      });
+    } catch (err) {
+      console.error('⚠️  Error al notificar entrega al admin:', err);
+    }
+
+    return this.findOne(id);
   }
 
-  // ════════════════════════════════════════════════════════════════
+  // ══════════════════════════════════════════════════════════════════════════
   // HISTORIAL DE REVISIONES
-  // ════════════════════════════════════════════════════════════════
+  // ══════════════════════════════════════════════════════════════════════════
 
   async findRevisiones(solicitudId: number): Promise<RevisionInforme[]> {
     return this.revisionRepo.find({
@@ -346,9 +569,9 @@ export class SolicitudInformeService {
     });
   }
 
-  // ════════════════════════════════════════════════════════════════
+  // ══════════════════════════════════════════════════════════════════════════
   // CATÁLOGOS
-  // ════════════════════════════════════════════════════════════════
+  // ══════════════════════════════════════════════════════════════════════════
 
   async findAllModalidadesPago(): Promise<ModalidadPago[]> {
     return this.modalidadPagoRepo.find();
