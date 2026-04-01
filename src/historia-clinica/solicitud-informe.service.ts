@@ -79,13 +79,13 @@ function sanitizarParaTerapeuta(solicitud: SolicitudInforme): Partial<SolicitudI
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Construye un label legible del paciente a partir de la relación anidada.
- * venta_servicio → paciente → nombre / apellido
+ * Construye el nombre completo del paciente (nombres y apellidos completos).
+ * venta_servicio → paciente → nombres / apellidos
  */
-function nombrePaciente(s: SolicitudInforme): string {
+function nombreCompletoPaciente(s: SolicitudInforme): string {
   const p = (s as any).venta_servicio?.paciente;
   if (!p) return 'paciente desconocido';
-  const nombre = [p.nombre, p.apellido_paterno, p.apellido_materno]
+  const nombre = [p.nombres, p.apellido_paterno, p.apellido_materno]
     .filter(Boolean)
     .join(' ');
   return nombre || `paciente #${p.id}`;
@@ -99,12 +99,15 @@ function nombreTipoInforme(s: SolicitudInforme): string {
 }
 
 /**
- * Nombre del especialista asignado.
+ * Construye el nombre completo del especialista (nombres y apellidos completos).
  */
-function nombreEspecialista(s: SolicitudInforme): string {
+function nombreCompletoEspecialista(s: SolicitudInforme): string {
   const e = (s as any).especialista;
   if (!e) return 'terapeuta';
-  return [e.nombre, e.apellido_paterno].filter(Boolean).join(' ') || `terapeuta #${e.id}`;
+  const nombre = [e.nombres, e.apellido_paterno, e.apellido_materno]
+    .filter(Boolean)
+    .join(' ');
+  return nombre || `terapeuta #${e.id}`;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -195,9 +198,9 @@ export class SolicitudInformeService {
 
     // Necesitamos el objeto completo para construir mensajes descriptivos
     const completa = await this.findOne(resultado.id);
-    const paciente  = nombrePaciente(completa);
-    const informe   = nombreTipoInforme(completa);
-    const terapeuta = nombreEspecialista(completa);
+    const pacienteNombreCompleto  = nombreCompletoPaciente(completa);
+    const tipoInforme = nombreTipoInforme(completa);
+    const terapeutaNombreCompleto = nombreCompletoEspecialista(completa);
 
     // Fecha límite de entrega (si existe en el DTO)
     const fechaLimite = (dto as any).fecha_limite_entrega
@@ -210,13 +213,13 @@ export class SolicitudInformeService {
     try {
       const evento = await this.notificacionesService.crearEvento({
         tipo_evento: 'SOLICITUD_INFORME_CREADA',
-        descripcion: `Nueva solicitud de "${informe}" para el paciente ${paciente} asignada a ${terapeuta}`,
+        descripcion: `Nueva solicitud de ${tipoInforme} para el paciente ${pacienteNombreCompleto} asignada a ${terapeutaNombreCompleto}`,
         usuario_id:  resultado.especialista_id,
         datos_adicionales: {
           solicitud_id:            resultado.id,
           especialista_id:         resultado.especialista_id,
-          paciente_nombre:         paciente,
-          tipo_informe:            informe,
+          paciente_nombre:         pacienteNombreCompleto,
+          tipo_informe:            tipoInforme,
           fecha_limite:            fechaLimite,
           terapeutas_destinatarios: [resultado.especialista_id],
         },
@@ -224,8 +227,8 @@ export class SolicitudInformeService {
 
       await this.notificacionesService.crearNotificacion({
         tipo_notificacion: 'SOLICITUD_INFORME',
-        titulo:   `Nueva solicitud: ${informe} — ${paciente}`,
-        mensaje:  `Se te asignó la elaboración del "${informe}" para el paciente ${paciente}.${textoFecha} Por favor, sube el archivo cuando esté listo.`,
+        titulo:   `Nueva Solicitud de Informe`,
+        mensaje:  `Se te ha asignado la elaboración del ${tipoInforme} para el paciente ${pacienteNombreCompleto}.${textoFecha} Por favor, sube el archivo cuando esté listo.`,
         evento_id: evento.id,
         roles_destino: [ROL_TERAPEUTA],
       });
@@ -350,42 +353,111 @@ export class SolicitudInformeService {
       throw new BadRequestException('El informe ya fue entregado al paciente.');
     }
 
+    // 🔍 Verificar si la terapeuta asignada ES JEFA
+    // Si es jefa, aprueba automáticamente (sin necesidad de revisión por otra persona)
+    const terapeutaEsJefa = Boolean((solicitud.especialista as any)?.cargo?.es_jefe);
+    const nuevoEstado = terapeutaEsJefa
+      ? ESTADO_SOLICITUD.APROBADO
+      : ESTADO_SOLICITUD.PENDIENTE_REVISION;
+
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('🔍 DEBUG - Subir archivo informe #' + id);
+    console.log('👩‍⚕️ Terapeuta:', (solicitud.especialista as any)?.nombres);
+    console.log('👔 Es jefa?:', terapeutaEsJefa);
+    console.log('📋 Nuevo estado:', nuevoEstado === ESTADO_SOLICITUD.APROBADO ? 'APROBADO (directo)' : 'PENDIENTE_REVISION');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+
     await this.solicitudRepo.update(id, {
       archivo_url:          dto.archivo_url,
       fecha_subida_archivo: new Date(),
-      estado_solicitud_id:  ESTADO_SOLICITUD.PENDIENTE_REVISION,
+      estado_solicitud_id:  nuevoEstado,
       user_actua_id:        dto.user_actua_id,
+      // Si es jefa, también marcamos como revisado por ella misma
+      ...(terapeutaEsJefa ? {
+        fecha_revision: new Date(),
+        revisor_id: solicitud.especialista_id,
+      } : {}),
     });
 
     // Datos descriptivos para notificación
-    const paciente  = nombrePaciente(solicitud);
-    const informe   = nombreTipoInforme(solicitud);
-    const terapeuta = nombreEspecialista(solicitud);
+    const pacienteNombreCompleto  = nombreCompletoPaciente(solicitud);
+    const tipoInforme = nombreTipoInforme(solicitud);
+    const terapeutaNombreCompleto = nombreCompletoEspecialista(solicitud);
+
+    // Verificar si es una re-subida (corrección tras rechazo)
+    const esCorreccion = solicitud.estado_solicitud_id === ESTADO_SOLICITUD.RECHAZADO;
 
     try {
-      const evento = await this.notificacionesService.crearEvento({
-        tipo_evento: 'INFORME_PENDIENTE_REVISION',
-        descripcion: `${terapeuta} subió el "${informe}" del paciente ${paciente}. Pendiente de revisión.`,
-        usuario_id:  dto.user_actua_id ?? solicitud.especialista_id,
-        datos_adicionales: {
-          solicitud_id:    id,
-          especialista_id: solicitud.especialista_id,
-          paciente_nombre: paciente,
-          tipo_informe:    informe,
-          terapeuta_nombre: terapeuta,
-        },
-      });
+      if (terapeutaEsJefa) {
+        // ── Si es jefa: Notificar a ADMISIÓN que puede entregar (sin revisión) ──
+        const evento = await this.notificacionesService.crearEvento({
+          tipo_evento: 'INFORME_APROBADO',
+          descripcion: `El ${tipoInforme} del paciente ${pacienteNombreCompleto} fue aprobado automáticamente (terapeuta con cargo de jefa)`,
+          usuario_id:  dto.user_actua_id ?? solicitud.especialista_id,
+          datos_adicionales: {
+            solicitud_id:    id,
+            especialista_id: solicitud.especialista_id,
+            paciente_nombre: pacienteNombreCompleto,
+            tipo_informe:    tipoInforme,
+            terapeuta_nombre: terapeutaNombreCompleto,
+            auto_aprobado: true,
+          },
+        });
 
-      await this.notificacionesService.crearNotificacion({
-        tipo_notificacion: 'SOLICITUD_INFORME',
-        titulo:   `Informe listo para revisar: ${informe} — ${paciente}`,
-        mensaje:  `${terapeuta} subió el "${informe}" del paciente ${paciente}. Por favor, revísalo y aprueba o rechaza el documento.`,
-        evento_id: evento.id,
-        roles_destino: [ROL_ADMIN],  // La jefa tiene rol ADMIN o puede ser ROL_TERAPEUTA con es_jefe=true
-        // Si la jefa tiene un rol propio (ej. ROL_JEFA = 5), cambiar aquí
-      });
+        await this.notificacionesService.crearNotificacion({
+          tipo_notificacion: 'SOLICITUD_INFORME',
+          titulo:   `Informe Listo para Entrega`,
+          mensaje:  `El ${tipoInforme} del paciente ${pacienteNombreCompleto}, elaborado por ${terapeutaNombreCompleto}, ha sido aprobado automáticamente y está listo para ser entregado.`,
+          evento_id: evento.id,
+          roles_destino: [ROL_ADMISION],
+        });
+
+        // También crear registro de auto-revisión en el historial
+        const revision = this.revisionRepo.create({
+          solicitud_informe_id: id,
+          revisor_id:           solicitud.especialista_id,
+          estado_id:            ESTADO_SOLICITUD.APROBADO,
+          comentario:           'Aprobado automáticamente (terapeuta con cargo de jefa)',
+          fecha_revision:       new Date(),
+        });
+        await this.revisionRepo.save(revision);
+
+      } else {
+        // ── Si NO es jefa: Notificar a la JEFA para revisión ──
+        const tituloNotificacion = esCorreccion
+          ? `Informe Corregido - Pendiente de Revisión`
+          : `Nuevo Informe - Pendiente de Revisión`;
+
+        const mensajeNotificacion = esCorreccion
+          ? `${terapeutaNombreCompleto} ha corregido y vuelto a subir el ${tipoInforme} del paciente ${pacienteNombreCompleto}. Por favor, revisa el documento corregido.`
+          : `${terapeutaNombreCompleto} ha subido el ${tipoInforme} del paciente ${pacienteNombreCompleto}. Por favor, revisa y aprueba o rechaza el documento.`;
+
+        const evento = await this.notificacionesService.crearEvento({
+          tipo_evento: 'INFORME_PENDIENTE_REVISION',
+          descripcion: esCorreccion
+            ? `${terapeutaNombreCompleto} corrigió el ${tipoInforme} del paciente ${pacienteNombreCompleto}`
+            : `${terapeutaNombreCompleto} subió el ${tipoInforme} del paciente ${pacienteNombreCompleto}`,
+          usuario_id:  dto.user_actua_id ?? solicitud.especialista_id,
+          datos_adicionales: {
+            solicitud_id:    id,
+            especialista_id: solicitud.especialista_id,
+            paciente_nombre: pacienteNombreCompleto,
+            tipo_informe:    tipoInforme,
+            terapeuta_nombre: terapeutaNombreCompleto,
+            es_correccion: esCorreccion,
+          },
+        });
+
+        await this.notificacionesService.crearNotificacion({
+          tipo_notificacion: 'SOLICITUD_INFORME',
+          titulo:   tituloNotificacion,
+          mensaje:  mensajeNotificacion,
+          evento_id: evento.id,
+          roles_destino: [ROL_ADMIN],  // La jefa tiene rol ADMIN o puede ser ROL_TERAPEUTA con es_jefe=true
+        });
+      }
     } catch (err) {
-      console.error('⚠️  Error al notificar a la jefa sobre archivo subido:', err);
+      console.error('⚠️  Error al notificar sobre archivo subido:', err);
     }
 
     // La terapeuta recibe de vuelta su vista (sin datos financieros)
@@ -449,22 +521,22 @@ export class SolicitudInformeService {
     });
 
     // Datos descriptivos
-    const paciente  = nombrePaciente(solicitud);
-    const informe   = nombreTipoInforme(solicitud);
-    const terapeuta = nombreEspecialista(solicitud);
+    const pacienteNombreCompleto  = nombreCompletoPaciente(solicitud);
+    const tipoInforme = nombreTipoInforme(solicitud);
+    const terapeutaNombreCompleto = nombreCompletoEspecialista(solicitud);
 
     try {
       if (dto.estado_id === ESTADO_SOLICITUD.RECHAZADO) {
-        // ── Notificar al TERAPEUTA que fue rechazado ──────────────────────
+        // ── Notificar a la TERAPEUTA que fue rechazado ──────────────────────
         const evento = await this.notificacionesService.crearEvento({
           tipo_evento: 'INFORME_RECHAZADO',
-          descripcion: `El "${informe}" del paciente ${paciente} fue rechazado. Requiere correcciones.`,
+          descripcion: `El ${tipoInforme} del paciente ${pacienteNombreCompleto} fue rechazado`,
           usuario_id:  dto.revisor_id,
           datos_adicionales: {
             solicitud_id:            id,
             especialista_id:         solicitud.especialista_id,
-            paciente_nombre:         paciente,
-            tipo_informe:            informe,
+            paciente_nombre:         pacienteNombreCompleto,
+            tipo_informe:            tipoInforme,
             comentario:              dto.comentario,
             terapeutas_destinatarios: [solicitud.especialista_id],
           },
@@ -472,8 +544,8 @@ export class SolicitudInformeService {
 
         await this.notificacionesService.crearNotificacion({
           tipo_notificacion: 'SOLICITUD_INFORME',
-          titulo:   `Informe rechazado: ${informe} — ${paciente}`,
-          mensaje:  `Tu "${informe}" del paciente ${paciente} fue rechazado. Motivo: "${dto.comentario}". Por favor, corrígelo y vuelve a subir el archivo.`,
+          titulo:   `Informe Rechazado`,
+          mensaje:  `Tu ${tipoInforme} del paciente ${pacienteNombreCompleto} ha sido rechazado. Motivo: "${dto.comentario}". Por favor, realiza las correcciones necesarias y vuelve a subir el archivo.`,
           evento_id: evento.id,
           roles_destino: [ROL_TERAPEUTA],
         });
@@ -482,20 +554,20 @@ export class SolicitudInformeService {
         // ── Notificar a ADMISIÓN que puede entregar ────────────────────────
         const evento = await this.notificacionesService.crearEvento({
           tipo_evento: 'INFORME_APROBADO',
-          descripcion: `El "${informe}" del paciente ${paciente} fue aprobado. Listo para entregar.`,
+          descripcion: `El ${tipoInforme} del paciente ${pacienteNombreCompleto} fue aprobado`,
           usuario_id:  dto.revisor_id,
           datos_adicionales: {
             solicitud_id:    id,
-            paciente_nombre: paciente,
-            tipo_informe:    informe,
-            terapeuta_nombre: terapeuta,
+            paciente_nombre: pacienteNombreCompleto,
+            tipo_informe:    tipoInforme,
+            terapeuta_nombre: terapeutaNombreCompleto,
           },
         });
 
         await this.notificacionesService.crearNotificacion({
           tipo_notificacion: 'SOLICITUD_INFORME',
-          titulo:   `Informe aprobado para entrega: ${informe} — ${paciente}`,
-          mensaje:  `El "${informe}" del paciente ${paciente} elaborado por ${terapeuta} fue aprobado. Ya puede ser entregado al paciente.`,
+          titulo:   `Informe Listo para Entrega`,
+          mensaje:  `El ${tipoInforme} del paciente ${pacienteNombreCompleto}, elaborado por ${terapeutaNombreCompleto}, ha sido aprobado y está listo para ser entregado.`,
           evento_id: evento.id,
           roles_destino: [ROL_ADMISION],
         });
@@ -527,26 +599,26 @@ export class SolicitudInformeService {
       ...(dto.user_actua_id ? { user_actua_id: dto.user_actua_id } : {}),
     });
 
-    const paciente = nombrePaciente(solicitud);
-    const informe  = nombreTipoInforme(solicitud);
+    const pacienteNombreCompleto = nombreCompletoPaciente(solicitud);
+    const tipoInforme = nombreTipoInforme(solicitud);
 
     // Notificación informativa al Admin (opcional, útil para trazabilidad)
     try {
       const evento = await this.notificacionesService.crearEvento({
         tipo_evento: 'INFORME_ENTREGADO',
-        descripcion: `El "${informe}" del paciente ${paciente} fue entregado.`,
+        descripcion: `El ${tipoInforme} del paciente ${pacienteNombreCompleto} fue entregado`,
         usuario_id:  dto.user_actua_id ?? 0,
         datos_adicionales: {
           solicitud_id:    id,
-          paciente_nombre: paciente,
-          tipo_informe:    informe,
+          paciente_nombre: pacienteNombreCompleto,
+          tipo_informe:    tipoInforme,
         },
       });
 
       await this.notificacionesService.crearNotificacion({
         tipo_notificacion: 'SOLICITUD_INFORME',
-        titulo:   `Informe entregado: ${informe} — ${paciente}`,
-        mensaje:  `El "${informe}" del paciente ${paciente} ha sido entregado correctamente. Solicitud #${id} completada.`,
+        titulo:   `Informe Entregado`,
+        mensaje:  `El ${tipoInforme} del paciente ${pacienteNombreCompleto} ha sido entregado exitosamente. Solicitud #${id} completada.`,
         evento_id: evento.id,
         roles_destino: [ROL_ADMIN],
       });

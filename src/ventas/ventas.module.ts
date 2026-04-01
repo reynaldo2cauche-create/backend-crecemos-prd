@@ -31,6 +31,7 @@ import { TipoComprobanteService } from './services/tipo-comprobante.service';
 import { TipoComprobanteController } from './controllers/tipo-comprobante.controller';
 import { ServicioTarifa } from 'src/inventario/entities/servicio-tarifa.entity';
 import { ServicioPaquetePrecio } from 'src/inventario/entities/servicio-paquete-precio.entity';
+import { ModalidadPago } from 'src/historia-clinica/entities/modalidad-pago.entity';
 
 @Module({
   imports: [
@@ -53,6 +54,7 @@ import { ServicioPaquetePrecio } from 'src/inventario/entities/servicio-paquete-
       TipoComprobante,
       // ✅ FIX: registrar VentaPromocionAplicada para que los services puedan inyectar su repo
       VentaPromocionAplicada,
+      ModalidadPago
     ]),
   ],
   providers: [

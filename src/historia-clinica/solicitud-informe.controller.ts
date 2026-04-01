@@ -7,10 +7,19 @@ import {
   Body,
   Param,
   ParseIntPipe,
-  Req,
+  Request,
   ForbiddenException,
+  UseGuards,
+  UseInterceptors,
+  UploadedFile,
+  HttpException,
+  HttpStatus,
 } from '@nestjs/common';
-import { Request } from 'express';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import * as fs from 'fs';
+import * as path from 'path';
+import { v4 as uuidv4 } from 'uuid';
 
 import {
   SolicitudInformeService,
@@ -26,17 +35,15 @@ import {
 } from './dto/solicitud-informe.dto';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Ajusta esto al helper que usas en tu proyecto para obtener
-// el usuario autenticado desde el request (JWT payload, session, etc.)
+// CONSTANTES DE ROLES
 // ─────────────────────────────────────────────────────────────────────────────
 const ROL_ADMIN     = 1;
 const ROL_ADMISION  = 2;
 const ROL_TERAPEUTA = 4;
 
-function getAuthUser(req: Request): { id: number; rol_id: number; es_jefe?: boolean } {
-  // Ajusta según tu implementación de JWT/guards
-  return (req as any).user;
-}
+// ─────────────────────────────────────────────────────────────────────────────
+// HELPERS
+// ─────────────────────────────────────────────────────────────────────────────
 
 function vistaDesdeRol(rolId: number, esJefe: boolean): VistaRol {
   if (rolId === ROL_ADMIN)     return 'admin';
@@ -45,7 +52,8 @@ function vistaDesdeRol(rolId: number, esJefe: boolean): VistaRol {
   return 'terapeuta'; // fallback seguro
 }
 
-@Controller('solicitudes-informe')
+@Controller('backend_api/solicitudes-informe')
+@UseGuards(JwtAuthGuard)
 export class SolicitudInformeController {
   constructor(private readonly service: SolicitudInformeService) {}
 
@@ -53,19 +61,42 @@ export class SolicitudInformeController {
   // CRUD BASE
   // ══════════════════════════════════════════════════════════════════════════
 
+  // ══════════════════════════════════════════════════════════════════════════
+  // CATÁLOGOS (deben ir PRIMERO para evitar conflictos con :id)
+  // ══════════════════════════════════════════════════════════════════════════
+
+  @Get('catalogos/modalidades-pago')
+  findModalidadesPago() {
+    return this.service.findAllModalidadesPago();
+  }
+
+  @Get('catalogos/estados-pago')
+  findEstadosPago() {
+    return this.service.findAllEstadosPago();
+  }
+
+  @Get('catalogos/estados-solicitud')
+  findEstadosSolicitud() {
+    return this.service.findAllEstadosSolicitud();
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // CRUD BASE (rutas específicas ANTES de :id)
+  // ══════════════════════════════════════════════════════════════════════════
+
   /**
    * POST /solicitudes-informe
    * Solo Admin (1) y Admisión (2) pueden crear.
    */
   @Post()
-  create(@Body() dto: CreateSolicitudInformeDto, @Req() req: Request) {
-    const { rol_id } = getAuthUser(req);
-    if (rol_id !== ROL_ADMIN && rol_id !== ROL_ADMISION) {
+  create(@Body() dto: CreateSolicitudInformeDto, @Request() req) {
+    const rolId = req.user?.rol?.id;
+    if (rolId !== ROL_ADMIN && rolId !== ROL_ADMISION) {
       throw new ForbiddenException(
         'Solo Administración o Admisión pueden crear solicitudes de informe.',
       );
     }
-    return this.service.create(dto, rol_id);
+    return this.service.create(dto, rolId);
   }
 
   /**
@@ -73,23 +104,12 @@ export class SolicitudInformeController {
    * Solo Admin y Admisión ven el listado completo.
    */
   @Get()
-  findAll(@Req() req: Request) {
-    const { rol_id } = getAuthUser(req);
-    if (rol_id !== ROL_ADMIN && rol_id !== ROL_ADMISION) {
+  findAll(@Request() req) {
+    const rolId = req.user?.rol?.id;
+    if (rolId !== ROL_ADMIN && rolId !== ROL_ADMISION) {
       throw new ForbiddenException('No tienes permiso para ver este listado.');
     }
     return this.service.findAll();
-  }
-
-  /**
-   * GET /solicitudes-informe/:id
-   * Todos pueden consultar una solicitud, pero la vista varía según el rol.
-   */
-  @Get(':id')
-  findOne(@Param('id', ParseIntPipe) id: number, @Req() req: Request) {
-    const { rol_id, es_jefe } = getAuthUser(req);
-    const vista = vistaDesdeRol(rol_id, !!es_jefe);
-    return this.service.findOneByRol(id, vista);
   }
 
   /**
@@ -99,10 +119,11 @@ export class SolicitudInformeController {
   @Get('paciente/:pacienteId')
   findByPaciente(
     @Param('pacienteId', ParseIntPipe) pacienteId: number,
-    @Req() req: Request,
+    @Request() req,
   ) {
-    const { rol_id, es_jefe } = getAuthUser(req);
-    const vista = vistaDesdeRol(rol_id, !!es_jefe);
+    const rolId = req.user?.rol?.id;
+    const esJefe = Boolean(req.user?.cargo?.es_jefe);
+    const vista = vistaDesdeRol(rolId, esJefe);
     return this.service.findByPaciente(pacienteId, vista);
   }
 
@@ -114,12 +135,13 @@ export class SolicitudInformeController {
   @Get('especialista/:especialistaId')
   findByEspecialista(
     @Param('especialistaId', ParseIntPipe) especialistaId: number,
-    @Req() req: Request,
+    @Request() req,
   ) {
-    const { rol_id, id: userId } = getAuthUser(req);
+    const rolId = req.user?.rol?.id;
+    const userId = req.user?.id;
 
     // Una terapeuta solo puede ver sus propias solicitudes
-    if (rol_id === ROL_TERAPEUTA && userId !== especialistaId) {
+    if (rolId === ROL_TERAPEUTA && userId !== especialistaId) {
       throw new ForbiddenException('Solo puedes ver tus propias solicitudes.');
     }
 
@@ -127,54 +149,106 @@ export class SolicitudInformeController {
   }
 
   /**
-   * PATCH /solicitudes-informe/:id
-   * Solo Admin y Admisión pueden editar datos generales.
+   * GET /solicitudes-informe/:id
+   * Todos pueden consultar una solicitud, pero la vista varía según el rol.
+   * IMPORTANTE: Esta ruta genérica DEBE ir AL FINAL para no capturar rutas específicas
    */
-  @Patch(':id')
-  update(
-    @Param('id', ParseIntPipe) id: number,
-    @Body() dto: UpdateSolicitudInformeDto,
-    @Req() req: Request,
-  ) {
-    const { rol_id } = getAuthUser(req);
-    if (rol_id !== ROL_ADMIN && rol_id !== ROL_ADMISION) {
-      throw new ForbiddenException('No tienes permiso para editar esta solicitud.');
-    }
-    return this.service.update(id, dto);
-  }
-
-  /**
-   * DELETE /solicitudes-informe/:id
-   * Solo Admin puede eliminar.
-   */
-  @Delete(':id')
-  remove(@Param('id', ParseIntPipe) id: number, @Req() req: Request) {
-    const { rol_id } = getAuthUser(req);
-    if (rol_id !== ROL_ADMIN) {
-      throw new ForbiddenException('Solo el Administrador puede eliminar solicitudes.');
-    }
-    return this.service.remove(id);
+  @Get(':id')
+  findOne(@Param('id', ParseIntPipe) id: number, @Request() req) {
+    const rolId = req.user?.rol?.id;
+    const esJefe = Boolean(req.user?.cargo?.es_jefe);
+    const vista = vistaDesdeRol(rolId, esJefe);
+    return this.service.findOneByRol(id, vista);
   }
 
   // ══════════════════════════════════════════════════════════════════════════
-  // WORKFLOW
+  // WORKFLOW (rutas específicas con sufijos)
   // ══════════════════════════════════════════════════════════════════════════
 
   /**
-   * PATCH /solicitudes-informe/:id/subir-archivo
+   * POST /solicitudes-informe/:id/subir-archivo
    * Solo terapeutas (ROL 4) pueden subir el archivo.
    * Devuelve la solicitud SIN datos financieros.
    */
-  @Patch(':id/subir-archivo')
-  subirArchivo(
+  @Post(':id/subir-archivo')
+  @UseInterceptors(FileInterceptor('archivo', {
+    storage: undefined,
+    fileFilter: (req, file, callback) => {
+      const allowedMimeTypes = [
+        'application/pdf',
+        'application/msword',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      ];
+
+      if (allowedMimeTypes.includes(file.mimetype)) {
+        callback(null, true);
+      } else {
+        callback(new HttpException(
+          `Solo se permiten archivos PDF o Word. Formato recibido: ${file.mimetype}`,
+          HttpStatus.BAD_REQUEST
+        ), false);
+      }
+    },
+    limits: {
+      fileSize: 20 * 1024 * 1024, // 20 MB
+    },
+  }))
+  async subirArchivo(
     @Param('id', ParseIntPipe) id: number,
-    @Body() dto: SubirArchivoDto,
-    @Req() req: Request,
+    @UploadedFile() file: Express.Multer.File,
+    @Request() req,
   ) {
-    const { rol_id } = getAuthUser(req);
-    if (rol_id !== ROL_TERAPEUTA) {
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('🔍 DEBUG - Endpoint subir-archivo llamado');
+    console.log('📋 ID solicitud:', id);
+    console.log('👤 Usuario:', req.user?.id, req.user?.nombres);
+    console.log('🎭 Rol:', req.user?.rol?.id);
+    console.log('📎 Archivo recibido:', file);
+    console.log('📦 Body completo:', req.body);
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+
+    const rolId = req.user?.rol?.id;
+    if (rolId !== ROL_TERAPEUTA) {
       throw new ForbiddenException('Solo el terapeuta asignado puede subir el archivo.');
     }
+
+    if (!file) {
+      console.error('❌ ERROR: No se recibió archivo');
+      console.error('Headers:', req.headers);
+      throw new HttpException('Archivo requerido', HttpStatus.BAD_REQUEST);
+    }
+
+    // Guardar el archivo en el sistema de archivos
+    const extension = path.extname(file.originalname);
+    const nombreArchivo = `${uuidv4()}_informe${extension}`;
+    const subcarpeta = 'solicitudes_informe';
+    const rutaArchivo = `${subcarpeta}/${nombreArchivo}`;
+
+    const uploadsDir = path.join(process.cwd(), 'uploads');
+    const subcarpetaCompleta = path.join(uploadsDir, subcarpeta);
+
+    if (!fs.existsSync(subcarpetaCompleta)) {
+      fs.mkdirSync(subcarpetaCompleta, { recursive: true });
+    }
+
+    const rutaCompleta = path.join(uploadsDir, rutaArchivo);
+
+    try {
+      fs.writeFileSync(rutaCompleta, file.buffer);
+      console.log('💾 Archivo de informe guardado:', rutaCompleta);
+    } catch (error) {
+      throw new HttpException(
+        `Error al guardar el archivo: ${error.message}`,
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
+
+    // Crear el DTO con la URL del archivo y el usuario que actúa
+    const dto: SubirArchivoDto = {
+      archivo_url: `/uploads/${rutaArchivo}`,
+      user_actua_id: req.user?.id,
+    };
+
     return this.service.subirArchivo(id, dto);
   }
 
@@ -187,21 +261,22 @@ export class SolicitudInformeController {
   revisarInforme(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: RevisarInformeDto,
-    @Req() req: Request,
+    @Request() req,
   ) {
-    const { rol_id, es_jefe } = getAuthUser(req);
+    const rolId = req.user?.rol?.id;
+    const esJefe = Boolean(req.user?.cargo?.es_jefe);
 
     // Admins también pueden revisar si lo necesitas; ajusta aquí
-    if (rol_id !== ROL_TERAPEUTA && rol_id !== ROL_ADMIN) {
+    if (rolId !== ROL_TERAPEUTA && rolId !== ROL_ADMIN) {
       throw new ForbiddenException('No tienes permiso para revisar informes.');
     }
-    if (rol_id === ROL_TERAPEUTA && !es_jefe) {
+    if (rolId === ROL_TERAPEUTA && !esJefe) {
       throw new ForbiddenException(
         'Solo la jefa / supervisora puede aprobar o rechazar informes.',
       );
     }
 
-    return this.service.revisarInforme(id, dto, !!es_jefe || rol_id === ROL_ADMIN);
+    return this.service.revisarInforme(id, dto, esJefe || rolId === ROL_ADMIN);
   }
 
   /**
@@ -212,10 +287,10 @@ export class SolicitudInformeController {
   marcarEntregado(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: MarcarEntregadoDto,
-    @Req() req: Request,
+    @Request() req,
   ) {
-    const { rol_id } = getAuthUser(req);
-    if (rol_id !== ROL_ADMIN && rol_id !== ROL_ADMISION) {
+    const rolId = req.user?.rol?.id;
+    if (rolId !== ROL_ADMIN && rolId !== ROL_ADMISION) {
       throw new ForbiddenException(
         'Solo Administración o Admisión pueden marcar un informe como entregado.',
       );
@@ -237,21 +312,36 @@ export class SolicitudInformeController {
   }
 
   // ══════════════════════════════════════════════════════════════════════════
-  // CATÁLOGOS
+  // OPERACIONES CON :id (deben ir AL FINAL)
   // ══════════════════════════════════════════════════════════════════════════
 
-  @Get('catalogos/modalidades-pago')
-  findModalidadesPago() {
-    return this.service.findAllModalidadesPago();
+  /**
+   * PATCH /solicitudes-informe/:id
+   * Solo Admin y Admisión pueden editar datos generales.
+   */
+  @Patch(':id')
+  update(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateSolicitudInformeDto,
+    @Request() req,
+  ) {
+    const rolId = req.user?.rol?.id;
+    if (rolId !== ROL_ADMIN && rolId !== ROL_ADMISION) {
+      throw new ForbiddenException('No tienes permiso para editar esta solicitud.');
+    }
+    return this.service.update(id, dto);
   }
 
-  @Get('catalogos/estados-pago')
-  findEstadosPago() {
-    return this.service.findAllEstadosPago();
-  }
-
-  @Get('catalogos/estados-solicitud')
-  findEstadosSolicitud() {
-    return this.service.findAllEstadosSolicitud();
+  /**
+   * DELETE /solicitudes-informe/:id
+   * Solo Admin puede eliminar.
+   */
+  @Delete(':id')
+  remove(@Param('id', ParseIntPipe) id: number, @Request() req) {
+    const rolId = req.user?.rol?.id;
+    if (rolId !== ROL_ADMIN) {
+      throw new ForbiddenException('Solo el Administrador puede eliminar solicitudes.');
+    }
+    return this.service.remove(id);
   }
 }

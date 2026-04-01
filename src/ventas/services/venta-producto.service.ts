@@ -37,6 +37,7 @@ export class VentaProductoService {
       .leftJoinAndSelect('detalles.producto', 'producto')
       .leftJoinAndSelect('detalles.descuento_tipo', 'detalle_descuento_tipo')
       .leftJoinAndSelect('v.tipo_comprobante', 'tipo_comprobante')
+      .leftJoinAndSelect('v.modalidad_pago', 'modalidad_pago')
       .orderBy('v.created_at', 'DESC');
 
     if (filtros?.desde) qb.andWhere('v.fecha_venta >= :desde', { desde: filtros.desde });
@@ -127,6 +128,7 @@ export class VentaProductoService {
         descuento_promocion: descuentoPromoMonto,
         total,
         nota: dto.nota,
+        modalidad_pago_id:      dto.modalidad_pago_id ?? null,
         user_crea_id: dto.user_crea_id,
       });
       const savedVenta = await manager.save(venta);

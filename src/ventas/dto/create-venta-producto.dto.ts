@@ -73,6 +73,11 @@ export class CreateVentaProductoDto {
   @IsString()
   nota?: string;
 
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  modalidad_pago_id?: number;
+
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => DetalleVentaProductoDto)

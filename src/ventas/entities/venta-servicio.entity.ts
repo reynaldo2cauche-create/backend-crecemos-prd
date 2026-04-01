@@ -9,6 +9,7 @@ import { TipoComprobante } from './tipo-comprobante.entity';
 import { Responsable } from 'src/pacientes/entities/responsable.entity';
 // ✅ FIX: importar la entidad de promociones aplicadas
 import { VentaPromocionAplicada } from '../../promociones/entities/venta-promocion-aplicada.entity';
+import { ModalidadPago } from '../../historia-clinica/entities/modalidad-pago.entity';
 
 @Entity('venta_servicio')
 export class VentaServicio {
@@ -80,6 +81,13 @@ export class VentaServicio {
 
   @Column({ type: 'text', nullable: true })
   nota: string;
+
+  @Column({ name: 'modalidad_pago_id', nullable: true, comment: 'Método de pago utilizado' })
+  modalidad_pago_id: number;
+
+  @ManyToOne(() => ModalidadPago, { nullable: true })
+  @JoinColumn({ name: 'modalidad_pago_id' })
+  modalidad_pago: ModalidadPago;
 
   @Column({ nullable: true })
   user_crea_id: number;

@@ -42,6 +42,7 @@ export class VentaServicioService {
       .leftJoinAndSelect('detalles.descuento_tipo', 'detalle_descuento_tipo')
       .leftJoinAndSelect('detalles.paciente', 'detalle_paciente')
       .leftJoinAndSelect('v.tipo_comprobante', 'tipo_comprobante')
+      .leftJoinAndSelect('v.modalidad_pago', 'modalidad_pago')
       .orderBy('v.created_at', 'DESC');
 
     if (filtros?.pacienteId) {
@@ -221,6 +222,7 @@ export class VentaServicioService {
         descuento_promocion:    descuentoPromoMonto,
         total,
         nota:                   dto.nota,
+        modalidad_pago_id:      dto.modalidad_pago_id ?? null,
         user_crea_id:           dto.user_crea_id,
       });
       const savedVenta = await manager.save(venta);

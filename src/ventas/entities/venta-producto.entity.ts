@@ -8,6 +8,7 @@ import { VentaProductoDetalle } from './venta-producto-detalle.entity';
 import { TipoComprobante } from './tipo-comprobante.entity';
 // ✅ FIX: importar la entidad de promociones aplicadas
 import { VentaPromocionAplicada } from '../../promociones/entities/venta-promocion-aplicada.entity';
+import { ModalidadPago } from '../../historia-clinica/entities/modalidad-pago.entity';
 
 @Entity('venta_producto')
 export class VentaProducto {
@@ -79,6 +80,13 @@ export class VentaProducto {
 
   @Column({ type: 'text', nullable: true })
   nota: string;
+
+  @Column({ name: 'modalidad_pago_id', nullable: true, comment: 'Método de pago utilizado' })
+  modalidad_pago_id: number;
+
+  @ManyToOne(() => ModalidadPago, { nullable: true })
+  @JoinColumn({ name: 'modalidad_pago_id' })
+  modalidad_pago: ModalidadPago;
 
   @Column({ nullable: true })
   user_crea_id: number;
