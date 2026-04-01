@@ -183,95 +183,96 @@ export class AsistenciaService {
   /**
    * Obtener asistencias por terapeuta en un rango de fechas
    */
-  async obtenerAsistenciasPorTerapeuta(
-    terapeutaId: number,
-    fechaInicio: string,
-    fechaFin: string,
-  ): Promise<any> {
-    console.log(`📊 Consultando asistencias del terapeuta ${terapeutaId} desde ${fechaInicio} hasta ${fechaFin}`);
+async obtenerAsistenciasPorTerapeuta(
+  terapeutaId: number,
+  fechaInicio: string,
+  fechaFin: string,
+): Promise<any> {
+  console.log(`📊 Consultando asistencias del terapeuta ${terapeutaId} desde ${fechaInicio} hasta ${fechaFin}`);
 
-    try {
-      const query = `
-        SELECT
-          sa.id,
-          sa.cita_id,
-          CONCAT(c.fecha, ' ', c.hora_inicio) AS fecha_cita,
-          CONCAT(p.nombres, ' ', p.apellido_paterno, ' ', p.apellido_materno) AS paciente_nombre,
-          sa.recepcion_marco,
-          sa.recepcion_estado_id,
-          sa.recepcion_fecha,
-          sa.terapeuta_marco,
-          sa.terapeuta_estado_id,
-          sa.terapeuta_fecha
-        FROM seguimiento_asistencia sa
-        INNER JOIN citas c ON sa.cita_id = c.id
-        INNER JOIN paciente p ON c.paciente_id = p.id
-        WHERE c.doctor_id = ?
-          AND c.fecha BETWEEN ? AND ?
-          AND c.flg_activo = 1
-        ORDER BY c.fecha DESC, c.hora_inicio DESC
-      `;
+  try {
+    const query = `
+      SELECT
+        sa.id,
+        sa.cita_id,
+        CONCAT(c.fecha, ' ', c.hora_inicio) AS fecha_cita,
+        CONCAT(p.nombres, ' ', p.apellido_paterno, ' ', p.apellido_materno) AS paciente_nombre,
+        sa.recepcion_marco,
+        sa.recepcion_estado_id,
+        sa.recepcion_fecha,
+        sa.terapeuta_marco,
+        sa.terapeuta_estado_id,
+        sa.terapeuta_fecha
+      FROM seguimiento_asistencia sa
+      INNER JOIN citas c ON sa.cita_id = c.id
+      INNER JOIN paciente p ON c.paciente_id = p.id
+      WHERE c.doctor_id = ?
+        AND c.fecha BETWEEN ? AND ?
+        AND c.flg_activo = 1
+        AND (sa.recepcion_marco = 1 OR sa.terapeuta_marco = 1)
+      ORDER BY c.fecha DESC, c.hora_inicio DESC
+    `;
 
-      const asistencias = await this.seguimientoRepo.query(query, [terapeutaId, fechaInicio, fechaFin]);
+    const asistencias = await this.seguimientoRepo.query(query, [terapeutaId, fechaInicio, fechaFin]);
 
-      console.log(`✅ Encontradas ${asistencias.length} asistencias del terapeuta ${terapeutaId}`);
+    console.log(`✅ Encontradas ${asistencias.length} asistencias del terapeuta ${terapeutaId}`);
 
-      return {
-        asistencias,
-        total: asistencias.length,
-      };
-    } catch (error) {
-      console.error('❌ Error en obtenerAsistenciasPorTerapeuta:', error);
-      throw error;
-    }
+    return {
+      asistencias,
+      total: asistencias.length,
+    };
+  } catch (error) {
+    console.error('❌ Error en obtenerAsistenciasPorTerapeuta:', error);
+    throw error;
   }
+}
 
   /**
    * Obtener asistencias por paciente en un rango de fechas
    */
-  async obtenerAsistenciasPorPaciente(
-    pacienteId: number,
-    fechaInicio: string,
-    fechaFin: string,
-  ): Promise<any> {
-    console.log(`📊 Consultando asistencias del paciente ${pacienteId} desde ${fechaInicio} hasta ${fechaFin}`);
+    async obtenerAsistenciasPorPaciente(
+      pacienteId: number,
+      fechaInicio: string,
+      fechaFin: string,
+    ): Promise<any> {
+      console.log(`📊 Consultando asistencias del paciente ${pacienteId} desde ${fechaInicio} hasta ${fechaFin}`);
 
-    try {
-      const query = `
-        SELECT
-          sa.id,
-          sa.cita_id,
-          CONCAT(c.fecha, ' ', c.hora_inicio) AS fecha_cita,
-          CONCAT(tc.nombres, ' ', tc.apellidos) AS terapeuta_nombre,
-          sa.recepcion_marco,
-          sa.recepcion_estado_id,
-          sa.recepcion_fecha,
-          sa.terapeuta_marco,
-          sa.terapeuta_estado_id,
-          sa.terapeuta_fecha
-        FROM seguimiento_asistencia sa
-        INNER JOIN citas c ON sa.cita_id = c.id
-        INNER JOIN trabajador_centro tc ON c.doctor_id = tc.id
-        WHERE c.paciente_id = ?
-          AND c.fecha BETWEEN ? AND ?
-          AND c.flg_activo = 1
-        ORDER BY c.fecha DESC, c.hora_inicio DESC
-      `;
+      try {
+        const query = `
+          SELECT
+            sa.id,
+            sa.cita_id,
+            CONCAT(c.fecha, ' ', c.hora_inicio) AS fecha_cita,
+            CONCAT(tc.nombres, ' ', tc.apellidos) AS terapeuta_nombre,
+            sa.recepcion_marco,
+            sa.recepcion_estado_id,
+            sa.recepcion_fecha,
+            sa.terapeuta_marco,
+            sa.terapeuta_estado_id,
+            sa.terapeuta_fecha
+          FROM seguimiento_asistencia sa
+          INNER JOIN citas c ON sa.cita_id = c.id
+          INNER JOIN trabajador_centro tc ON c.doctor_id = tc.id
+          WHERE c.paciente_id = ?
+            AND c.fecha BETWEEN ? AND ?
+            AND c.flg_activo = 1
+            AND (sa.recepcion_marco = 1 OR sa.terapeuta_marco = 1)
+          ORDER BY c.fecha DESC, c.hora_inicio DESC
+        `;
 
-      const asistencias = await this.seguimientoRepo.query(query, [pacienteId, fechaInicio, fechaFin]);
+        const asistencias = await this.seguimientoRepo.query(query, [pacienteId, fechaInicio, fechaFin]);
 
-      console.log(`✅ Encontradas ${asistencias.length} asistencias del paciente ${pacienteId}`);
+        console.log(`✅ Encontradas ${asistencias.length} asistencias del paciente ${pacienteId}`);
 
-      return {
-        asistencias,
-        total: asistencias.length,
-      };
-    } catch (error) {
-      console.error('❌ Error en obtenerAsistenciasPorPaciente:', error);
-      throw error;
+        return {
+          asistencias,
+          total: asistencias.length,
+        };
+      } catch (error) {
+        console.error('❌ Error en obtenerAsistenciasPorPaciente:', error);
+        throw error;
+      }
     }
-  }
-
   /**
    * Obtener inconsistencias de asistencia en un rango de fechas
    * LÓGICA:
