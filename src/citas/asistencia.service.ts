@@ -358,8 +358,8 @@ export class AsistenciaService {
         total: inconsistencias.length,
       };
     } catch (error) {
-      console.error('❌ Error en obtenerInconsistencias:', error.message);
-      console.error('Stack:', error.stack);
+      console.error('❌ Error en obtenerInconsistencias:', error instanceof Error ? error.message : String(error));
+      console.error('Stack:', error instanceof Error ? error.stack : '');
       throw error;
     }
   }
@@ -403,7 +403,7 @@ export class AsistenciaService {
         total: asistencias.length,
       };
     } catch (error) {
-      console.error('❌ Error en obtenerTodasAsistencias:', error.message);
+      console.error('❌ Error en obtenerTodasAsistencias:', error instanceof Error ? error.message : String(error));
       throw error;
     }
   }
@@ -477,7 +477,7 @@ export class AsistenciaService {
 
           console.log(`🚨 Notificación creada para cita ${cita.cita_id} (${cita.paciente_nombre})`);
         } catch (error) {
-          console.error(`❌ Error al notificar cita ${cita.cita_id}:`, error.message);
+          console.error(`❌ Error al notificar cita ${cita.cita_id}:`, error instanceof Error ? error.message : String(error));
         }
       }
 
@@ -599,7 +599,7 @@ export class AsistenciaService {
         seguimiento,
       };
     } catch (error) {
-      console.error('❌ Error en modificarAsistenciaAdmin:', error.message);
+      console.error('❌ Error en modificarAsistenciaAdmin:', error instanceof Error ? error.message : String(error));
       throw error;
     }
   }
