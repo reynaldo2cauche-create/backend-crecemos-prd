@@ -91,7 +91,61 @@ export class NotificacionesService {
         LIMIT ?
       `;
       const notificaciones = await this.notificacionesRepo.query(query, [usuarioId, rolId, limite]);
-      return notificaciones.map(notif => ({
+
+      // Filtrar notificaciones específicas para terapeutas
+      const notificacionesFiltradas = notificaciones.filter(notif => {
+        if (rolId === ROL_TERAPEUTA) {
+          // Para SOLICITUD_INFORME y DOCUMENTO_SUBIDO, solo mostrar si la terapeuta está en la lista
+          if (
+            (notif.tipo_notificacion === 'DOCUMENTO_SUBIDO' || notif.tipo_notificacion === 'SOLICITUD_INFORME') &&
+            notif.datos_adicionales
+          ) {
+            try {
+              const datos = JSON.parse(notif.datos_adicionales);
+
+              // Si es una notificación de revisión (para jefas), solo mostrarla si es la jefa asignada
+              if (datos.es_revision === true) {
+                // Si tiene jefe_destinatario_id, solo mostrar si coincide con el usuario actual
+                if (datos.jefe_destinatario_id) {
+                  return datos.jefe_destinatario_id === usuarioId;
+                }
+                // Si no tiene jefe_destinatario_id, mostrarla (compatibilidad con notificaciones antiguas)
+                return true;
+              }
+
+              // Solo mostrar si existe terapeutas_destinatarios Y contiene a este usuario
+              if (datos.terapeutas_destinatarios && Array.isArray(datos.terapeutas_destinatarios)) {
+                return datos.terapeutas_destinatarios.includes(usuarioId);
+              }
+              // Si no existe terapeutas_destinatarios para SOLICITUD_INFORME, NO mostrar
+              if (notif.tipo_notificacion === 'SOLICITUD_INFORME') {
+                return false;
+              }
+              // Para DOCUMENTO_SUBIDO sin terapeutas_destinatarios, mostrar (compatibilidad)
+              return notif.tipo_notificacion === 'DOCUMENTO_SUBIDO';
+            } catch {
+              return false;
+            }
+          }
+        }
+        // Para ROL_ADMIN, filtrar notificaciones de revisión
+        if (rolId === ROL_ADMIN) {
+          if (notif.tipo_notificacion === 'SOLICITUD_INFORME' && notif.datos_adicionales) {
+            try {
+              const datos = JSON.parse(notif.datos_adicionales);
+              // Si es notificación de revisión con jefe asignado, solo mostrar si es el jefe
+              if (datos.es_revision === true && datos.jefe_destinatario_id) {
+                return datos.jefe_destinatario_id === usuarioId;
+              }
+            } catch {
+              return false;
+            }
+          }
+        }
+        return true;
+      });
+
+      return notificacionesFiltradas.map(notif => ({
         ...notif,
         datos_adicionales: notif.datos_adicionales ? JSON.parse(notif.datos_adicionales) : null,
         leida: notif.leida === 1,
@@ -140,22 +194,55 @@ export class NotificacionesService {
       `;
       const notificaciones = await this.notificacionesRepo.query(query, [usuarioId, rolId, limite, offset]);
 
-      // Solo los terapeutas tienen filtro adicional en DOCUMENTO_SUBIDO.
+      // Solo los terapeutas tienen filtro adicional en DOCUMENTO_SUBIDO y SOLICITUD_INFORME.
       // Admin y admisión ven todas las notificaciones de su rol sin restricción extra.
       const notificacionesFiltradas = notificaciones.filter(notif => {
-        if (
-          rolId === ROL_TERAPEUTA &&
-          notif.tipo_notificacion === 'DOCUMENTO_SUBIDO' &&
-          notif.datos_adicionales
-        ) {
-          try {
-            const datos = JSON.parse(notif.datos_adicionales);
-            if (datos.terapeutas_destinatarios && Array.isArray(datos.terapeutas_destinatarios)) {
-              return datos.terapeutas_destinatarios.includes(usuarioId);
+        if (rolId === ROL_TERAPEUTA) {
+          // Para SOLICITUD_INFORME y DOCUMENTO_SUBIDO, solo mostrar si la terapeuta está en la lista
+          if (
+            (notif.tipo_notificacion === 'DOCUMENTO_SUBIDO' || notif.tipo_notificacion === 'SOLICITUD_INFORME') &&
+            notif.datos_adicionales
+          ) {
+            try {
+              const datos = JSON.parse(notif.datos_adicionales);
+
+              // Si es una notificación de revisión (para jefas), solo mostrarla si es la jefa asignada
+              if (datos.es_revision === true) {
+                // Si tiene jefe_destinatario_id, solo mostrar si coincide con el usuario actual
+                if (datos.jefe_destinatario_id) {
+                  return datos.jefe_destinatario_id === usuarioId;
+                }
+                // Si no tiene jefe_destinatario_id, mostrarla (compatibilidad con notificaciones antiguas)
+                return true;
+              }
+
+              // Solo mostrar si existe terapeutas_destinatarios Y contiene a este usuario
+              if (datos.terapeutas_destinatarios && Array.isArray(datos.terapeutas_destinatarios)) {
+                return datos.terapeutas_destinatarios.includes(usuarioId);
+              }
+              // Si no existe terapeutas_destinatarios para SOLICITUD_INFORME, NO mostrar
+              if (notif.tipo_notificacion === 'SOLICITUD_INFORME') {
+                return false;
+              }
+              // Para DOCUMENTO_SUBIDO sin terapeutas_destinatarios, mostrar (compatibilidad)
+              return notif.tipo_notificacion === 'DOCUMENTO_SUBIDO';
+            } catch {
+              return false;
             }
-            return true;
-          } catch {
-            return false;
+          }
+        }
+        // Para ROL_ADMIN, filtrar notificaciones de revisión
+        if (rolId === ROL_ADMIN) {
+          if (notif.tipo_notificacion === 'SOLICITUD_INFORME' && notif.datos_adicionales) {
+            try {
+              const datos = JSON.parse(notif.datos_adicionales);
+              // Si es notificación de revisión con jefe asignado, solo mostrar si es el jefe
+              if (datos.es_revision === true && datos.jefe_destinatario_id) {
+                return datos.jefe_destinatario_id === usuarioId;
+              }
+            } catch {
+              return false;
+            }
           }
         }
         return true;

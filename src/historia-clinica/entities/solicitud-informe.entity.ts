@@ -6,6 +6,7 @@ import { TrabajadorCentro } from '../../usuarios/trabajador-centro.entity';
 import { ModalidadPago } from './modalidad-pago.entity';
 import { EstadoPago } from './estado-pago.entity';
 import { EstadoSolicitudInforme } from './estado-solicitud-informe.entity';
+import { DocumentoTarifa } from 'src/inventario/entities/documento-tarifa.entity';
 
 @Entity('solicitud_informe')
 export class SolicitudInforme {
@@ -26,12 +27,12 @@ export class SolicitudInforme {
   @JoinColumn({ name: 'venta_servicio_id' })
   venta_servicio: VentaServicio;
 
-  @Column({ name: 'tipo_archivo_id' })
-  tipo_archivo_id: number;
+  @Column({ name: 'documento_tarifa_id' })
+  documento_tarifa_id: number;
 
-  @ManyToOne(() => TipoArchivo, { eager: true })
-  @JoinColumn({ name: 'tipo_archivo_id' })
-  tipo_archivo: TipoArchivo;
+  @ManyToOne(() => DocumentoTarifa, { eager: true })
+  @JoinColumn({ name: 'documento_tarifa_id' })
+  documento_tarifa: DocumentoTarifa;
 
   @Column({ name: 'especialista_id' })
   especialista_id: number;

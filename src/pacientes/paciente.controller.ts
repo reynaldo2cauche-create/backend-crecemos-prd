@@ -252,7 +252,7 @@ async findAllIncludingInactive(@Query() query: any) {
       return {
         success: false,
         message: 'Error al actualizar pacientes inactivos',
-        error: error.message,
+        error: error instanceof Error ? error.message : 'Error desconocido',
       };
     }
   }

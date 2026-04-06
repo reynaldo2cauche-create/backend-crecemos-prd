@@ -32,7 +32,7 @@ import {
   SubirArchivoDto,
   RevisarInformeDto,
   MarcarEntregadoDto,
-} from './dto/solicitud-informe.dto';
+} from './dto/create-solicitud-informe.dto';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONSTANTES DE ROLES
@@ -238,7 +238,7 @@ export class SolicitudInformeController {
       console.log('💾 Archivo de informe guardado:', rutaCompleta);
     } catch (error) {
       throw new HttpException(
-        `Error al guardar el archivo: ${error.message}`,
+        `Error al guardar el archivo: ${error instanceof Error ? error.message : String(error)}`,
         HttpStatus.INTERNAL_SERVER_ERROR
       );
     }

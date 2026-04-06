@@ -825,7 +825,8 @@ async findAll(filters?: {
 
       this.logger.log(`📢 Notificación creada para cambio de estado de paciente ID ${id}`);
     } catch (error) {
-      this.logger.error(`❌ Error al crear notificación de cambio de estado: ${error.message}`);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.logger.error(`❌ Error al crear notificación de cambio de estado: ${errorMessage}`);
     }
 
     // Retornar el paciente actualizado con sus relaciones
@@ -1079,8 +1080,9 @@ async actualizarPacientesInactivos(): Promise<{
 
       this.logger.log(`📢 Notificación creada para paciente ID ${pacienteInfo.id}`);
     } catch (error) {
-      this.logger.error(`❌ Error al crear notificación para paciente ${pacienteInfo.id}: ${error.message}`);
-    }
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.logger.error(`❌ Error al crear notificación para paciente ${pacienteInfo.id}: ${errorMessage}`);
+    } 
 
     pacientesIds.push(pacienteInfo.id);
     this.logger.log(`✅ Paciente ID ${pacienteInfo.id} (${pacienteInfo.nombre}) → Inactivo. Última cita: ${pacienteInfo.ultimaCita}`);
