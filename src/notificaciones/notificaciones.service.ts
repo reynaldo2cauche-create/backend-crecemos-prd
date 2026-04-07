@@ -301,21 +301,54 @@ export class NotificacionesService {
       `;
       const notificaciones = await this.notificacionesRepo.query(query, [usuarioId, rolId]);
 
-      // Solo los terapeutas tienen filtro adicional en DOCUMENTO_SUBIDO.
+      // Aplicar los mismos filtros que en obtenerNotificacionesRecientes()
       const notificacionesFiltradas = notificaciones.filter(notif => {
-        if (
-          rolId === ROL_TERAPEUTA &&
-          notif.tipo_notificacion === 'DOCUMENTO_SUBIDO' &&
-          notif.datos_adicionales
-        ) {
-          try {
-            const datos = JSON.parse(notif.datos_adicionales);
-            if (datos.terapeutas_destinatarios && Array.isArray(datos.terapeutas_destinatarios)) {
-              return datos.terapeutas_destinatarios.includes(usuarioId);
+        if (rolId === ROL_TERAPEUTA) {
+          // Para SOLICITUD_INFORME y DOCUMENTO_SUBIDO, solo contar si la terapeuta está en la lista
+          if (
+            (notif.tipo_notificacion === 'DOCUMENTO_SUBIDO' || notif.tipo_notificacion === 'SOLICITUD_INFORME') &&
+            notif.datos_adicionales
+          ) {
+            try {
+              const datos = JSON.parse(notif.datos_adicionales);
+
+              // Si es una notificación de revisión (para jefas), solo contarla si es la jefa asignada
+              if (datos.es_revision === true) {
+                // Si tiene jefe_destinatario_id, solo contar si coincide con el usuario actual
+                if (datos.jefe_destinatario_id) {
+                  return datos.jefe_destinatario_id === usuarioId;
+                }
+                // Si no tiene jefe_destinatario_id, contarla (compatibilidad con notificaciones antiguas)
+                return true;
+              }
+
+              // Solo contar si existe terapeutas_destinatarios Y contiene a este usuario
+              if (datos.terapeutas_destinatarios && Array.isArray(datos.terapeutas_destinatarios)) {
+                return datos.terapeutas_destinatarios.includes(usuarioId);
+              }
+              // Si no existe terapeutas_destinatarios para SOLICITUD_INFORME, NO contar
+              if (notif.tipo_notificacion === 'SOLICITUD_INFORME') {
+                return false;
+              }
+              // Para DOCUMENTO_SUBIDO sin terapeutas_destinatarios, contar (compatibilidad)
+              return notif.tipo_notificacion === 'DOCUMENTO_SUBIDO';
+            } catch {
+              return false;
             }
-            return true;
-          } catch {
-            return false;
+          }
+        }
+        // Para ROL_ADMIN, filtrar notificaciones de revisión
+        if (rolId === ROL_ADMIN) {
+          if (notif.tipo_notificacion === 'SOLICITUD_INFORME' && notif.datos_adicionales) {
+            try {
+              const datos = JSON.parse(notif.datos_adicionales);
+              // Si es notificación de revisión con jefe asignado, solo contar si es el jefe
+              if (datos.es_revision === true && datos.jefe_destinatario_id) {
+                return datos.jefe_destinatario_id === usuarioId;
+              }
+            } catch {
+              return false;
+            }
           }
         }
         return true;
