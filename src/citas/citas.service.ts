@@ -144,7 +144,37 @@ export class CitasService {
       throw new BadRequestException('Se requiere doctor_id y servicio_id para cita normal');
     }
 
-  
+    // 🛒 VALIDACIÓN OBLIGATORIA: venta_servicio_detalle_id
+    if (!dto.venta_servicio_detalle_id) {
+      throw new BadRequestException('Se requiere una venta previa (venta_servicio_detalle_id) para agendar la cita. El paciente debe tener una compra de sesiones disponibles.');
+    }
+
+    // 🛒 VALIDAR QUE LA VENTA EXISTE Y TIENE SESIONES DISPONIBLES
+    const ventaDetalle = await this.ventaDetalleRepo.findOne({
+      where: { id: dto.venta_servicio_detalle_id },
+      relations: ['venta', 'servicio_tarifa', 'servicio_tarifa.servicio', 'servicio_tarifa.motivo_cita'],
+    });
+
+    if (!ventaDetalle) {
+      throw new BadRequestException(`La venta seleccionada (ID: ${dto.venta_servicio_detalle_id}) no existe.`);
+    }
+
+    // 🛒 VALIDAR QUE LA VENTA CORRESPONDE AL PACIENTE CORRECTO
+    if (ventaDetalle.paciente_id !== dto.paciente_id) {
+      throw new BadRequestException(`La venta seleccionada pertenece a otro paciente. Por favor selecciona una venta válida para este paciente.`);
+    }
+
+    // 🛒 VALIDAR QUE LA VENTA TIENE SESIONES DISPONIBLES
+    if (ventaDetalle.sesiones_usadas >= ventaDetalle.sesiones_totales) {
+      throw new BadRequestException(`La venta seleccionada ya no tiene sesiones disponibles (${ventaDetalle.sesiones_usadas}/${ventaDetalle.sesiones_totales} usadas). Por favor selecciona otra venta con sesiones disponibles.`);
+    }
+
+    // 🛒 VALIDAR QUE EL SERVICIO DE LA VENTA COINCIDE CON EL SERVICIO DE LA CITA
+    if (ventaDetalle.servicio_tarifa?.servicio_id !== dto.servicio_id) {
+      throw new BadRequestException(`El servicio de la venta seleccionada no coincide con el servicio de la cita.`);
+    }
+
+    console.log(`✅ Venta validada: ID ${ventaDetalle.id}, Sesiones disponibles: ${ventaDetalle.sesiones_totales - ventaDetalle.sesiones_usadas}/${ventaDetalle.sesiones_totales}`);
 
 
 
@@ -169,7 +199,15 @@ export class CitasService {
     const guardada = await this.citaRepo.save(cita);
     console.log(`✅ Cita normal creada: ID ${guardada.id}`);
 
- 
+    // 🛒 INCREMENTAR SESIONES USADAS EN LA VENTA
+    await this.citaRepo.query(
+      `UPDATE venta_servicio_detalle
+       SET sesiones_usadas = sesiones_usadas + 1
+       WHERE id = ?`,
+      [dto.venta_servicio_detalle_id]
+    );
+    console.log(`✅ Sesión descontada de venta ID ${dto.venta_servicio_detalle_id}: ${ventaDetalle.sesiones_usadas + 1}/${ventaDetalle.sesiones_totales}`);
+
     // Registrar en historial
     await this.historialService.registrarHistorial(
       guardada.id,
@@ -1065,6 +1103,17 @@ private async actualizarVisitaEscolar(id: number, dto: CrearCitaDto): Promise<an
     });
     console.log(`✅ Cita ${id} marcada como eliminada (flg_activo = 0)`);
 
+    // 🛒 DEVOLVER SESIÓN A LA VENTA (si la cita tenía venta asociada)
+    if (cita.venta_servicio_detalle_id) {
+      await this.citaRepo.query(
+        `UPDATE venta_servicio_detalle
+         SET sesiones_usadas = GREATEST(0, sesiones_usadas - 1)
+         WHERE id = ?`,
+        [cita.venta_servicio_detalle_id]
+      );
+      console.log(`✅ Sesión devuelta a venta ID ${cita.venta_servicio_detalle_id}`);
+    }
+
     // 🔥 Retornar con motivo y datos de la cita para auditoría
     return {
       mensaje: 'Cita eliminada correctamente',
@@ -1481,14 +1530,16 @@ async obtenerEstadisticasSesiones(
  * BUSCA AUTOMÁTICAMENTE el paquete/sesión activa del paciente
  * Devuelve el primer paquete con sesiones disponibles (más reciente)
  */
-async obtenerPaqueteActivoPaciente(pacienteId: number, servicioId?: number): Promise<any> {
+async obtenerPaqueteActivoPaciente(pacienteId: number, servicioId?: number, motivoCitaId?: number): Promise<any> {
   try {
     const query = `
       SELECT
         vsd.id,
         vsd.venta_id,
-        vsd.servicio_id,
+        st.servicio_id,
         s.nombre as servicio_nombre,
+        st.motivo_cita_id,
+        mc.nombre as motivo_cita_nombre,
         vsd.tipo_venta_id,
         tvs.nombre as tipo_venta_nombre,
         vsd.paquete_id,
@@ -1503,17 +1554,23 @@ async obtenerPaqueteActivoPaciente(pacienteId: number, servicioId?: number): Pro
         tc.nombre as tipo_comprobante_nombre
       FROM venta_servicio_detalle vsd
       INNER JOIN venta_servicio vs ON vs.id = vsd.venta_id
-      INNER JOIN servicios s ON s.id = vsd.servicio_id
+      INNER JOIN servicio_tarifa st ON st.id = vsd.servicio_tarifa_id
+      INNER JOIN servicios s ON s.id = st.servicio_id
+      INNER JOIN motivo_cita mc ON mc.id = st.motivo_cita_id
       INNER JOIN tipo_venta_servicio tvs ON tvs.id = vsd.tipo_venta_id
       INNER JOIN tipo_comprobante tc ON tc.id = vs.tipo_comprobante_id
       LEFT JOIN paquetes p ON p.id = vsd.paquete_id
       WHERE vsd.paciente_id = ?
         AND vsd.sesiones_usadas < vsd.sesiones_totales
-        ${servicioId ? 'AND vsd.servicio_id = ?' : ''}
+        ${servicioId ? 'AND st.servicio_id = ?' : ''}
+        ${motivoCitaId ? 'AND st.motivo_cita_id = ?' : ''}
       ORDER BY vs.fecha_venta DESC, vsd.id DESC
     `;
 
-    const params = servicioId ? [pacienteId, servicioId] : [pacienteId];
+    const params = [pacienteId];
+    if (servicioId) params.push(servicioId);
+    if (motivoCitaId) params.push(motivoCitaId);
+
     const sesiones = await this.citaRepo.query(query, params);
 
     console.log(`📦 Sesiones disponibles para paciente ${pacienteId}:`, sesiones.length);
@@ -1523,6 +1580,8 @@ async obtenerPaqueteActivoPaciente(pacienteId: number, servicioId?: number): Pro
       venta_id: s.venta_id,
       servicio_id: s.servicio_id,
       servicio_nombre: s.servicio_nombre,
+      motivo_cita_id: s.motivo_cita_id,
+      motivo_cita_nombre: s.motivo_cita_nombre,
       tipo_venta_id: s.tipo_venta_id,
       tipo_venta_nombre: s.tipo_venta_nombre,
       paquete_id: s.paquete_id,
@@ -1536,10 +1595,156 @@ async obtenerPaqueteActivoPaciente(pacienteId: number, servicioId?: number): Pro
       codigo_comprobante: s.codigo_comprobante,
       tipo_comprobante_nombre: s.tipo_comprobante_nombre,
       // Descripción para mostrar en el modal
-      descripcion: `${s.servicio_nombre}${s.paquete_nombre ? ` - ${s.paquete_nombre}` : ''} (${s.sesiones_disponibles}/${s.sesiones_totales} disponibles) - ${s.codigo_comprobante || 'Sin código'}`
+      descripcion: `${s.servicio_nombre} - ${s.motivo_cita_nombre}${s.paquete_nombre ? ` (${s.paquete_nombre})` : ''} | ${s.sesiones_disponibles}/${s.sesiones_totales} disponibles | ${s.codigo_comprobante || 'Sin código'}`
     }));
   } catch (error) {
     console.error('❌ Error al obtener sesiones disponibles:', error);
+    throw error;
+  }
+}
+
+// 📋 OBTENER LISTADO DETALLADO DE CITAS POR PACIENTE
+async obtenerListadoCitasPorPaciente(pacienteId: number) {
+  try {
+    console.log(`📋 Obteniendo listado detallado de citas para paciente ${pacienteId}`);
+
+    const query = `
+      SELECT
+        c.id,
+        c.fecha,
+        c.hora_inicio,
+        c.servicio_id,
+        s.nombre as servicio_nombre,
+        c.venta_servicio_detalle_id,
+        COALESCE(vsd.descripcion_linea, 'Sesión individual') as paquete_nombre,
+        CONCAT(t.nombres, ' ', t.apellidos) as especialista,
+        mc.nombre as tipo_servicio,
+        COALESCE(vsd.subtotal, 0) as monto,
+        vs.fecha_venta as fecha_pago,
+        mp.nombre as modalidad_pago,
+        vs.codigo_comprobante,
+        CASE
+          WHEN sa.terapeuta_estado_id = 7 AND sa.recepcion_estado_id = 7 THEN 1
+          WHEN sa.terapeuta_estado_id = 6 AND sa.recepcion_estado_id = 6 THEN 0
+          ELSE NULL
+        END as asistencia
+      FROM citas c
+      INNER JOIN servicios s ON s.id = c.servicio_id
+      LEFT JOIN trabajador_centro t ON t.id = c.doctor_id
+      LEFT JOIN motivo_cita mc ON mc.id = c.motivo_id
+      LEFT JOIN venta_servicio_detalle vsd ON vsd.id = c.venta_servicio_detalle_id
+      LEFT JOIN venta_servicio vs ON vs.id = vsd.venta_id
+      LEFT JOIN modalidad_pago mp ON mp.id = vs.modalidad_pago_id
+      LEFT JOIN seguimiento_asistencia sa ON sa.cita_id = c.id
+      WHERE c.paciente_id = ?
+        AND c.flg_activo = 1
+      ORDER BY s.nombre ASC,
+               COALESCE(vsd.id, 999999) ASC,
+               c.fecha ASC,
+               c.hora_inicio ASC
+    `;
+
+    const resultados = await this.citaRepo.query(query, [pacienteId]);
+
+    // Agrupar por servicio y luego por paquete
+    const agrupado = resultados.reduce((acc, cita) => {
+      const servicioId = cita.servicio_id;
+      const paqueteId = cita.venta_servicio_detalle_id || 'sin_paquete';
+
+      if (!acc[servicioId]) {
+        acc[servicioId] = {
+          servicio_id: servicioId,
+          servicio_nombre: cita.servicio_nombre,
+          paquetes: {}
+        };
+      }
+
+      if (!acc[servicioId].paquetes[paqueteId]) {
+        acc[servicioId].paquetes[paqueteId] = {
+          paquete_id: paqueteId,
+          paquete_nombre: cita.paquete_nombre || 'Sesión individual',
+          codigo_comprobante: cita.codigo_comprobante,
+          citas: []
+        };
+      }
+
+      acc[servicioId].paquetes[paqueteId].citas.push({
+        id: cita.id,
+        fecha: cita.fecha,
+        hora: cita.hora_inicio,
+        asistencia: cita.asistencia,
+        especialista: cita.especialista || 'No asignado',
+        tipo_servicio: cita.tipo_servicio,
+        monto: parseFloat(cita.monto),
+        fecha_pago: cita.fecha_pago,
+        modalidad_pago: cita.modalidad_pago,
+        comprobante: cita.codigo_comprobante
+      });
+
+      return acc;
+    }, {});
+
+    // Convertir a array
+    const servicios = Object.values(agrupado).map((servicio: any) => ({
+      ...servicio,
+      paquetes: Object.values(servicio.paquetes)
+    }));
+
+    return { servicios };
+  } catch (error) {
+    console.error('❌ Error al obtener listado de citas:', error);
+    throw error;
+  }
+}
+
+// 📊 OBTENER RESUMEN DE TERAPIAS POR PACIENTE
+async obtenerResumenTerapiasPorPaciente(pacienteId: number) {
+  try {
+    console.log(`📊 Obteniendo resumen de terapias para paciente ${pacienteId}`);
+
+    const query = `
+      SELECT
+        s.id as servicio_id,
+        s.nombre as servicio_nombre,
+        COUNT(DISTINCT c.id) as total_citas,
+        SUM(CASE
+          WHEN sa.terapeuta_estado_id = 7 AND sa.recepcion_estado_id = 7 THEN 1
+          ELSE 0
+        END) as asistencias,
+        SUM(CASE
+          WHEN sa.terapeuta_estado_id = 6 AND sa.recepcion_estado_id = 6 THEN 1
+          ELSE 0
+        END) as faltas
+      FROM citas c
+      INNER JOIN servicios s ON s.id = c.servicio_id
+      LEFT JOIN seguimiento_asistencia sa ON sa.cita_id = c.id
+      WHERE c.paciente_id = ?
+        AND c.flg_activo = 1
+      GROUP BY s.id, s.nombre
+      ORDER BY s.nombre ASC
+    `;
+
+    const resultados = await this.citaRepo.query(query, [pacienteId]);
+
+    // Calcular totales
+    const totales = resultados.reduce((acc, row) => ({
+      total_citas: acc.total_citas + parseInt(row.total_citas || 0),
+      asistencias: acc.asistencias + parseInt(row.asistencias || 0),
+      faltas: acc.faltas + parseInt(row.faltas || 0)
+    }), { total_citas: 0, asistencias: 0, faltas: 0 });
+
+    return {
+      servicios: resultados.map(row => ({
+        servicio_id: parseInt(row.servicio_id),
+        servicio_nombre: row.servicio_nombre,
+        total_citas: parseInt(row.total_citas || 0),
+        asistencias: parseInt(row.asistencias || 0),
+        faltas: parseInt(row.faltas || 0)
+      })),
+      totales
+    };
+  } catch (error) {
+    console.error('❌ Error al obtener resumen de terapias:', error);
     throw error;
   }
 }

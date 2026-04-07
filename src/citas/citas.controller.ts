@@ -54,6 +54,35 @@ async obtenerEstadisticasSesiones(@Query() query: any) {
   );
 }
 
+  // 🛒 OBTENER VENTAS DISPONIBLES DEL PACIENTE
+  @Get('ventas-disponibles/:paciente_id')
+  async obtenerVentasDisponibles(
+    @Param('paciente_id') paciente_id: string,
+    @Query('servicio_id') servicio_id?: string,
+    @Query('motivo_cita_id') motivo_cita_id?: string,
+  ) {
+    console.log(`🛒 Obteniendo ventas disponibles para paciente ${paciente_id}, servicio ${servicio_id || 'todos'}, motivo ${motivo_cita_id || 'todos'}`);
+    return this.citasService.obtenerPaqueteActivoPaciente(
+      +paciente_id,
+      servicio_id ? +servicio_id : undefined,
+      motivo_cita_id ? +motivo_cita_id : undefined
+    );
+  }
+
+  // 📋 OBTENER LISTADO DETALLADO DE CITAS POR PACIENTE
+  @Get('listado-citas/:paciente_id')
+  async obtenerListadoCitas(@Param('paciente_id') paciente_id: string) {
+    console.log(`📋 Obteniendo listado de citas para paciente ${paciente_id}`);
+    return this.citasService.obtenerListadoCitasPorPaciente(+paciente_id);
+  }
+
+  // 📊 OBTENER RESUMEN DE TERAPIAS POR PACIENTE
+  @Get('resumen-terapias/:paciente_id')
+  async obtenerResumenTerapias(@Param('paciente_id') paciente_id: string) {
+    console.log(`📊 Obteniendo resumen de terapias para paciente ${paciente_id}`);
+    return this.citasService.obtenerResumenTerapiasPorPaciente(+paciente_id);
+  }
+
   // ✅ RUTAS CON PARÁMETROS AL FINAL
   @Get(':id/historial')
   async obtenerHistorial(@Param('id') id: string) {
