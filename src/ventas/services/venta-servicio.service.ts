@@ -222,6 +222,7 @@ export class VentaServicioService {
         descuento_promocion:    descuentoPromoMonto,
         total,
         nota:                   dto.nota,
+        observaciones:          dto.observaciones,
         modalidad_pago_id:      dto.modalidad_pago_id ?? null,
         user_crea_id:           dto.user_crea_id,
       });

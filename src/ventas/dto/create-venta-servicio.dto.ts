@@ -103,6 +103,10 @@ export class CreateVentaServicioDto {
   nota?: string;
 
   @IsOptional()
+  @IsString()
+  observaciones?: string;
+
+  @IsOptional()
   @IsNumber()
   @Type(() => Number)
   modalidad_pago_id?: number;

@@ -14,12 +14,16 @@ import {
   UploadedFile,
   HttpException,
   HttpStatus,
+  Res,
+  BadRequestException,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { Response } from 'express';
 import * as fs from 'fs';
 import * as path from 'path';
 import { v4 as uuidv4 } from 'uuid';
+import { extname } from 'path';
 
 import {
   SolicitudInformeService,
@@ -33,6 +37,8 @@ import {
   RevisarInformeDto,
   MarcarEntregadoDto,
 } from './dto/create-solicitud-informe.dto';
+
+import { Public } from '../auth/decorators/public.decorator';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONSTANTES DE ROLES
@@ -81,6 +87,41 @@ export class SolicitudInformeController {
   }
 
   // ══════════════════════════════════════════════════════════════════════════
+  // SERVIR ARCHIVOS
+  // ══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * GET /solicitudes-informe/archivo/:filename
+   * Sirve los archivos de informes (PDFs y Word) almacenados en el servidor
+   * PÚBLICO (sin guard) para permitir previsualización y descarga
+   */
+  @Public()
+  @Get('archivo/:filename')
+  async verArchivo(@Param('filename') filename: string, @Res() res: Response) {
+    const rutaArchivo = path.join(process.cwd(), 'uploads', 'solicitudes_informe', filename);
+
+    if (!fs.existsSync(rutaArchivo)) {
+      throw new BadRequestException('Archivo no encontrado');
+    }
+
+    const ext = extname(filename).toLowerCase();
+    const mimeTypes = {
+      '.pdf': 'application/pdf',
+      '.doc': 'application/msword',
+      '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    };
+
+    const mimeType = mimeTypes[ext] || 'application/octet-stream';
+
+    res.setHeader('Content-Type', mimeType);
+    res.setHeader('Cache-Control', 'public, max-age=31536000');
+    res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
+
+    const fileStream = fs.createReadStream(rutaArchivo);
+    fileStream.pipe(res);
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
   // CRUD BASE (rutas específicas ANTES de :id)
   // ══════════════════════════════════════════════════════════════════════════
 
@@ -101,20 +142,34 @@ export class SolicitudInformeController {
 
   /**
    * GET /solicitudes-informe
-   * Solo Admin y Admisión ven el listado completo.
+   * - Admin y Admisión ven todo
+   * - Terapeuta (no jefa) solo ve sus solicitudes
+   * - Terapeuta jefa ve las de sus subordinadas y las suyas
    */
   @Get()
   findAll(@Request() req) {
     const rolId = req.user?.rol?.id;
-    if (rolId !== ROL_ADMIN && rolId !== ROL_ADMISION) {
-      throw new ForbiddenException('No tienes permiso para ver este listado.');
+    const userId = req.user?.id;
+    const esJefe = Boolean(req.user?.cargo?.es_jefe);
+
+    // Admin y Admisión ven todo
+    if (rolId === ROL_ADMIN || rolId === ROL_ADMISION) {
+      return this.service.findAll();
     }
-    return this.service.findAll();
+
+    // Terapeuta ve solo las suyas (o de subordinadas si es jefa)
+    if (rolId === ROL_TERAPEUTA) {
+      return this.service.findAllByTerapeuta(userId, esJefe);
+    }
+
+    throw new ForbiddenException('No tienes permiso para ver este listado.');
   }
 
   /**
    * GET /solicitudes-informe/paciente/:pacienteId
-   * Todos pueden consultarlo; la vista depende del rol.
+   * - Admin/Admisión: ven todas las solicitudes del paciente
+   * - Terapeuta (no jefa): solo ve sus propias solicitudes del paciente
+   * - Terapeuta jefa: ve las suyas y las de sus subordinadas del paciente
    */
   @Get('paciente/:pacienteId')
   findByPaciente(
@@ -122,9 +177,10 @@ export class SolicitudInformeController {
     @Request() req,
   ) {
     const rolId = req.user?.rol?.id;
+    const userId = req.user?.id;
     const esJefe = Boolean(req.user?.cargo?.es_jefe);
     const vista = vistaDesdeRol(rolId, esJefe);
-    return this.service.findByPaciente(pacienteId, vista);
+    return this.service.findByPaciente(pacienteId, vista, userId, esJefe);
   }
 
   /**

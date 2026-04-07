@@ -78,8 +78,11 @@ export class VentaProducto {
   @Column({ type: 'decimal', precision: 10, scale: 2, comment: 'subtotal - descuento_monto' })
   total: number;
 
-  @Column({ type: 'text', nullable: true })
+  @Column({ type: 'text', nullable: true, comment: 'Nota interna, solo visible en el sistema' })
   nota: string;
+
+  @Column({ type: 'text', nullable: true, comment: 'Observaciones visibles en el comprobante impreso' })
+  observaciones: string;
 
   @Column({ name: 'modalidad_pago_id', nullable: true, comment: 'Método de pago utilizado' })
   modalidad_pago_id: number;

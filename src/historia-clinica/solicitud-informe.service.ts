@@ -253,6 +253,56 @@ export class SolicitudInformeService {
       .getMany();
   }
 
+  /**
+   * FIND ALL BY TERAPEUTA
+   * - Si NO es jefa: solo ve sus propias solicitudes
+   * - Si ES jefa: ve las suyas y las de sus subordinadas
+   */
+  async findAllByTerapeuta(terapeutaId: number, esJefe: boolean): Promise<Partial<SolicitudInforme>[]> {
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('🔍 DEBUG findAllByTerapeuta');
+    console.log('   - terapeutaId:', terapeutaId);
+    console.log('   - esJefe:', esJefe);
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+
+    let query = this.baseQuery();
+
+    if (esJefe) {
+      console.log('✅ Es JEFA - buscando subordinadas...');
+      // Si es jefa, obtener sus subordinadas
+      const trabajador = await this.solicitudRepo.manager
+        .createQueryBuilder()
+        .select('tc.id', 'id')
+        .from('trabajador_centro', 'tc')
+        .where('tc.jefe_id = :terapeutaId', { terapeutaId })
+        .getRawMany();
+
+      const subordinadasIds = trabajador.map(t => t.id);
+      const todosIds = [terapeutaId, ...subordinadasIds];
+
+      console.log('   - Subordinadas encontradas:', trabajador);
+      console.log('   - Subordinadas IDs:', subordinadasIds);
+      console.log('   - Todos IDs (ella + subordinadas):', todosIds);
+
+      query = query.where('si.especialista_id IN (:...ids)', { ids: todosIds });
+    } else {
+      console.log('✅ NO es jefa - solo sus solicitudes');
+      console.log('   - Filtrando por especialista_id =', terapeutaId);
+      // Si NO es jefa, solo sus propias solicitudes
+      query = query.where('si.especialista_id = :terapeutaId', { terapeutaId });
+    }
+
+    const solicitudes = await query
+      .orderBy('si.fecha_solicitud', 'DESC')
+      .getMany();
+
+    console.log('📋 Solicitudes encontradas:', solicitudes.length);
+    console.log('   - IDs:', solicitudes.map(s => `#${s.id} (especialista: ${(s as any).especialista?.id})`));
+
+    // Retornar sin datos financieros (vista terapeuta)
+    return solicitudes.map(sanitizarParaTerapeuta);
+  }
+
   // ──────────────────────────────────────────────────────────────────────────
   // FIND ONE  (interno — siempre con todas las relaciones)
   // ──────────────────────────────────────────────────────────────────────────
@@ -290,11 +340,56 @@ export class SolicitudInformeService {
   async findByPaciente(
     pacienteId: number,
     vista: VistaRol = 'admin',
+    terapeutaId?: number,
+    esJefe?: boolean,
   ): Promise<Array<SolicitudInforme | Partial<SolicitudInforme>>> {
-    const solicitudes = await this.baseQuery()
-      .where('paciente.id = :pacienteId', { pacienteId })
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('🔍 DEBUG findByPaciente');
+    console.log('   - pacienteId:', pacienteId);
+    console.log('   - vista:', vista);
+    console.log('   - terapeutaId:', terapeutaId);
+    console.log('   - esJefe:', esJefe);
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+
+    let query = this.baseQuery().where('paciente.id = :pacienteId', { pacienteId });
+
+    // Si es terapeuta, filtrar por especialista asignada
+    if ((vista === 'terapeuta' || vista === 'jefa') && terapeutaId) {
+      console.log('✅ Aplicando filtro de terapeuta...');
+      if (esJefe) {
+        console.log('✅ Es JEFA - buscando subordinadas...');
+        // Si es jefa, obtener sus subordinadas
+        const trabajador = await this.solicitudRepo.manager
+          .createQueryBuilder()
+          .select('tc.id', 'id')
+          .from('trabajador_centro', 'tc')
+          .where('tc.jefe_id = :terapeutaId', { terapeutaId })
+          .getRawMany();
+
+        const subordinadasIds = trabajador.map(t => t.id);
+        const todosIds = [terapeutaId, ...subordinadasIds];
+
+        console.log('   - Subordinadas encontradas:', trabajador);
+        console.log('   - Subordinadas IDs:', subordinadasIds);
+        console.log('   - Todos IDs (jefa + subordinadas):', todosIds);
+
+        query = query.andWhere('si.especialista_id IN (:...ids)', { ids: todosIds });
+      } else {
+        console.log('✅ NO es jefa - solo sus solicitudes');
+        console.log('   - Filtrando por especialista_id =', terapeutaId);
+        // Si NO es jefa, solo sus propias solicitudes
+        query = query.andWhere('si.especialista_id = :terapeutaId', { terapeutaId });
+      }
+    } else {
+      console.log('✅ Admin/Admisión - sin filtro de terapeuta');
+    }
+
+    const solicitudes = await query
       .orderBy('si.fecha_solicitud', 'DESC')
       .getMany();
+
+    console.log('📋 Solicitudes encontradas:', solicitudes.length);
+    console.log('   - IDs:', solicitudes.map(s => `#${s.id} (especialista: ${(s as any).especialista?.id})`));
 
     if (vista === 'terapeuta' || vista === 'jefa') {
       return solicitudes.map(sanitizarParaTerapeuta);
