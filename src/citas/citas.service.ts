@@ -1639,9 +1639,10 @@ async obtenerListadoCitasPorPaciente(pacienteId: number) {
       WHERE c.paciente_id = ?
         AND c.flg_activo = 1
       ORDER BY s.nombre ASC,
-               COALESCE(vsd.id, 999999) ASC,
-               c.fecha ASC,
-               c.hora_inicio ASC
+               vs.fecha_venta DESC,
+               COALESCE(vsd.id, 0) DESC,
+               c.fecha DESC,
+               c.hora_inicio DESC
     `;
 
     const resultados = await this.citaRepo.query(query, [pacienteId]);
