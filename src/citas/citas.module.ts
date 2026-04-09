@@ -23,6 +23,9 @@ import { TipoCita } from '../catalogos/tipo-cita.entity';
 // Ventas
 import { VentaServicioDetalle } from '../ventas/entities/venta-servicio-detalle.entity';
 
+// Pacientes
+import { ResponsablePaciente } from '../pacientes/entities/responsable-paciente.entity';
+
 // Servicios y controladores
 import { CitasService } from './citas.service';
 import { HistorialCitasService } from './historial-citas.service';
@@ -53,7 +56,9 @@ import { SorteoModule } from '../sorteos/sorteo.module';
       EstadoCita,
       TipoCita,
       // Ventas
-      VentaServicioDetalle
+      VentaServicioDetalle,
+      // Pacientes
+      ResponsablePaciente
     ]),
     forwardRef(() => NotificacionesModule),
     forwardRef(() => SorteoModule),

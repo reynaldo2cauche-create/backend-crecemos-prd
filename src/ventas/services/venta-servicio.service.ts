@@ -4,6 +4,7 @@ import { DataSource, Repository } from 'typeorm';
 import { VentaServicio } from '../entities/venta-servicio.entity';
 import { VentaServicioDetalle } from '../entities/venta-servicio-detalle.entity';
 import { CreateVentaServicioDto, DetalleVentaServicioDto } from '../dto/create-venta-servicio.dto';
+import { UpdateVentaServicioDto } from '../dto/update-venta-servicio.dto';
 import { VentaPromocionAplicada } from '../../promociones/entities/venta-promocion-aplicada.entity';
 import { ServicioTarifa } from '../../inventario/entities/servicio-tarifa.entity';
 import { ServicioPaquetePrecio } from '../../inventario/entities/servicio-paquete-precio.entity';
@@ -278,6 +279,194 @@ export class VentaServicioService {
     }
     await this.detalleRepo.update(detalleId, { sesiones_usadas: detalle.sesiones_usadas + 1 });
     return { sesiones_usadas: detalle.sesiones_usadas + 1, sesiones_totales: detalle.sesiones_totales };
+  }
+
+  /** Actualiza campos editables de una venta de servicio */
+  async update(id: number, dto: UpdateVentaServicioDto) {
+    const venta = await this.ventaRepo.findOne({
+      where: { id },
+      relations: ['detalles']
+    });
+    if (!venta) throw new NotFoundException(`Venta de servicio ${id} no encontrada`);
+
+    // Verificar si algún detalle ya tiene sesiones usadas (citas registradas)
+    const tieneSesionesUsadas = venta.detalles.some(d => d.sesiones_usadas > 0);
+    if (tieneSesionesUsadas && dto.detalles) {
+      throw new BadRequestException(
+        'No se pueden modificar los detalles de una venta que ya tiene sesiones usadas (citas registradas)'
+      );
+    }
+
+    return this.dataSource.transaction(async (manager) => {
+      let subtotalFinal = venta.subtotal;
+
+      // Si se envían detalles, reemplazar completamente
+      if (dto.detalles && dto.detalles.length > 0) {
+        // Eliminar detalles antiguos
+        await manager.delete(VentaServicioDetalle, { venta_id: id });
+
+        // Enriquecer y crear nuevos detalles
+        const detallesEnriquecidos = await Promise.all(
+          dto.detalles.map(async (d) => {
+            const tipoItem = d.tipo_item_venta ?? 1;
+            let precioUnitario = 0;
+            let motivoCitaId = null;
+            let descripcionLinea = d.descripcion_linea;
+
+            if (tipoItem === 1) {
+              if (!d.servicio_tarifa_id) {
+                throw new BadRequestException('servicio_tarifa_id es obligatorio para tipo_item_venta=1');
+              }
+
+              const tarifa = await manager.findOne(ServicioTarifa, {
+                where: { id: d.servicio_tarifa_id },
+                relations: ['motivo_cita', 'servicio'],
+              });
+              if (!tarifa) {
+                throw new BadRequestException(`ServicioTarifa ${d.servicio_tarifa_id} no encontrada`);
+              }
+
+              motivoCitaId = tarifa.motivo_cita_id;
+              precioUnitario = parseFloat(String(tarifa.precio));
+
+              if (d.tipo_venta_id === 2 && d.paquete_id) {
+                const config = await manager.findOne(ServicioPaquetePrecio, {
+                  where: { servicio_tarifa_id: d.servicio_tarifa_id, paquete_id: d.paquete_id, flg_activo: 1 },
+                });
+                if (config) {
+                  const sesiones = d.sesiones_totales;
+                  if (config.tipo_calculo === 'precio_total') {
+                    precioUnitario = parseFloat(String(config.valor)) / sesiones;
+                  } else if (config.tipo_calculo === 'descuento_porcentaje') {
+                    precioUnitario = precioUnitario * (1 - parseFloat(String(config.valor)) / 100);
+                  }
+                }
+              }
+
+              if (!descripcionLinea && tarifa.motivo_cita && tarifa.servicio) {
+                const sesionLabel = d.sesiones_totales === 1 ? 'Sesión' : 'Sesiones';
+                descripcionLinea = `${d.sesiones_totales} ${sesionLabel} de ${tarifa.motivo_cita.nombre} - ${tarifa.servicio.nombre}`;
+              }
+
+            } else if (tipoItem === 2) {
+              if (!d.documento_tarifa_id) {
+                throw new BadRequestException('documento_tarifa_id es obligatorio para tipo_item_venta=2');
+              }
+
+              const documento = await manager.findOne(DocumentoTarifa, {
+                where: { id: d.documento_tarifa_id, flgActivo: 1 },
+              });
+              if (!documento) {
+                throw new BadRequestException(`DocumentoTarifa ${d.documento_tarifa_id} no encontrado o inactivo`);
+              }
+
+              precioUnitario = parseFloat(String(documento.precio));
+
+              if (!descripcionLinea) {
+                descripcionLinea = documento.nombre;
+              }
+            }
+
+            return {
+              ...d,
+              tipo_item_venta: tipoItem,
+              motivo_cita_id: motivoCitaId,
+              precio_unitario: precioUnitario,
+              descripcion_linea: descripcionLinea,
+            };
+          }),
+        );
+
+        const detallesCalculados = detallesEnriquecidos.map((d) => this.calcularDetalle(d));
+        subtotalFinal = detallesCalculados.reduce((s, d) => s + d.subtotal, 0);
+
+        // Guardar nuevos detalles
+        for (const d of detallesCalculados) {
+          const detalle = manager.create(VentaServicioDetalle, {
+            venta_id: id,
+            tipoItemVenta:       d.tipo_item_venta ?? 1,
+            paciente_id:         d.paciente_id,
+            servicio_tarifa_id:  d.servicio_tarifa_id ?? null,
+            motivoCitaId:        d.motivo_cita_id ?? null,
+            documentoTarifaId:   d.documento_tarifa_id ?? null,
+            descripcionLinea:    d.descripcion_linea ?? null,
+            tipo_venta_id:       d.tipo_venta_id,
+            paquete_id:          d.paquete_id,
+            sesiones_totales:    d.sesiones_totales,
+            sesiones_usadas:     d.tipo_item_venta === 2 ? 1 : 0,
+            precio_unitario:     d.precio_unitario,
+            descuento_tipo_id:   d.descuento_tipo_id,
+            descuento_valor:     d.descuento_valor ?? 0,
+            descuento_monto:     d.descuento_monto,
+            subtotal:            d.subtotal,
+          });
+          await manager.save(detalle);
+        }
+      }
+
+      // Actualizar campos de la venta
+      const camposActualizables: Partial<VentaServicio> = {};
+
+      if (dto.fecha_venta !== undefined) camposActualizables.fecha_venta = dto.fecha_venta;
+      if (dto.nota !== undefined) camposActualizables.nota = dto.nota;
+      if (dto.observaciones !== undefined) camposActualizables.observaciones = dto.observaciones;
+      if (dto.modalidad_pago_id !== undefined) camposActualizables.modalidad_pago_id = dto.modalidad_pago_id;
+
+      // Recalcular descuentos y totales
+      const descuentoTipoId = dto.descuento_tipo_id ?? venta.descuento_tipo_id;
+      const descuentoValor = dto.descuento_valor ?? venta.descuento_valor;
+      const descuentoGlobalMonto = this.calcularDescuentoMonto(subtotalFinal, descuentoTipoId, descuentoValor);
+      const descuentoPromoMonto = parseFloat((venta.descuento_promocion ?? 0).toFixed(2));
+      const descuentoMonto = parseFloat((descuentoGlobalMonto + descuentoPromoMonto).toFixed(2));
+      const total = Math.max(0, parseFloat((subtotalFinal - descuentoMonto).toFixed(2)));
+
+      camposActualizables.subtotal = subtotalFinal;
+      camposActualizables.descuento_tipo_id = descuentoTipoId;
+      camposActualizables.descuento_valor = descuentoValor;
+      camposActualizables.descuento_monto = descuentoMonto;
+      camposActualizables.total = total;
+
+      if (dto.user_actua_id !== undefined) {
+        camposActualizables.user_actua_id = dto.user_actua_id;
+      }
+
+      await manager.update(VentaServicio, id, camposActualizables);
+
+      return this.findOne(id);
+    });
+  }
+
+  /** Elimina una venta de servicio (solo si no tiene sesiones usadas) */
+  async remove(id: number) {
+    const venta = await this.ventaRepo.findOne({
+      where: { id },
+      relations: ['detalles']
+    });
+    if (!venta) throw new NotFoundException(`Venta de servicio ${id} no encontrada`);
+
+    // Verificar si algún detalle ya tiene sesiones usadas (citas registradas)
+    const tieneSesionesUsadas = venta.detalles.some(d => d.sesiones_usadas > 0);
+    if (tieneSesionesUsadas) {
+      throw new BadRequestException(
+        'No se puede eliminar una venta que ya tiene sesiones usadas (citas registradas)'
+      );
+    }
+
+    return this.dataSource.transaction(async (manager) => {
+      // Eliminar promociones aplicadas
+      await manager.delete(VentaPromocionAplicada, {
+        tipo_venta_id: TIPO_VENTA_SERVICIO,
+        venta_id: id
+      });
+
+      // Eliminar detalles
+      await manager.delete(VentaServicioDetalle, { venta_id: id });
+
+      // Eliminar venta
+      await manager.delete(VentaServicio, id);
+
+      return { message: 'Venta de servicio eliminada exitosamente', id };
+    });
   }
 
   // ── Helpers privados ──────────────────────────────────────────────────────────

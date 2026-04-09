@@ -4,6 +4,7 @@ import { DataSource, Repository } from 'typeorm';
 import { VentaProducto } from '../entities/venta-producto.entity';
 import { VentaProductoDetalle } from '../entities/venta-producto-detalle.entity';
 import { CreateVentaProductoDto, DetalleVentaProductoDto } from '../dto/create-venta-producto.dto';
+import { UpdateVentaProductoDto } from '../dto/update-venta-producto.dto';
 import { Producto } from '../../inventario/entities/producto.entity';
 // ✅ FIX: importar el repositorio de promociones aplicadas
 import { VentaPromocionAplicada } from '../../promociones/entities/venta-promocion-aplicada.entity';
@@ -170,6 +171,137 @@ export class VentaProductoService {
       ventaCompleta.promociones_aplicadas = [];
 
       return ventaCompleta;
+    });
+  }
+
+  /** Actualiza campos editables de una venta de producto */
+  async update(id: number, dto: UpdateVentaProductoDto) {
+    const venta = await this.ventaRepo.findOne({
+      where: { id },
+      relations: ['detalles']
+    });
+    if (!venta) throw new NotFoundException(`Venta de producto ${id} no encontrada`);
+
+    return this.dataSource.transaction(async (manager) => {
+      let subtotalFinal = venta.subtotal;
+
+      // Si se envían detalles, reemplazar completamente
+      if (dto.detalles && dto.detalles.length > 0) {
+        // Devolver stock de los detalles antiguos
+        for (const detalleAntiguo of venta.detalles) {
+          await manager
+            .createQueryBuilder()
+            .update(Producto)
+            .set({ stock_actual: () => `stock_actual + ${detalleAntiguo.cantidad}` })
+            .where('id = :id', { id: detalleAntiguo.producto_id })
+            .execute();
+        }
+
+        // Eliminar detalles antiguos
+        await manager.delete(VentaProductoDetalle, { venta_id: id });
+
+        // Verificar stock suficiente para los nuevos productos
+        for (const d of dto.detalles) {
+          const prod = await manager.findOne(Producto, { where: { id: d.producto_id } });
+          if (!prod) throw new NotFoundException(`Producto ${d.producto_id} no encontrado`);
+          if (prod.stock_actual < d.cantidad) {
+            throw new BadRequestException(
+              `Stock insuficiente para "${prod.nombre}": disponible ${prod.stock_actual}, solicitado ${d.cantidad}`,
+            );
+          }
+        }
+
+        // Calcular nuevos detalles
+        const detallesCalculados = dto.detalles.map((d) => this.calcularDetalle(d));
+        subtotalFinal = detallesCalculados.reduce((s, d) => s + d.subtotal, 0);
+
+        // Guardar nuevos detalles y descontar stock
+        for (const d of detallesCalculados) {
+          const detalle = manager.create(VentaProductoDetalle, {
+            venta_id: id,
+            producto_id: d.producto_id,
+            cantidad: d.cantidad,
+            precio_unitario: d.precio_unitario,
+            descuento_tipo_id: d.descuento_tipo_id,
+            descuento_valor: d.descuento_valor ?? 0,
+            descuento_monto: d.descuento_monto,
+            subtotal: d.subtotal,
+          });
+          await manager.save(detalle);
+
+          await manager
+            .createQueryBuilder()
+            .update(Producto)
+            .set({ stock_actual: () => `stock_actual - ${d.cantidad}` })
+            .where('id = :id', { id: d.producto_id })
+            .execute();
+        }
+      }
+
+      // Actualizar campos de la venta
+      const camposActualizables: Partial<VentaProducto> = {};
+
+      if (dto.fecha_venta !== undefined) camposActualizables.fecha_venta = dto.fecha_venta;
+      if (dto.nota !== undefined) camposActualizables.nota = dto.nota;
+      if (dto.observaciones !== undefined) camposActualizables.observaciones = dto.observaciones;
+      if (dto.modalidad_pago_id !== undefined) camposActualizables.modalidad_pago_id = dto.modalidad_pago_id;
+
+      // Recalcular descuentos y totales
+      const descuentoTipoId = dto.descuento_tipo_id ?? venta.descuento_tipo_id;
+      const descuentoValor = dto.descuento_valor ?? venta.descuento_valor;
+      const descuentoGlobalMonto = this.calcularDescuentoMonto(subtotalFinal, descuentoTipoId, descuentoValor);
+      const descuentoPromoMonto = parseFloat((venta.descuento_promocion ?? 0).toFixed(2));
+      const descuentoMonto = parseFloat((descuentoGlobalMonto + descuentoPromoMonto).toFixed(2));
+      const total = Math.max(0, parseFloat((subtotalFinal - descuentoMonto).toFixed(2)));
+
+      camposActualizables.subtotal = subtotalFinal;
+      camposActualizables.descuento_tipo_id = descuentoTipoId;
+      camposActualizables.descuento_valor = descuentoValor;
+      camposActualizables.descuento_monto = descuentoMonto;
+      camposActualizables.total = total;
+
+      if (dto.user_actua_id !== undefined) {
+        camposActualizables.user_actua_id = dto.user_actua_id;
+      }
+
+      await manager.update(VentaProducto, id, camposActualizables);
+
+      return this.findOne(id);
+    });
+  }
+
+  /** Elimina una venta de producto y devuelve el stock a los productos */
+  async remove(id: number) {
+    const venta = await this.ventaRepo.findOne({
+      where: { id },
+      relations: ['detalles', 'detalles.producto']
+    });
+    if (!venta) throw new NotFoundException(`Venta de producto ${id} no encontrada`);
+
+    return this.dataSource.transaction(async (manager) => {
+      // Devolver stock a los productos
+      for (const detalle of venta.detalles) {
+        await manager
+          .createQueryBuilder()
+          .update(Producto)
+          .set({ stock_actual: () => `stock_actual + ${detalle.cantidad}` })
+          .where('id = :id', { id: detalle.producto_id })
+          .execute();
+      }
+
+      // Eliminar promociones aplicadas
+      await manager.delete(VentaPromocionAplicada, {
+        tipo_venta_id: TIPO_VENTA_PRODUCTO,
+        venta_id: id
+      });
+
+      // Eliminar detalles
+      await manager.delete(VentaProductoDetalle, { venta_id: id });
+
+      // Eliminar venta
+      await manager.delete(VentaProducto, id);
+
+      return { message: 'Venta de producto eliminada exitosamente', id };
     });
   }
 

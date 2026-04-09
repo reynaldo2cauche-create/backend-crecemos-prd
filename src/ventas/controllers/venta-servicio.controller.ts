@@ -1,7 +1,8 @@
-import { Controller, Get, Post, Body, Param, Query, Patch, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Query, Patch, Delete, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { VentaServicioService } from '../services/venta-servicio.service';
 import { CreateVentaServicioDto } from '../dto/create-venta-servicio.dto';
+import { UpdateVentaServicioDto } from '../dto/update-venta-servicio.dto';
 import { Auditable } from '../../auditoria/decorators/auditable.decorator';
 
 @Controller('backend_api/ventas/servicios')
@@ -42,5 +43,17 @@ export class VentaServicioController {
   @Auditable({ modulo: 'VENTAS', accion: 'REGISTRAR_SESION_USADA' })
   registrarSesionUsada(@Param('detalleId') id: string) {
     return this.service.registrarSesionUsada(+id);
+  }
+
+  @Patch(':id')
+  @Auditable({ modulo: 'VENTAS', accion: 'ACTUALIZAR_VENTA_SERVICIO' })
+  update(@Param('id') id: string, @Body() dto: UpdateVentaServicioDto) {
+    return this.service.update(+id, dto);
+  }
+
+  @Delete(':id')
+  @Auditable({ modulo: 'VENTAS', accion: 'ELIMINAR_VENTA_SERVICIO' })
+  remove(@Param('id') id: string) {
+    return this.service.remove(+id);
   }
 }

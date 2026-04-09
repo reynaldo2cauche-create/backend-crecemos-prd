@@ -13,6 +13,7 @@ import { CrearCitaDto } from './dto/crear-cita.dto';
 import { HistorialCitasService } from './historial-citas.service';
 import { NotificacionesService } from '../notificaciones/notificaciones.service';
 import { VentaServicioDetalle } from '../ventas/entities/venta-servicio-detalle.entity';
+import { ResponsablePaciente } from '../pacientes/entities/responsable-paciente.entity';
 
 
 @Injectable()
@@ -36,6 +37,8 @@ export class CitasService {
     private tipoRepo: Repository<TipoCita>,
     @InjectRepository(VentaServicioDetalle)
     private ventaDetalleRepo: Repository<VentaServicioDetalle>,
+    @InjectRepository(ResponsablePaciente)
+    private responsablePacienteRepo: Repository<ResponsablePaciente>,
     @Inject(forwardRef(() => HistorialCitasService))
     private historialService: HistorialCitasService,
     @Inject(forwardRef(() => NotificacionesService))
@@ -562,6 +565,34 @@ async listar(filtros: any = {}): Promise<any[]> {
     }
 
     console.log(`✅ Cita encontrada. Paciente: ${cita.paciente?.nombres || 'N/A'}`);
+
+    // 🆕 Consultar responsables MANUALMENTE desde la tabla responsable_paciente
+    if (cita.paciente) {
+      const responsables = await this.responsablePacienteRepo
+        .createQueryBuilder('rp')
+        .leftJoinAndSelect('rp.responsable', 'responsable')
+        .where('rp.paciente_id = :pacienteId', { pacienteId: cita.paciente.id })
+        .andWhere('rp.activo = :activo', { activo: true })
+        .getMany();
+
+      // Agregar responsables al objeto paciente
+      cita.paciente.responsables = responsables.map(rp => ({
+        id: rp.id,
+        nombres: rp.responsable?.nombres || '',
+        apellido_paterno: rp.responsable?.apellido_paterno || '',
+        apellido_materno: rp.responsable?.apellido_materno || '',
+        numero_documento: rp.responsable?.numero_documento || '',
+        telefono: rp.responsable?.telefono || '',
+        email: rp.responsable?.email || '',
+        activo: rp.activo,
+        orden: rp.orden
+      })) as any;
+
+      console.log(`🔍 DEBUG RESPONSABLES EN BACKEND:`, {
+        cantidad: responsables.length,
+        responsables: cita.paciente.responsables
+      });
+    }
 
     // Verificar si es reunión clínica (soportar registros antiguos y nuevos)
     let reunion = await this.reunionRepo.findOne({
