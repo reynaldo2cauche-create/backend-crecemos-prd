@@ -1782,4 +1782,61 @@ async obtenerResumenTerapiasPorPaciente(pacienteId: number) {
   }
 }
 
+
+async obtenerInfoVentaDeCita(citaId: number): Promise<any> {
+  // 1. Obtener la cita actual para saber su venta_servicio_detalle_id y paciente_id
+  const cita = await this.citaRepo.findOne({
+    where: { id: citaId, flg_activo: 1 }
+  });
+
+  if (!cita || !cita.venta_servicio_detalle_id) return null;
+
+  // 2. Reutilizar obtenerListadoCitasPorPaciente que ya tienes
+  const listado = await this.obtenerListadoCitasPorPaciente(cita.paciente_id);
+
+  // 3. Buscar el paquete que corresponde a esta cita
+  let citasDelPaquete = null;
+  for (const servicio of listado.servicios) {
+    const paquetes = Object.values(servicio.paquetes) as any[];
+    const paqueteEncontrado = paquetes.find(
+      p => String(p.paquete_id) === String(cita.venta_servicio_detalle_id)
+    );
+    if (paqueteEncontrado) {
+      citasDelPaquete = paqueteEncontrado.citas;
+      break;
+    }
+  }
+
+  if (!citasDelPaquete || citasDelPaquete.length === 0) return null;
+
+  // 4. Ordenar por fecha y hora ASC — la última en el orden es la última sesión
+  const citasOrdenadas = [...citasDelPaquete].sort((a, b) => {
+    const fechaA = new Date(`${a.fecha}T${a.hora}`);
+    const fechaB = new Date(`${b.fecha}T${b.hora}`);
+    return fechaA.getTime() - fechaB.getTime();
+  });
+
+  const ultimaCita = citasOrdenadas[citasOrdenadas.length - 1];
+  const penultimaCita = citasOrdenadas.length >= 2
+    ? citasOrdenadas[citasOrdenadas.length - 2]
+    : null;
+
+  const esUltimaCita = ultimaCita?.id === citaId;
+  const esPenultimaCita = penultimaCita?.id === citaId;
+
+  // 5. Obtener sesiones_totales de la venta
+  const venta = await this.ventaDetalleRepo.findOne({
+    where: { id: cita.venta_servicio_detalle_id }
+  });
+
+  return {
+    sesiones_totales: venta?.sesiones_totales || citasDelPaquete.length,
+    total_citas_agendadas: citasDelPaquete.length,
+    es_ultima_cita: esUltimaCita,
+    es_penultima_cita: esPenultimaCita,
+    id_ultima_cita: ultimaCita?.id,
+  };
+}
+
+
 }

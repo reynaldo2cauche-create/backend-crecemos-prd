@@ -54,6 +54,11 @@ async obtenerEstadisticasSesiones(@Query() query: any) {
   );
 }
 
+
+@Get(':id/info-venta')
+async obtenerInfoVenta(@Param('id') id: string) {
+  return this.citasService.obtenerInfoVentaDeCita(+id);
+}
   // 🛒 OBTENER VENTAS DISPONIBLES DEL PACIENTE
   @Get('ventas-disponibles/:paciente_id')
   async obtenerVentasDisponibles(
