@@ -108,7 +108,7 @@ export class VentaProductoService {
       const detallesCalculados = dto.detalles.map((d) => this.calcularDetalle(d));
       const subtotal = detallesCalculados.reduce((s, d) => s + d.subtotal, 0);
       const descuentoGlobalMonto = this.calcularDescuentoMonto(subtotal, dto.descuento_tipo_id, dto.descuento_valor);
-      const descuentoPromoMonto = parseFloat((dto.descuento_promocion ?? 0).toFixed(2));
+      const descuentoPromoMonto = parseFloat((Number(dto.descuento_promocion ?? 0)).toFixed(2));
       const descuentoMonto = parseFloat((descuentoGlobalMonto + descuentoPromoMonto).toFixed(2));
       const total = Math.max(0, parseFloat((subtotal - descuentoMonto).toFixed(2)));
 
@@ -242,6 +242,11 @@ export class VentaProductoService {
       const camposActualizables: Partial<VentaProducto> = {};
 
       if (dto.fecha_venta !== undefined) camposActualizables.fecha_venta = dto.fecha_venta;
+      if (dto.tipo_pagador_id !== undefined) camposActualizables.tipo_comprador_id = dto.tipo_pagador_id;
+      if (dto.paciente_id !== undefined) camposActualizables.paciente_id = dto.paciente_id;
+      if (dto.responsable_id !== undefined) camposActualizables.responsable_id = dto.responsable_id;
+      if (dto.comprador_externo_id !== undefined) camposActualizables.comprador_externo_id = dto.comprador_externo_id;
+      if (dto.tipo_comprobante_id !== undefined) camposActualizables.tipo_comprobante_id = dto.tipo_comprobante_id;
       if (dto.nota !== undefined) camposActualizables.nota = dto.nota;
       if (dto.observaciones !== undefined) camposActualizables.observaciones = dto.observaciones;
       if (dto.modalidad_pago_id !== undefined) camposActualizables.modalidad_pago_id = dto.modalidad_pago_id;
@@ -250,7 +255,7 @@ export class VentaProductoService {
       const descuentoTipoId = dto.descuento_tipo_id ?? venta.descuento_tipo_id;
       const descuentoValor = dto.descuento_valor ?? venta.descuento_valor;
       const descuentoGlobalMonto = this.calcularDescuentoMonto(subtotalFinal, descuentoTipoId, descuentoValor);
-      const descuentoPromoMonto = parseFloat((venta.descuento_promocion ?? 0).toFixed(2));
+      const descuentoPromoMonto = parseFloat((Number(venta.descuento_promocion ?? 0)).toFixed(2));
       const descuentoMonto = parseFloat((descuentoGlobalMonto + descuentoPromoMonto).toFixed(2));
       const total = Math.max(0, parseFloat((subtotalFinal - descuentoMonto).toFixed(2)));
 

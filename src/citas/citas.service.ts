@@ -127,6 +127,7 @@ export class CitasService {
     const tipoCita = await this.determinarTipoCita(dto.motivo_id);
     console.log(`🔍 Creando cita tipo: ${tipoCita}`);
 
+
     if (tipoCita === 'NORMAL') {
       return this.crearCitaNormal(dto);
     } else if (tipoCita === 'REUNION_CLINICA') {
@@ -1672,8 +1673,8 @@ async obtenerListadoCitasPorPaciente(pacienteId: number) {
       ORDER BY s.nombre ASC,
                vs.fecha_venta DESC,
                COALESCE(vsd.id, 0) DESC,
-               c.fecha DESC,
-               c.hora_inicio DESC
+               c.fecha ASC,
+               c.hora_inicio ASC
     `;
 
     const resultados = await this.citaRepo.query(query, [pacienteId]);

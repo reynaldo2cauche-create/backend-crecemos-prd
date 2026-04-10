@@ -9,6 +9,7 @@ import { VentaPromocionAplicada } from '../../promociones/entities/venta-promoci
 import { ServicioTarifa } from '../../inventario/entities/servicio-tarifa.entity';
 import { ServicioPaquetePrecio } from '../../inventario/entities/servicio-paquete-precio.entity';
 import { DocumentoTarifa } from '../../inventario/entities/documento-tarifa.entity';
+import { Paquete } from 'src/catalogos/paquete.entity';
 
 const TIPO_VENTA_SERVICIO = 2;
 
@@ -152,9 +153,14 @@ export class VentaServicioService {
                 where: { servicio_tarifa_id: d.servicio_tarifa_id, paquete_id: d.paquete_id, flg_activo: 1 },
               });
               if (config) {
-                const sesiones = d.sesiones_totales;
+                // Buscar el paquete para obtener sus sesiones base
+                const paquete = await manager.findOne(Paquete, {  // ← ajusta el nombre de tu entidad
+                  where: { id: d.paquete_id },
+                });
+                const sesionesPaquete = paquete?.cantidadSesiones;
+                
                 if (config.tipo_calculo === 'precio_total') {
-                  precioUnitario = parseFloat(String(config.valor)) / sesiones;
+                  precioUnitario = parseFloat(String(config.valor)) / sesionesPaquete;  // ← divide por sesiones del paquete
                 } else if (config.tipo_calculo === 'descuento_porcentaje') {
                   precioUnitario = precioUnitario * (1 - parseFloat(String(config.valor)) / 100);
                 }
@@ -202,7 +208,7 @@ export class VentaServicioService {
 
       const subtotal = detallesCalculados.reduce((s, d) => s + d.subtotal, 0);
       const descuentoGlobalMonto = this.calcularDescuentoMonto(subtotal, dto.descuento_tipo_id, dto.descuento_valor);
-      const descuentoPromoMonto  = parseFloat((dto.descuento_promocion ?? 0).toFixed(2));
+      const descuentoPromoMonto  = parseFloat((Number(dto.descuento_promocion ?? 0)).toFixed(2));
       const descuentoMonto       = parseFloat((descuentoGlobalMonto + descuentoPromoMonto).toFixed(2));
       const total                = Math.max(0, parseFloat((subtotal - descuentoMonto).toFixed(2)));
 
@@ -330,18 +336,23 @@ export class VentaServicioService {
               precioUnitario = parseFloat(String(tarifa.precio));
 
               if (d.tipo_venta_id === 2 && d.paquete_id) {
-                const config = await manager.findOne(ServicioPaquetePrecio, {
-                  where: { servicio_tarifa_id: d.servicio_tarifa_id, paquete_id: d.paquete_id, flg_activo: 1 },
+              const config = await manager.findOne(ServicioPaquetePrecio, {
+                where: { servicio_tarifa_id: d.servicio_tarifa_id, paquete_id: d.paquete_id, flg_activo: 1 },
+              });
+              if (config) {
+                // Buscar el paquete para obtener sus sesiones base
+                const paquete = await manager.findOne(Paquete, {  // ← ajusta el nombre de tu entidad
+                  where: { id: d.paquete_id },
                 });
-                if (config) {
-                  const sesiones = d.sesiones_totales;
-                  if (config.tipo_calculo === 'precio_total') {
-                    precioUnitario = parseFloat(String(config.valor)) / sesiones;
-                  } else if (config.tipo_calculo === 'descuento_porcentaje') {
-                    precioUnitario = precioUnitario * (1 - parseFloat(String(config.valor)) / 100);
-                  }
+                const sesionesPaquete = paquete?.cantidadSesiones ;
+                
+                if (config.tipo_calculo === 'precio_total') {
+                  precioUnitario = parseFloat(String(config.valor)) / sesionesPaquete;  // ← divide por sesiones del paquete
+                } else if (config.tipo_calculo === 'descuento_porcentaje') {
+                  precioUnitario = precioUnitario * (1 - parseFloat(String(config.valor)) / 100);
                 }
               }
+            }
 
               if (!descripcionLinea && tarifa.motivo_cita && tarifa.servicio) {
                 const sesionLabel = d.sesiones_totales === 1 ? 'Sesión' : 'Sesiones';
@@ -407,6 +418,12 @@ export class VentaServicioService {
       // Actualizar campos de la venta
       const camposActualizables: Partial<VentaServicio> = {};
 
+      if (dto.tipo_pagador_id !== undefined)       camposActualizables.tipo_pagador_id       = dto.tipo_pagador_id;
+    if (dto.paciente_id !== undefined)           camposActualizables.paciente_id           = dto.paciente_id;
+    if (dto.responsable_id !== undefined)        camposActualizables.responsable_id        = dto.responsable_id;
+    if (dto.comprador_externo_id !== undefined)  camposActualizables.comprador_externo_id  = dto.comprador_externo_id;
+    if (dto.tipo_comprobante_id !== undefined)   camposActualizables.tipo_comprobante_id   = dto.tipo_comprobante_id;
+
       if (dto.fecha_venta !== undefined) camposActualizables.fecha_venta = dto.fecha_venta;
       if (dto.nota !== undefined) camposActualizables.nota = dto.nota;
       if (dto.observaciones !== undefined) camposActualizables.observaciones = dto.observaciones;
@@ -416,9 +433,9 @@ export class VentaServicioService {
       const descuentoTipoId = dto.descuento_tipo_id ?? venta.descuento_tipo_id;
       const descuentoValor = dto.descuento_valor ?? venta.descuento_valor;
       const descuentoGlobalMonto = this.calcularDescuentoMonto(subtotalFinal, descuentoTipoId, descuentoValor);
-      const descuentoPromoMonto = parseFloat((venta.descuento_promocion ?? 0).toFixed(2));
+      const descuentoPromoMonto = parseFloat(Number(venta.descuento_promocion ?? 0).toFixed(2)); 
       const descuentoMonto = parseFloat((descuentoGlobalMonto + descuentoPromoMonto).toFixed(2));
-      const total = Math.max(0, parseFloat((subtotalFinal - descuentoMonto).toFixed(2)));
+      const total = Math.max(0, parseFloat((subtotalFinal - descuentoMonto).toFixed(2))); 
 
       camposActualizables.subtotal = subtotalFinal;
       camposActualizables.descuento_tipo_id = descuentoTipoId;

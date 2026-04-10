@@ -185,6 +185,12 @@ import { LibroReclamacionesDocumento } from './libro-reclamaciones/entities/docu
 import { LibroReclamacionesSeguimiento } from './libro-reclamaciones/entities/seguimiento.entity';
 import { LibroReclamacionesConfig } from './libro-reclamaciones/entities/config.entity';
 
+// ── Campañas ──────────────────────────────────────────────────────────────────
+import { CampanasModule } from './campanas/campanas.module';
+import { Campana } from './campanas/entities/campana.entity';
+import { CampanaEstado } from './campanas/entities/campana-estado.entity';
+import { CampanaSeccion } from './campanas/entities/campana-seccion.entity';
+
 
 @Module({
   imports: [
@@ -382,6 +388,9 @@ import { LibroReclamacionesConfig } from './libro-reclamaciones/entities/config.
         LibroReclamacionesDocumento,
         LibroReclamacionesSeguimiento,
         LibroReclamacionesConfig,
+        Campana,
+        CampanaEstado,
+        CampanaSeccion,
         EntrevistaAdultos,
         SolicitudInforme,
         ModalidadPago,
@@ -430,6 +439,7 @@ import { LibroReclamacionesConfig } from './libro-reclamaciones/entities/config.
     VentasModule,
     PromocionesModule,
     LibroReclamacionesModule,
+    CampanasModule,
   ],
   controllers: [AppController],
   providers: [
