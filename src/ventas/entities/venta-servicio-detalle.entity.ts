@@ -6,6 +6,8 @@ import { Paciente } from '../../pacientes/paciente.entity';
 import { Servicios } from '../../catalogos/servicios.entity';
 import { Paquete } from '../../catalogos/paquete.entity';
 import { ServicioTarifa } from '../../inventario/entities/servicio-tarifa.entity';
+import { PaqueteCombo } from '../../inventario/entities/paquete-combo.entity';
+import { DocumentoTarifa } from '../../inventario/entities/documento-tarifa.entity';
 
 @Entity('venta_servicio_detalle')
 export class VentaServicioDetalle {
@@ -42,6 +44,10 @@ export class VentaServicioDetalle {
   @Column({ name: 'documento_tarifa_id', nullable: true, comment: 'Documento vendible (solo si tipo_item_venta=2, NULL si tipo_item_venta=1)' })
   documentoTarifaId: number;
 
+  @ManyToOne(() => DocumentoTarifa, { nullable: true })
+  @JoinColumn({ name: 'documento_tarifa_id' })
+  documento_tarifa: DocumentoTarifa;
+
   @Column({ name: 'descripcion_linea', length: 255, nullable: true, comment: 'Descripción legible para la boleta: "3 Sesiones de Evaluación", "1 Informe Verbal", "Informe Físico"' })
   descripcionLinea: string;
 
@@ -58,6 +64,13 @@ export class VentaServicioDetalle {
   @ManyToOne(() => Paquete, { nullable: true, onDelete: 'RESTRICT' })
   @JoinColumn({ name: 'paquete_id' })
   paquete: Paquete;
+
+  @Column({ name: 'paquete_combo_id', nullable: true, comment: 'Solo si tipo_venta_id = 3' })
+  paquete_combo_id: number;
+
+  @ManyToOne(() => PaqueteCombo, { nullable: true, onDelete: 'RESTRICT' })
+  @JoinColumn({ name: 'paquete_combo_id' })
+  paqueteCombo: PaqueteCombo;
 
   @Column({ type: 'int' })
   sesiones_totales: number;

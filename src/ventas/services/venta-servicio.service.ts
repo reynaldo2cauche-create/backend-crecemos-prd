@@ -10,6 +10,8 @@ import { ServicioTarifa } from '../../inventario/entities/servicio-tarifa.entity
 import { ServicioPaquetePrecio } from '../../inventario/entities/servicio-paquete-precio.entity';
 import { DocumentoTarifa } from '../../inventario/entities/documento-tarifa.entity';
 import { Paquete } from 'src/catalogos/paquete.entity';
+import { PaqueteCombo } from '../../inventario/entities/paquete-combo.entity';
+import { PaqueteComboItem } from '../../inventario/entities/paquete-combo-item.entity';
 
 const TIPO_VENTA_SERVICIO = 2;
 
@@ -41,6 +43,8 @@ export class VentaServicioService {
       .leftJoinAndSelect('servicio_tarifa.motivo_cita', 'motivo_cita')   // motivo de cita
       .leftJoinAndSelect('detalles.tipo_venta', 'tipo_venta')
       .leftJoinAndSelect('detalles.paquete', 'paquete')
+      .leftJoinAndSelect('detalles.paqueteCombo', 'paqueteCombo')        // nombre del paquete combo
+      .leftJoinAndSelect('detalles.documento_tarifa', 'documento_tarifa')  // nombre del documento
       .leftJoinAndSelect('detalles.descuento_tipo', 'detalle_descuento_tipo')
       .leftJoinAndSelect('detalles.paciente', 'detalle_paciente')
       .leftJoinAndSelect('v.tipo_comprobante', 'tipo_comprobante')
@@ -90,6 +94,8 @@ export class VentaServicioService {
         'detalles.servicio_tarifa.servicio',       // nombre del servicio
         'detalles.servicio_tarifa.motivo_cita',    // motivo de cita
         'detalles.tipo_venta', 'detalles.paquete',
+        'detalles.paqueteCombo',                   // nombre del paquete combo
+        'detalles.documento_tarifa',               // nombre del documento
         'detalles.descuento_tipo', 'detalles.paciente',
         'tipo_comprobante',
       ],
@@ -120,13 +126,64 @@ export class VentaServicioService {
 
   async create(dto: CreateVentaServicioDto) {
     return this.dataSource.transaction(async (manager) => {
+      // ✨ EXPANDIR PAQUETES COMBO: Si un detalle tiene tipo_venta_id=3 y paquete_combo_id,
+      // lo expandimos en múltiples líneas (una por cada ítem del combo)
+      let detallesExpandidos: DetalleVentaServicioDto[] = [];
+
+      for (const d of dto.detalles) {
+        if (d.tipo_venta_id === 3 && d.paquete_combo_id) {
+          // Buscar el combo y sus ítems
+          const combo = await manager.findOne(PaqueteCombo, {
+            where: { id: d.paquete_combo_id, flgActivo: 1 },
+            relations: ['items', 'items.servicioTarifa', 'items.documentoTarifa'],
+          });
+
+          if (!combo) {
+            throw new BadRequestException(`Paquete combo ${d.paquete_combo_id} no encontrado o inactivo`);
+          }
+
+          if (!combo.items || combo.items.length === 0) {
+            throw new BadRequestException(`Paquete combo ${d.paquete_combo_id} no tiene ítems configurados`);
+          }
+
+          // Por cada ítem del combo, crear un detalle
+          for (const item of combo.items) {
+            const tipoItem = item.servicioTarifaId ? 1 : 2; // 1=Servicio, 2=Documento
+
+            detallesExpandidos.push({
+              paciente_id: d.paciente_id,
+              tipo_item_venta: tipoItem,
+              servicio_tarifa_id: item.servicioTarifaId,
+              documento_tarifa_id: item.documentoTarifaId,
+              descripcion_linea: item.descripcionLinea || `${combo.nombre} - ${tipoItem === 1 ? 'Servicio' : 'Documento'}`,
+              tipo_venta_id: 3, // Paquete combo
+              paquete_combo_id: combo.id,
+              sesiones_totales: item.cantidad,
+              descuento_tipo_id: null,
+              descuento_valor: 0,
+              precio_unitario: 0, // El precio del combo se asigna al detalle principal, los ítems expandidos tienen precio_unitario=0
+            });
+          }
+        } else {
+          // Detalle normal (tipo_venta_id=1 o 2)
+          detallesExpandidos.push(d);
+        }
+      }
+
       // Enriquecer cada detalle con precio_unitario desde servicio_tarifa
       const detallesEnriquecidos = await Promise.all(
-        dto.detalles.map(async (d) => {
+        detallesExpandidos.map(async (d) => {
           const tipoItem = d.tipo_item_venta ?? 1; // Default: Servicio con cita
           let precioUnitario = 0;
           let motivoCitaId = null;
           let descripcionLinea = d.descripcion_linea;
+
+          // Si es paquete combo (tipo_venta_id=3), precio_unitario = 0
+          // El precio total está en paquete_combo.precioTotal
+          const esPaqueteCombo = d.tipo_venta_id === 3;
+
+          // Si viene paquete_combo_id Y precio_unitario del frontend, respetar ese precio
+          const tieneComboConPrecio = d.paquete_combo_id && d.precio_unitario !== undefined && d.precio_unitario !== null;
 
           if (tipoItem === 1) {
             // TIPO 1: Servicio con cita
@@ -145,8 +202,15 @@ export class VentaServicioService {
             // Copiar motivo_cita_id desde servicio_tarifa (DESNORMALIZACIÓN)
             motivoCitaId = tarifa.motivo_cita_id;
 
-            // Precio: si es paquete, buscar configuración en servicio_paquete_precio
-            precioUnitario = parseFloat(String(tarifa.precio));
+            // Precio: Si tiene paquete_combo_id con precio del frontend, usar ese precio
+            if (tieneComboConPrecio) {
+              precioUnitario = parseFloat(String(d.precio_unitario));
+            } else if (esPaqueteCombo) {
+              precioUnitario = 0;
+            } else {
+              // Precio: si es paquete, buscar configuración en servicio_paquete_precio
+              precioUnitario = parseFloat(String(tarifa.precio));
+            }
 
             if (d.tipo_venta_id === 2 && d.paquete_id) {
               const config = await manager.findOne(ServicioPaquetePrecio, {
@@ -186,7 +250,14 @@ export class VentaServicioService {
               throw new BadRequestException(`DocumentoTarifa ${d.documento_tarifa_id} no encontrado o inactivo`);
             }
 
-            precioUnitario = parseFloat(String(documento.precio));
+            // Precio: Si tiene paquete_combo_id con precio del frontend, usar ese precio
+            if (tieneComboConPrecio) {
+              precioUnitario = parseFloat(String(d.precio_unitario));
+            } else if (esPaqueteCombo) {
+              precioUnitario = 0;
+            } else {
+              precioUnitario = parseFloat(String(documento.precio));
+            }
 
             // Para documentos, descripcion_linea es el nombre del documento
             if (!descripcionLinea) {
@@ -246,6 +317,7 @@ export class VentaServicioService {
           descripcionLinea:    d.descripcion_linea ?? null,
           tipo_venta_id:       d.tipo_venta_id,
           paquete_id:          d.paquete_id,
+          paquete_combo_id:    d.paquete_combo_id,
           sesiones_totales:    d.sesiones_totales,
           sesiones_usadas:     d.tipo_item_venta === 2 ? 1 : 0, // Documentos se entregan inmediatamente
           precio_unitario:     d.precio_unitario,
@@ -265,6 +337,7 @@ export class VentaServicioService {
           'detalles.servicio_tarifa',
           'detalles.servicio_tarifa.servicio',
           'detalles.servicio_tarifa.motivo_cita',
+          
           'detalles.tipo_venta', 'detalles.paquete',
           'detalles.descuento_tipo', 'detalles.paciente',
           'tipo_comprobante',
@@ -403,6 +476,7 @@ export class VentaServicioService {
             descripcionLinea:    d.descripcion_linea ?? null,
             tipo_venta_id:       d.tipo_venta_id,
             paquete_id:          d.paquete_id,
+            paquete_combo_id:    d.paquete_combo_id,
             sesiones_totales:    d.sesiones_totales,
             sesiones_usadas:     d.tipo_item_venta === 2 ? 1 : 0,
             precio_unitario:     d.precio_unitario,

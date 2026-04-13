@@ -25,6 +25,10 @@ import { ServicioPaquetePrecioController } from './controllers/servicio-paquete-
 import { DocumentoTarifa } from './entities/documento-tarifa.entity';
 import { DocumentoTarifaService } from './services/documento-tarifa.service';
 import { DocumentoTarifaController } from './controllers/documento-tarifa.controller';
+import { PaqueteCombo } from './entities/paquete-combo.entity';
+import { PaqueteComboItem } from './entities/paquete-combo-item.entity';
+import { PaqueteComboService } from './services/paquete-combo.service';
+import { PaqueteComboController } from './controllers/paquete-combo.controller';
 import { TipoArchivo } from '../historia-clinica/entities/tipo-archivo.entity';
 import { Paquete } from '../catalogos/paquete.entity';
 
@@ -39,6 +43,8 @@ import { Paquete } from '../catalogos/paquete.entity';
       ServicioTarifa,
       ServicioPaquetePrecio,
       DocumentoTarifa,
+      PaqueteCombo,
+      PaqueteComboItem,
       TipoArchivo,
       Paquete,
     ]),
@@ -51,6 +57,7 @@ import { Paquete } from '../catalogos/paquete.entity';
     ServicioTarifaService,
     ServicioPaquetePrecioService,
     DocumentoTarifaService,
+    PaqueteComboService,
   ],
   controllers: [
     CategoriaProductoController,
@@ -60,6 +67,7 @@ import { Paquete } from '../catalogos/paquete.entity';
     ServicioTarifaController,
     ServicioPaquetePrecioController,
     DocumentoTarifaController,
+    PaqueteComboController,
   ],
   exports: [ProductoService, DocumentoTarifaService],
 })

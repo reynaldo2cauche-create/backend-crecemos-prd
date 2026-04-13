@@ -51,20 +51,20 @@ async function bootstrap() {
   //   optionsSuccessStatus: 200, // <-- Esto es importante para algunos navegadores
   // });
 
-  app.useGlobalPipes(new ValidationPipe({
-    transform: true,
-    transformOptions: {
-      enableImplicitConversion: true,
-    },
+app.useGlobalPipes(new ValidationPipe({
     whitelist: true,
-    forbidNonWhitelisted: false,
+    transform: true,
     exceptionFactory: (errors) => {
-        const messages = errors.map(e =>
-          `${e.property}: ${Object.values(e.constraints || {}).join(', ')}`
-        );
-        console.error('❌ VALIDATION ERRORS:', messages);
-        return new BadRequestException(messages);
-      },
+      const flatten = (errs: any[], prefix = ''): string[] =>
+        errs.flatMap(e => {
+          const path = prefix ? `${prefix}.${e.property}` : e.property;
+          if (e.children?.length) return flatten(e.children, path);
+          return [`${path}: ${Object.values(e.constraints || {}).join(', ')}`];
+        });
+      const messages = flatten(errors);
+      console.error('❌ VALIDATION DETAIL:', JSON.stringify(messages, null, 2));
+      return new BadRequestException(messages);
+    },
   }));
 
  

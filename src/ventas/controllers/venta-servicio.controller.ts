@@ -36,7 +36,9 @@ export class VentaServicioController {
   @Post()
   @Auditable({ modulo: 'VENTAS', accion: 'REGISTRAR_VENTA_SERVICIO' })
   create(@Body() dto: CreateVentaServicioDto) {
+    console.log('📦 BODY RECIBIDO:', JSON.stringify(dto, null, 2));
     return this.service.create(dto);
+    
   }
 
   @Patch('detalle/:detalleId/sesion-usada')

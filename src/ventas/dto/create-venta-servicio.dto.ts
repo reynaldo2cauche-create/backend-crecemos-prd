@@ -30,7 +30,7 @@ export class DetalleVentaServicioDto {
   @IsString()
   descripcion_linea?: string;
 
-  /** 1 = Sesión unitaria, 2 = Paquete */
+  /** 1 = Sesión unitaria, 2 = Paquete, 3 = Paquete combo */
   @IsNumber()
   @Type(() => Number)
   tipo_venta_id: number;
@@ -40,10 +40,19 @@ export class DetalleVentaServicioDto {
   @Type(() => Number)
   paquete_id?: number;
 
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  paquete_combo_id?: number;
+
   @IsNumber()
   @IsPositive()
   @Type(() => Number)
   sesiones_totales: number;
+
+@Type(() => Number)
+@IsNumber()
+precio_unitario: number;
 
   @IsOptional()
   @IsNumber()

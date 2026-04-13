@@ -156,6 +156,8 @@ import { VentaProductoDetalle } from './ventas/entities/venta-producto-detalle.e
 import { ServicioTarifa } from './inventario/entities/servicio-tarifa.entity';
 import { ServicioPaquetePrecio } from './inventario/entities/servicio-paquete-precio.entity';
 import { DocumentoTarifa } from './inventario/entities/documento-tarifa.entity';
+import { PaqueteCombo } from './inventario/entities/paquete-combo.entity';
+import { PaqueteComboItem } from './inventario/entities/paquete-combo-item.entity';
 import { TipoComprobante } from './ventas/entities/tipo-comprobante.entity';
 import { ResponsablePaciente } from './pacientes/entities/responsable-paciente.entity';
 import { Responsable } from './pacientes/entities/responsable.entity';
@@ -227,18 +229,18 @@ import { CampanaSeccion } from './campanas/entities/campana-seccion.entity';
       },
     }),
     TypeOrmModule.forRoot({
-      type: 'mysql',
-      host: 'localhost',
-      port: 3306,
-      username: 'crecemos',
-      password: 'DB_PASSWORD_REMOVED',
-      database: 'crecemos_website',
       // type: 'mysql',
       // host: 'localhost',
       // port: 3306,
-      // username: 'root',  // Asegúrate de poner el nombre de usuario correcto
-      // password: 'admin',  // Asegúrate de poner la contraseña correcta
+      // username: 'crecemos',
+      // password: 'DB_PASSWORD_REMOVED',
       // database: 'crecemos_website',
+      type: 'mysql',
+      host: 'localhost',
+      port: 3306,
+      username: 'root',  // Asegúrate de poner el nombre de usuario correcto
+      password: 'admin',  // Asegúrate de poner la contraseña correcta
+      database: 'crecemos_website',
       entities: [
         Postulacion,
         Paciente,
@@ -361,6 +363,8 @@ import { CampanaSeccion } from './campanas/entities/campana-seccion.entity';
         ServicioTarifa,
         ServicioPaquetePrecio,
         DocumentoTarifa,
+        PaqueteCombo,
+        PaqueteComboItem,
         // Ventas
         TipoVentaServicio,
         TipoPagador,
