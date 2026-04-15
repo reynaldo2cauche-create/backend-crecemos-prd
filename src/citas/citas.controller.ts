@@ -55,10 +55,7 @@ async obtenerEstadisticasSesiones(@Query() query: any) {
 }
 
 
-@Get(':id/info-venta')
-async obtenerInfoVenta(@Param('id') id: string) {
-  return this.citasService.obtenerInfoVentaDeCita(+id);
-}
+
   // 🛒 OBTENER VENTAS DISPONIBLES DEL PACIENTE
   @Get('ventas-disponibles/:paciente_id')
   async obtenerVentasDisponibles(
@@ -88,6 +85,13 @@ async obtenerInfoVenta(@Param('id') id: string) {
     return this.citasService.obtenerResumenTerapiasPorPaciente(+paciente_id);
   }
 
+
+
+  @Get(':id/info-venta')
+    async obtenerInfoVenta(@Param('id') id: string) {
+      return this.citasService.obtenerInfoVentaDeCita(+id);
+    }
+    
   // ✅ RUTAS CON PARÁMETROS AL FINAL
   @Get(':id/historial')
   async obtenerHistorial(@Param('id') id: string) {

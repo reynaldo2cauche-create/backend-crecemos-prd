@@ -98,6 +98,7 @@ export class VentaServicioService {
         'detalles.documento_tarifa',               // nombre del documento
         'detalles.descuento_tipo', 'detalles.paciente',
         'tipo_comprobante',
+        'modalidad_pago',                          // modalidad de pago
       ],
     });
     if (!v) throw new NotFoundException(`Venta de servicio ${id} no encontrada`);

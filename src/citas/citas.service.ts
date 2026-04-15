@@ -1562,174 +1562,305 @@ async obtenerEstadisticasSesiones(
  * BUSCA AUTOMÁTICAMENTE el paquete/sesión activa del paciente
  * Devuelve el primer paquete con sesiones disponibles (más reciente)
  */
-async obtenerPaqueteActivoPaciente(pacienteId: number, servicioId?: number, motivoCitaId?: number): Promise<any> {
-  try {
-    const query = `
-      SELECT
-        vsd.id,
-        vsd.venta_id,
-        st.servicio_id,
-        s.nombre as servicio_nombre,
-        st.motivo_cita_id,
-        mc.nombre as motivo_cita_nombre,
-        vsd.tipo_venta_id,
-        tvs.nombre as tipo_venta_nombre,
-        vsd.paquete_id,
-        p.nombre as paquete_nombre,
-        vsd.sesiones_totales,
-        vsd.sesiones_usadas,
-        (vsd.sesiones_totales - vsd.sesiones_usadas) as sesiones_disponibles,
-        vsd.precio_unitario,
-        vsd.subtotal,
-        vs.fecha_venta,
-        vs.codigo_comprobante,
-        tc.nombre as tipo_comprobante_nombre
-      FROM venta_servicio_detalle vsd
-      INNER JOIN venta_servicio vs ON vs.id = vsd.venta_id
-      INNER JOIN servicio_tarifa st ON st.id = vsd.servicio_tarifa_id
-      INNER JOIN servicios s ON s.id = st.servicio_id
-      INNER JOIN motivo_cita mc ON mc.id = st.motivo_cita_id
-      INNER JOIN tipo_venta_servicio tvs ON tvs.id = vsd.tipo_venta_id
-      INNER JOIN tipo_comprobante tc ON tc.id = vs.tipo_comprobante_id
-      LEFT JOIN paquetes p ON p.id = vsd.paquete_id
-      WHERE vsd.paciente_id = ?
-        AND vsd.sesiones_usadas < vsd.sesiones_totales
-        ${servicioId ? 'AND st.servicio_id = ?' : ''}
-        ${motivoCitaId ? 'AND st.motivo_cita_id = ?' : ''}
-      ORDER BY vs.fecha_venta DESC, vsd.id DESC
-    `;
+  async obtenerPaqueteActivoPaciente(pacienteId: number, servicioId?: number, motivoCitaId?: number): Promise<any> {
+    try {
+      const query = `
+        SELECT
+          vsd.id,
+          vsd.venta_id,
+          st.servicio_id,
+          s.nombre as servicio_nombre,
+          st.motivo_cita_id,
+          mc.nombre as motivo_cita_nombre,
+          vsd.tipo_venta_id,
+          tvs.nombre as tipo_venta_nombre,
+          vsd.paquete_id,
+          p.nombre as paquete_nombre,
+          vsd.sesiones_totales,
+          vsd.sesiones_usadas,
+          (vsd.sesiones_totales - vsd.sesiones_usadas) as sesiones_disponibles,
+          vsd.precio_unitario,
+          vsd.subtotal,
+          vs.fecha_venta,
+          vs.codigo_comprobante,
+          tc.nombre as tipo_comprobante_nombre
+        FROM venta_servicio_detalle vsd
+        INNER JOIN venta_servicio vs ON vs.id = vsd.venta_id
+        INNER JOIN servicio_tarifa st ON st.id = vsd.servicio_tarifa_id
+        INNER JOIN servicios s ON s.id = st.servicio_id
+        INNER JOIN motivo_cita mc ON mc.id = st.motivo_cita_id
+        INNER JOIN tipo_venta_servicio tvs ON tvs.id = vsd.tipo_venta_id
+        INNER JOIN tipo_comprobante tc ON tc.id = vs.tipo_comprobante_id
+        LEFT JOIN paquetes p ON p.id = vsd.paquete_id
+        WHERE vsd.paciente_id = ?
+          AND vsd.sesiones_usadas < vsd.sesiones_totales
+          ${servicioId ? 'AND st.servicio_id = ?' : ''}
+          ${motivoCitaId ? 'AND st.motivo_cita_id = ?' : ''}
+        ORDER BY vs.fecha_venta DESC, vsd.id DESC
+      `;
 
-    const params = [pacienteId];
-    if (servicioId) params.push(servicioId);
-    if (motivoCitaId) params.push(motivoCitaId);
+      const params = [pacienteId];
+      if (servicioId) params.push(servicioId);
+      if (motivoCitaId) params.push(motivoCitaId);
 
-    const sesiones = await this.citaRepo.query(query, params);
+      const sesiones = await this.citaRepo.query(query, params);
 
-    console.log(`📦 Sesiones disponibles para paciente ${pacienteId}:`, sesiones.length);
+      console.log(`📦 Sesiones disponibles para paciente ${pacienteId}:`, sesiones.length);
 
-    return sesiones.map(s => ({
-      id: s.id,
-      venta_id: s.venta_id,
-      servicio_id: s.servicio_id,
-      servicio_nombre: s.servicio_nombre,
-      motivo_cita_id: s.motivo_cita_id,
-      motivo_cita_nombre: s.motivo_cita_nombre,
-      tipo_venta_id: s.tipo_venta_id,
-      tipo_venta_nombre: s.tipo_venta_nombre,
-      paquete_id: s.paquete_id,
-      paquete_nombre: s.paquete_nombre,
-      sesiones_totales: parseInt(s.sesiones_totales),
-      sesiones_usadas: parseInt(s.sesiones_usadas),
-      sesiones_disponibles: parseInt(s.sesiones_disponibles),
-      precio_unitario: parseFloat(s.precio_unitario),
-      subtotal: parseFloat(s.subtotal),
-      fecha_venta: s.fecha_venta,
-      codigo_comprobante: s.codigo_comprobante,
-      tipo_comprobante_nombre: s.tipo_comprobante_nombre,
-      // Descripción para mostrar en el modal
-      descripcion: `${s.servicio_nombre} - ${s.motivo_cita_nombre}${s.paquete_nombre ? ` (${s.paquete_nombre})` : ''} | ${s.sesiones_disponibles}/${s.sesiones_totales} disponibles | ${s.codigo_comprobante || 'Sin código'}`
-    }));
-  } catch (error) {
-    console.error('❌ Error al obtener sesiones disponibles:', error);
-    throw error;
+      return sesiones.map(s => ({
+        id: s.id,
+        venta_id: s.venta_id,
+        servicio_id: s.servicio_id,
+        servicio_nombre: s.servicio_nombre,
+        motivo_cita_id: s.motivo_cita_id,
+        motivo_cita_nombre: s.motivo_cita_nombre,
+        tipo_venta_id: s.tipo_venta_id,
+        tipo_venta_nombre: s.tipo_venta_nombre,
+        paquete_id: s.paquete_id,
+        paquete_nombre: s.paquete_nombre,
+        sesiones_totales: parseInt(s.sesiones_totales),
+        sesiones_usadas: parseInt(s.sesiones_usadas),
+        sesiones_disponibles: parseInt(s.sesiones_disponibles),
+        precio_unitario: parseFloat(s.precio_unitario),
+        subtotal: parseFloat(s.subtotal),
+        fecha_venta: s.fecha_venta,
+        codigo_comprobante: s.codigo_comprobante,
+        tipo_comprobante_nombre: s.tipo_comprobante_nombre,
+        // Descripción para mostrar en el modal
+        descripcion: `${s.servicio_nombre} - ${s.motivo_cita_nombre}${s.paquete_nombre ? ` (${s.paquete_nombre})` : ''} | ${s.sesiones_disponibles}/${s.sesiones_totales} disponibles | ${s.codigo_comprobante || 'Sin código'}`
+      }));
+    } catch (error) {
+      console.error('❌ Error al obtener sesiones disponibles:', error);
+      throw error;
+    }
   }
-}
 
-// 📋 OBTENER LISTADO DETALLADO DE CITAS POR PACIENTE
-async obtenerListadoCitasPorPaciente(pacienteId: number) {
-  try {
-    console.log(`📋 Obteniendo listado detallado de citas para paciente ${pacienteId}`);
+  async obtenerListadoCitasPorPaciente(pacienteId: number) {
+    try {
+      console.log(`📋 Obteniendo listado detallado de citas para paciente ${pacienteId}`);
 
-    const query = `
-      SELECT
-        c.id,
-        c.fecha,
-        c.hora_inicio,
-        c.servicio_id,
-        s.nombre as servicio_nombre,
-        c.venta_servicio_detalle_id,
-        COALESCE(vsd.descripcion_linea, 'Sesión individual') as paquete_nombre,
-        CONCAT(t.nombres, ' ', t.apellidos) as especialista,
-        mc.nombre as tipo_servicio,
-        COALESCE(vsd.subtotal, 0) as monto,
-        vs.fecha_venta as fecha_pago,
-        mp.nombre as modalidad_pago,
-        vs.codigo_comprobante,
-        CASE
-          WHEN sa.terapeuta_estado_id = 7 AND sa.recepcion_estado_id = 7 THEN 1
-          WHEN sa.terapeuta_estado_id = 6 AND sa.recepcion_estado_id = 6 THEN 0
-          ELSE NULL
-        END as asistencia
-      FROM citas c
-      INNER JOIN servicios s ON s.id = c.servicio_id
-      LEFT JOIN trabajador_centro t ON t.id = c.doctor_id
-      LEFT JOIN motivo_cita mc ON mc.id = c.motivo_id
-      LEFT JOIN venta_servicio_detalle vsd ON vsd.id = c.venta_servicio_detalle_id
-      LEFT JOIN venta_servicio vs ON vs.id = vsd.venta_id
-      LEFT JOIN modalidad_pago mp ON mp.id = vs.modalidad_pago_id
-      LEFT JOIN seguimiento_asistencia sa ON sa.cita_id = c.id
-      WHERE c.paciente_id = ?
-        AND c.flg_activo = 1
-      ORDER BY s.nombre ASC,
-               vs.fecha_venta DESC,
-               COALESCE(vsd.id, 0) DESC,
-               c.fecha ASC,
-               c.hora_inicio ASC
-    `;
+      // 🔥 1. CITAS REALES
+      const queryCitas = `
+        SELECT
+          c.id,
+          c.fecha,
+          c.hora_inicio,
+          c.servicio_id,
+          s.nombre as servicio_nombre,
+          c.venta_servicio_detalle_id,
+          vsd.paquete_combo_id,
+          vsd.venta_id,
+          COALESCE(pc.nombre, vsd.descripcion_linea, 'Sesión individual') as paquete_nombre,
+          CONCAT(t.nombres, ' ', t.apellidos) as especialista,
+          mc.nombre as motivo_nombre,
+          c.motivo_id,
+          vs.fecha_venta as fecha_pago,
+          vs.codigo_comprobante,
+          CASE
+            WHEN sa.terapeuta_estado_id = 7 AND sa.recepcion_estado_id = 7 THEN 1
+            WHEN sa.terapeuta_estado_id = 6 AND sa.recepcion_estado_id = 6 THEN 0
+            ELSE NULL
+          END as asistencia
+        FROM citas c
+        INNER JOIN servicios s ON s.id = c.servicio_id
+        LEFT JOIN trabajador_centro t ON t.id = c.doctor_id
+        LEFT JOIN motivo_cita mc ON mc.id = c.motivo_id
+        LEFT JOIN venta_servicio_detalle vsd ON vsd.id = c.venta_servicio_detalle_id
+        LEFT JOIN venta_servicio vs ON vs.id = vsd.venta_id
+        LEFT JOIN seguimiento_asistencia sa ON sa.cita_id = c.id
+        LEFT JOIN paquete_combo pc ON pc.id = vsd.paquete_combo_id
+        WHERE c.paciente_id = ?
+          AND c.flg_activo = 1
+      `;
 
-    const resultados = await this.citaRepo.query(query, [pacienteId]);
+      // 🔥 2. TODAS LAS VENTAS
+      const queryVentas = `
+        SELECT
+          vsd.id,
+          vsd.venta_id,
+          vsd.paquete_combo_id,
+          vsd.sesiones_totales,
+          vsd.sesiones_usadas,
+          COALESCE(pc.nombre, vsd.descripcion_linea, 'Sesión individual') as paquete_nombre,
+          st.servicio_id,
+          s.nombre as servicio_nombre,
+          vs.codigo_comprobante,
+          vs.fecha_venta as fecha_pago,
+          st.motivo_cita_id,
+          mc.nombre as motivo_cita_nombre
+        FROM venta_servicio_detalle vsd
+        INNER JOIN venta_servicio vs ON vs.id = vsd.venta_id
+        LEFT JOIN servicio_tarifa st ON st.id = vsd.servicio_tarifa_id
+        LEFT JOIN servicios s ON s.id = st.servicio_id
+        LEFT JOIN motivo_cita mc ON mc.id = st.motivo_cita_id
+        LEFT JOIN paquete_combo pc ON pc.id = vsd.paquete_combo_id
+        WHERE vsd.paciente_id = ?
+          AND vsd.tipo_item_venta = 1
+          AND vsd.sesiones_totales > 0
+      `;
 
-    // Agrupar por servicio y luego por paquete
-    const agrupado = resultados.reduce((acc, cita) => {
-      const servicioId = cita.servicio_id;
-      const paqueteId = cita.venta_servicio_detalle_id || 'sin_paquete';
+      const [citas, ventas] = await Promise.all([
+        this.citaRepo.query(queryCitas, [pacienteId]),
+        this.citaRepo.query(queryVentas, [pacienteId]),
+      ]);
 
-      if (!acc[servicioId]) {
-        acc[servicioId] = {
-          servicio_id: servicioId,
-          servicio_nombre: cita.servicio_nombre,
-          paquetes: {}
-        };
+      // 🔍 DEBUG: Ver qué ventas trae para paquetes combo
+      const ventasCombo = ventas.filter(v => v.paquete_combo_id);
+      if (ventasCombo.length > 0) {
+        console.log('🔍 VENTAS DE COMBO (ANTES FILTRAR):', ventasCombo.length, 'líneas');
       }
 
-      if (!acc[servicioId].paquetes[paqueteId]) {
-        acc[servicioId].paquetes[paqueteId] = {
-          paquete_id: paqueteId,
-          paquete_nombre: cita.paquete_nombre || 'Sesión individual',
-          codigo_comprobante: cita.codigo_comprobante,
-          citas: []
-        };
+      // 🔥 ELIMINAR DUPLICADOS: Si hay múltiples líneas con mismo combo+servicio+motivo, quedarse solo con la primera (ID menor)
+      const ventasMap = new Map();
+      for (const venta of ventas) {
+        let key;
+        if (venta.paquete_combo_id) {
+          // Para combos: agrupar por combo_id + servicio + motivo
+          key = `combo_${venta.paquete_combo_id}_s${venta.servicio_id}_m${venta.motivo_cita_id}`;
+        } else {
+          // Para no combos: usar ID directo
+          key = `venta_${venta.id}`;
+        }
+
+        const existing = ventasMap.get(key);
+        if (!existing || venta.id < existing.id) {
+          ventasMap.set(key, venta);
+        }
       }
 
-      acc[servicioId].paquetes[paqueteId].citas.push({
-        id: cita.id,
-        fecha: cita.fecha,
-        hora: cita.hora_inicio,
-        asistencia: cita.asistencia,
-        especialista: cita.especialista || 'No asignado',
-        tipo_servicio: cita.tipo_servicio,
-        monto: parseFloat(cita.monto),
-        fecha_pago: cita.fecha_pago,
-        modalidad_pago: cita.modalidad_pago,
-        comprobante: cita.codigo_comprobante
+      const ventasFiltradas = Array.from(ventasMap.values());
+
+      if (ventasCombo.length > 0) {
+        const ventasComboFiltradas = ventasFiltradas.filter(v => v.paquete_combo_id);
+        console.log('🔍 VENTAS DE COMBO (DESPUÉS FILTRAR):', ventasComboFiltradas.length, 'líneas');
+        console.log(JSON.stringify(ventasComboFiltradas.map(v => ({
+          id: v.id,
+          combo_id: v.paquete_combo_id,
+          servicio: v.servicio_nombre,
+          motivo: v.motivo_cita_nombre,
+          sesiones: v.sesiones_totales,
+        })), null, 2));
+      }
+
+      const agrupado: Record<string, any> = {};
+
+      // 🔥 PASO 1: CREAR ESTRUCTURA DESDE VENTAS
+      for (const venta of ventasFiltradas) {
+
+        // 🔥 SIEMPRE agrupar por servicio_id (combos y no combos)
+        const servicioKey = `servicio_${venta.servicio_id || 0}`;
+
+        // 🔥 Para combos, cada línea (servicio/motivo) es un subpaquete separado
+        const paqueteKey = venta.paquete_combo_id
+          ? `combo_${venta.paquete_combo_id}_linea_${venta.id}`
+          : `venta_${venta.id}`;
+
+        const sesionesTotales = Number(venta.sesiones_totales) || 0;
+        const sesionesUsadas = Number(venta.sesiones_usadas) || 0;
+        const pendientes = Math.max(0, sesionesTotales - sesionesUsadas);
+
+        if (!agrupado[servicioKey]) {
+          agrupado[servicioKey] = {
+            servicio_id: venta.servicio_id,
+            servicio_nombre: venta.servicio_nombre || 'Servicio',
+            paquetes: {},
+          };
+        }
+
+        if (!agrupado[servicioKey].paquetes[paqueteKey]) {
+          agrupado[servicioKey].paquetes[paqueteKey] = {
+            paquete_id: paqueteKey,
+            paquete_combo_id: venta.paquete_combo_id,
+            paquete_nombre: venta.paquete_nombre,
+            paquete_combo_nombre: venta.paquete_combo_id ? venta.paquete_nombre : null, // 🔥 Nombre del combo
+            sesiones_totales: sesionesTotales,
+            venta_id: venta.venta_id,
+            citas: [],
+          };
+        }
+
+        // 🔥 CREAR SLOTS VACÍOS
+        for (let i = 0; i < pendientes; i++) {
+          agrupado[servicioKey].paquetes[paqueteKey].citas.push({
+            id: null,
+            fecha: null,
+            hora: null,
+            asistencia: null,
+            especialista: 'Por asignar',
+            motivo_id: venta.motivo_cita_id,
+            motivo_nombre: venta.motivo_cita_nombre || 'Por agendar',
+            programada: false,
+            venta_id: venta.venta_id,
+            comprobante: venta.codigo_comprobante,
+            fecha_pago: venta.fecha_pago,
+          });
+        }
+      }
+
+      // 🔥 PASO 2: INSERTAR CITAS REALES
+      for (const cita of citas) {
+
+        const servicioKey = `servicio_${cita.servicio_id}`;
+
+        // 🔥 Usar mismo formato que en paso 1
+        const paqueteKey = cita.paquete_combo_id
+          ? `combo_${cita.paquete_combo_id}_linea_${cita.venta_servicio_detalle_id}`
+          : `venta_${cita.venta_servicio_detalle_id}`;
+
+        if (!agrupado[servicioKey]) continue;
+        const paquete = agrupado[servicioKey].paquetes[paqueteKey];
+        if (!paquete) continue;
+
+        const index = paquete.citas.findIndex(c =>
+          c.programada === false &&
+          (c.motivo_id === cita.motivo_id || !c.motivo_id)
+        );
+
+        const citaReal = {
+          id: cita.id,
+          fecha: cita.fecha,
+          hora: cita.hora_inicio,
+          asistencia: cita.asistencia,
+          especialista: cita.especialista || 'No asignado',
+          motivo_id: cita.motivo_id,
+          motivo_nombre: cita.motivo_nombre,
+          programada: true,
+          venta_id: cita.venta_id,
+          comprobante: cita.codigo_comprobante,
+          fecha_pago: cita.fecha_pago,
+        };
+
+        if (index !== -1) {
+          paquete.citas[index] = citaReal;
+        } else {
+          paquete.citas.push(citaReal);
+        }
+      }
+
+      // 🔥 ORDENAR CITAS (opc pero recomendado)
+      Object.values(agrupado).forEach((servicio: any) => {
+        Object.values(servicio.paquetes).forEach((paq: any) => {
+          paq.citas.sort((a: any, b: any) => {
+            if (a.programada === false) return 1;
+            if (b.programada === false) return -1;
+            return new Date(a.fecha || 0).getTime() - new Date(b.fecha || 0).getTime();
+          });
+        });
       });
 
-      return acc;
-    }, {});
+      // 🔥 FORMATEO FINAL
+      const servicios = Object.values(agrupado).map((s: any) => ({
+        ...s,
+        paquetes: Object.values(s.paquetes),
+      }));
 
-    // Convertir a array
-    const servicios = Object.values(agrupado).map((servicio: any) => ({
-      ...servicio,
-      paquetes: Object.values(servicio.paquetes)
-    }));
+      return { servicios };
 
-    return { servicios };
-  } catch (error) {
-    console.error('❌ Error al obtener listado de citas:', error);
-    throw error;
+    } catch (error) {
+      console.error(error);
+      throw error;
+    }
   }
-}
-
 // 📊 OBTENER RESUMEN DE TERAPIAS POR PACIENTE
 async obtenerResumenTerapiasPorPaciente(pacienteId: number) {
   try {
