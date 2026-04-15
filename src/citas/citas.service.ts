@@ -1704,21 +1704,13 @@ async obtenerEstadisticasSesiones(
         this.citaRepo.query(queryVentas, [pacienteId]),
       ]);
 
-      // 🔍 DEBUG: Ver qué ventas trae para paquetes combo
-      const ventasCombo = ventas.filter(v => v.paquete_combo_id);
-      if (ventasCombo.length > 0) {
-        console.log('🔍 VENTAS DE COMBO (ANTES FILTRAR):', ventasCombo.length, 'líneas');
-      }
-
-      // 🔥 ELIMINAR DUPLICADOS: Si hay múltiples líneas con mismo combo+servicio+motivo, quedarse solo con la primera (ID menor)
+      // 🔥 ELIMINAR DUPLICADOS (tu lógica original)
       const ventasMap = new Map();
       for (const venta of ventas) {
         let key;
         if (venta.paquete_combo_id) {
-          // Para combos: agrupar por combo_id + servicio + motivo
           key = `combo_${venta.paquete_combo_id}_s${venta.servicio_id}_m${venta.motivo_cita_id}`;
         } else {
-          // Para no combos: usar ID directo
           key = `venta_${venta.id}`;
         }
 
@@ -1730,27 +1722,13 @@ async obtenerEstadisticasSesiones(
 
       const ventasFiltradas = Array.from(ventasMap.values());
 
-      if (ventasCombo.length > 0) {
-        const ventasComboFiltradas = ventasFiltradas.filter(v => v.paquete_combo_id);
-        console.log('🔍 VENTAS DE COMBO (DESPUÉS FILTRAR):', ventasComboFiltradas.length, 'líneas');
-        console.log(JSON.stringify(ventasComboFiltradas.map(v => ({
-          id: v.id,
-          combo_id: v.paquete_combo_id,
-          servicio: v.servicio_nombre,
-          motivo: v.motivo_cita_nombre,
-          sesiones: v.sesiones_totales,
-        })), null, 2));
-      }
-
       const agrupado: Record<string, any> = {};
 
-      // 🔥 PASO 1: CREAR ESTRUCTURA DESDE VENTAS
+      // 🔥 PASO 1: CREAR ESTRUCTURA DESDE VENTAS (NO TOCAR)
       for (const venta of ventasFiltradas) {
 
-        // 🔥 SIEMPRE agrupar por servicio_id (combos y no combos)
         const servicioKey = `servicio_${venta.servicio_id || 0}`;
 
-        // 🔥 Para combos, cada línea (servicio/motivo) es un subpaquete separado
         const paqueteKey = venta.paquete_combo_id
           ? `combo_${venta.paquete_combo_id}_linea_${venta.id}`
           : `venta_${venta.id}`;
@@ -1772,14 +1750,14 @@ async obtenerEstadisticasSesiones(
             paquete_id: paqueteKey,
             paquete_combo_id: venta.paquete_combo_id,
             paquete_nombre: venta.paquete_nombre,
-            paquete_combo_nombre: venta.paquete_combo_id ? venta.paquete_nombre : null, // 🔥 Nombre del combo
+            paquete_combo_nombre: venta.paquete_combo_id ? venta.paquete_nombre : null,
             sesiones_totales: sesionesTotales,
             venta_id: venta.venta_id,
             citas: [],
           };
         }
 
-        // 🔥 CREAR SLOTS VACÍOS
+        // 🔥 CREAR SLOTS
         for (let i = 0; i < pendientes; i++) {
           agrupado[servicioKey].paquetes[paqueteKey].citas.push({
             id: null,
@@ -1797,12 +1775,13 @@ async obtenerEstadisticasSesiones(
         }
       }
 
-      // 🔥 PASO 2: INSERTAR CITAS REALES
+      // 🔥 PASO 2: INSERTAR CITAS CON VENTA (NO TOCAR)
       for (const cita of citas) {
+
+        if (!cita.venta_servicio_detalle_id) continue;
 
         const servicioKey = `servicio_${cita.servicio_id}`;
 
-        // 🔥 Usar mismo formato que en paso 1
         const paqueteKey = cita.paquete_combo_id
           ? `combo_${cita.paquete_combo_id}_linea_${cita.venta_servicio_detalle_id}`
           : `venta_${cita.venta_servicio_detalle_id}`;
@@ -1837,7 +1816,50 @@ async obtenerEstadisticasSesiones(
         }
       }
 
-      // 🔥 ORDENAR CITAS (opc pero recomendado)
+      // 🔥 PASO 3: CITAS SIN VENTA (NUEVO 🔥)
+      for (const cita of citas) {
+
+        if (cita.venta_servicio_detalle_id) continue;
+
+        const servicioKey = `servicio_${cita.servicio_id}`;
+
+        if (!agrupado[servicioKey]) {
+          agrupado[servicioKey] = {
+            servicio_id: cita.servicio_id,
+            servicio_nombre: cita.servicio_nombre || 'Servicio',
+            paquetes: {},
+          };
+        }
+
+        const paqueteKey = `virtual_${cita.id}`;
+
+        if (!agrupado[servicioKey].paquetes[paqueteKey]) {
+          agrupado[servicioKey].paquetes[paqueteKey] = {
+            paquete_id: paqueteKey,
+            paquete_combo_id: null,
+            paquete_nombre: 'Cita individual',
+            sesiones_totales: 1,
+            venta_id: null,
+            citas: [],
+          };
+        }
+
+        agrupado[servicioKey].paquetes[paqueteKey].citas.push({
+          id: cita.id,
+          fecha: cita.fecha,
+          hora: cita.hora_inicio,
+          asistencia: cita.asistencia,
+          especialista: cita.especialista || 'No asignado',
+          motivo_id: cita.motivo_id,
+          motivo_nombre: cita.motivo_nombre,
+          programada: true,
+          venta_id: null,
+          comprobante: null,
+          fecha_pago: null,
+        });
+      }
+
+      // 🔥 ORDENAR
       Object.values(agrupado).forEach((servicio: any) => {
         Object.values(servicio.paquetes).forEach((paq: any) => {
           paq.citas.sort((a: any, b: any) => {
@@ -1848,7 +1870,7 @@ async obtenerEstadisticasSesiones(
         });
       });
 
-      // 🔥 FORMATEO FINAL
+      // 🔥 FORMATO FINAL
       const servicios = Object.values(agrupado).map((s: any) => ({
         ...s,
         paquetes: Object.values(s.paquetes),
