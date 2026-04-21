@@ -239,8 +239,16 @@ import { CampanaSeccion } from './campanas/entities/campana-seccion.entity';
       host: 'localhost',
       port: 3306,
       username: 'crecemos',
-      password: 'd339yr8l',// Asegúrate de poner la contraseña correcta
+      password: 'd339yr8l',
       database: 'crecemos_website',
+      extra: {
+        connectionLimit: 60,
+        waitForConnections: true,
+        queueLimit: 0,
+        connectTimeout: 20000,
+        enableKeepAlive: false,    // no mantener vivas conexiones inactivas (reduce Sleep)
+        idleTimeoutMillis: 30000,  // cerrar conexión si lleva 30s sin usarse
+      },
       entities: [
         Postulacion,
         Paciente,

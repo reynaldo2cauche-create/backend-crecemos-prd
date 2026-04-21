@@ -20,6 +20,25 @@ export class VentaServicioController {
     return this.service.verificarTieneCitas(+id);
   }
 
+  @Get('historial')
+  findHistorial(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('tipo') tipo?: string,
+    @Query('desde') desde?: string,
+    @Query('hasta') hasta?: string,
+    @Query('pacienteId') pacienteId?: string,
+  ) {
+    return this.service.findHistorial({
+      page: page ? +page : 0,
+      limit: limit ? +limit : 12,
+      tipo: tipo || 'todos',
+      desde,
+      hasta,
+      pacienteId: pacienteId ? +pacienteId : undefined,
+    });
+  }
+
   @Get()
   findAll(
     @Query('pacienteId') pacienteId?: string,

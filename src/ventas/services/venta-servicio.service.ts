@@ -86,6 +86,168 @@ export class VentaServicioService {
     return ventas;
   }
 
+  async findHistorial(filtros: {
+    page: number;
+    limit: number;
+    tipo: string;
+    desde?: string;
+    hasta?: string;
+    pacienteId?: number;
+  }) {
+    const { page, limit, tipo, desde, hasta, pacienteId } = filtros;
+    const offset = page * limit;
+
+    // Condiciones para venta_servicio
+    const condS: string[] = [];
+    const paramsS: any[] = [];
+    if (desde) { condS.push('vs.fecha_venta >= ?'); paramsS.push(desde); }
+    if (hasta) { condS.push('vs.fecha_venta <= ?'); paramsS.push(hasta); }
+    if (pacienteId) { condS.push('vs.paciente_id = ?'); paramsS.push(pacienteId); }
+    const whereS = condS.length ? 'AND ' + condS.join(' AND ') : '';
+
+    // Condiciones para venta_producto
+    const condP: string[] = [];
+    const paramsP: any[] = [];
+    if (desde) { condP.push('vp.fecha_venta >= ?'); paramsP.push(desde); }
+    if (hasta) { condP.push('vp.fecha_venta <= ?'); paramsP.push(hasta); }
+    const whereP = condP.length ? 'AND ' + condP.join(' AND ') : '';
+
+    let countSql: string;
+    let countParams: any[];
+    let montoSql: string;
+    let montoParams: any[];
+    let pageSql: string;
+    let pageParams: any[];
+
+    if (tipo === 'servicios') {
+      countSql = `SELECT COUNT(*) as total FROM venta_servicio vs WHERE 1=1 ${whereS}`;
+      countParams = [...paramsS];
+      montoSql = `SELECT COALESCE(SUM(total), 0) as total_monto FROM venta_servicio vs WHERE 1=1 ${whereS}`;
+      montoParams = [...paramsS];
+      pageSql = `SELECT id, created_at, 'servicio' as tipo FROM venta_servicio vs WHERE 1=1 ${whereS} ORDER BY created_at DESC LIMIT ? OFFSET ?`;
+      pageParams = [...paramsS, limit, offset];
+    } else if (tipo === 'productos') {
+      countSql = `SELECT COUNT(*) as total FROM venta_producto vp WHERE 1=1 ${whereP}`;
+      countParams = [...paramsP];
+      montoSql = `SELECT COALESCE(SUM(total), 0) as total_monto FROM venta_producto vp WHERE 1=1 ${whereP}`;
+      montoParams = [...paramsP];
+      pageSql = `SELECT id, created_at, 'producto' as tipo FROM venta_producto vp WHERE 1=1 ${whereP} ORDER BY created_at DESC LIMIT ? OFFSET ?`;
+      pageParams = [...paramsP, limit, offset];
+    } else {
+      countSql = `
+        SELECT COUNT(*) as total FROM (
+          SELECT id FROM venta_servicio vs WHERE 1=1 ${whereS}
+          UNION ALL
+          SELECT id FROM venta_producto vp WHERE 1=1 ${whereP}
+        ) combined`;
+      countParams = [...paramsS, ...paramsP];
+      montoSql = `
+        SELECT COALESCE(SUM(total), 0) as total_monto FROM (
+          SELECT total FROM venta_servicio vs WHERE 1=1 ${whereS}
+          UNION ALL
+          SELECT total FROM venta_producto vp WHERE 1=1 ${whereP}
+        ) combined`;
+      montoParams = [...paramsS, ...paramsP];
+      pageSql = `
+        SELECT id, created_at, 'servicio' as tipo FROM venta_servicio vs WHERE 1=1 ${whereS}
+        UNION ALL
+        SELECT id, created_at, 'producto' as tipo FROM venta_producto vp WHERE 1=1 ${whereP}
+        ORDER BY created_at DESC LIMIT ? OFFSET ?`;
+      pageParams = [...paramsS, ...paramsP, limit, offset];
+    }
+
+    const globalMontoSql = `
+      SELECT COALESCE(
+        (SELECT COALESCE(SUM(total),0) FROM venta_servicio) +
+        (SELECT COALESCE(SUM(total),0) FROM venta_producto),
+        0
+      ) as total_monto_global`;
+
+    const [[{ total }], [{ total_monto }], pageRows, [{ total_monto_global }]] = await Promise.all([
+      this.dataSource.query(countSql, countParams),
+      this.dataSource.query(montoSql, montoParams),
+      this.dataSource.query(pageSql, pageParams),
+      this.dataSource.query(globalMontoSql),
+    ]);
+
+    const servicioIds: number[] = pageRows.filter(r => r.tipo === 'servicio').map(r => +r.id);
+    const productoIds: number[] = pageRows.filter(r => r.tipo === 'producto').map(r => +r.id);
+
+    const [servicios, productos] = await Promise.all([
+      servicioIds.length ? this.ventaRepo
+        .createQueryBuilder('v')
+        .leftJoinAndSelect('v.tipo_pagador', 'tipo_pagador')
+        .leftJoinAndSelect('v.paciente', 'paciente')
+        .leftJoinAndSelect('v.responsable', 'responsable')
+        .leftJoinAndSelect('v.comprador_externo', 'comprador_externo')
+        .leftJoinAndSelect('v.descuento_tipo', 'descuento_tipo')
+        .leftJoinAndSelect('v.detalles', 'detalles')
+        .leftJoinAndSelect('detalles.servicio_tarifa', 'servicio_tarifa')
+        .leftJoinAndSelect('servicio_tarifa.servicio', 'servicio')
+        .leftJoinAndSelect('servicio_tarifa.motivo_cita', 'motivo_cita')
+        .leftJoinAndSelect('detalles.tipo_venta', 'tipo_venta')
+        .leftJoinAndSelect('detalles.paquete', 'paquete')
+        .leftJoinAndSelect('detalles.paqueteCombo', 'paqueteCombo')
+        .leftJoinAndSelect('detalles.documento_tarifa', 'documento_tarifa')
+        .leftJoinAndSelect('detalles.descuento_tipo', 'detalle_descuento_tipo')
+        .leftJoinAndSelect('detalles.paciente', 'detalle_paciente')
+        .leftJoinAndSelect('v.tipo_comprobante', 'tipo_comprobante')
+        .leftJoinAndSelect('v.modalidad_pago', 'modalidad_pago')
+        .whereInIds(servicioIds)
+        .getMany() : Promise.resolve([]),
+
+      productoIds.length ? this.dataSource
+        .createQueryBuilder()
+        .select('v')
+        .from('VentaProducto', 'v')
+        .leftJoinAndSelect('v.tipo_comprador', 'tipo_comprador')
+        .leftJoinAndSelect('v.paciente', 'paciente')
+        .leftJoinAndSelect('v.responsable', 'responsable')
+        .leftJoinAndSelect('v.comprador_externo', 'comprador_externo')
+        .leftJoinAndSelect('v.descuento_tipo', 'descuento_tipo')
+        .leftJoinAndSelect('v.detalles', 'detalles')
+        .leftJoinAndSelect('detalles.producto', 'producto')
+        .leftJoinAndSelect('detalles.descuento_tipo', 'detalle_descuento_tipo')
+        .leftJoinAndSelect('v.tipo_comprobante', 'tipo_comprobante')
+        .leftJoinAndSelect('v.modalidad_pago', 'modalidad_pago')
+        .whereInIds(productoIds)
+        .getMany() : Promise.resolve([]),
+    ]);
+
+    // Cargar promociones solo para los items de esta página
+    const [promosS, promosP] = await Promise.all([
+      servicioIds.length ? this.ventaPromoRepo.find({
+        where: servicioIds.map(id => ({ tipo_venta_id: TIPO_VENTA_SERVICIO, venta_id: id })),
+        relations: ['promocion', 'promocion.reglas', 'promocion.reglas.beneficio_producto'],
+      }) : Promise.resolve([]),
+      productoIds.length ? this.ventaPromoRepo.find({
+        where: productoIds.map(id => ({ tipo_venta_id: 1, venta_id: id })),
+        relations: ['promocion', 'promocion.reglas', 'promocion.reglas.beneficio_producto'],
+      }) : Promise.resolve([]),
+    ]);
+
+    const buildPromoMap = (promos: VentaPromocionAplicada[]) => {
+      const map = new Map<number, VentaPromocionAplicada[]>();
+      for (const p of promos) {
+        if (!map.has(p.venta_id)) map.set(p.venta_id, []);
+        map.get(p.venta_id).push(p);
+      }
+      return map;
+    };
+
+    const promoMapS = buildPromoMap(promosS);
+    const promoMapP = buildPromoMap(promosP);
+    for (const v of servicios) v.promociones_aplicadas = promoMapS.get(v.id) ?? [];
+    for (const v of productos as any[]) v.promociones_aplicadas = promoMapP.get(v.id) ?? [];
+
+    // Reordenar según el orden original de pageRows
+    const sMap = new Map(servicios.map(v => [v.id, { ...v, tipo: 'servicio' }]));
+    const pMap = new Map((productos as any[]).map(v => [v.id, { ...v, tipo: 'producto' }]));
+    const data = pageRows.map(r => r.tipo === 'servicio' ? sMap.get(+r.id) : pMap.get(+r.id)).filter(Boolean);
+
+    return { data, total: +total, totalMonto: +total_monto, totalMontoGlobal: +total_monto_global, page, limit };
+  }
+
   async findOne(id: number) {
     const v = await this.ventaRepo.findOne({
       where: { id },
