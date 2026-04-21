@@ -1656,6 +1656,8 @@ async obtenerEstadisticasSesiones(
           c.motivo_id,
           vs.fecha_venta as fecha_pago,
           vs.codigo_comprobante,
+          sa.terapeuta_estado_id,
+          sa.recepcion_estado_id,
           CASE
             WHEN sa.terapeuta_estado_id = 7 AND sa.recepcion_estado_id = 7 THEN 1
             WHEN sa.terapeuta_estado_id = 6 AND sa.recepcion_estado_id = 6 THEN 0
@@ -1802,6 +1804,8 @@ async obtenerEstadisticasSesiones(
           asistencia: cita.asistencia,
           especialista: cita.especialista || 'No asignado',
           motivo_id: cita.motivo_id,
+          terapeuta_estado_id: cita.terapeuta_estado_id,
+          recepcion_estado_id: cita.recepcion_estado_id,
           motivo_nombre: cita.motivo_nombre,
           programada: true,
           venta_id: cita.venta_id,
@@ -1853,6 +1857,8 @@ async obtenerEstadisticasSesiones(
           motivo_id: cita.motivo_id,
           motivo_nombre: cita.motivo_nombre,
           programada: true,
+          terapeuta_estado_id: cita.terapeuta_estado_id,
+          recepcion_estado_id: cita.recepcion_estado_id,
           venta_id: null,
           comprobante: null,
           fecha_pago: null,

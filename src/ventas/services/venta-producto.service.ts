@@ -8,6 +8,7 @@ import { UpdateVentaProductoDto } from '../dto/update-venta-producto.dto';
 import { Producto } from '../../inventario/entities/producto.entity';
 // ✅ FIX: importar el repositorio de promociones aplicadas
 import { VentaPromocionAplicada } from '../../promociones/entities/venta-promocion-aplicada.entity';
+import { ComprobanteService } from './comprobante.service';
 
 const TIPO_VENTA_PRODUCTO = 1;
 
@@ -24,6 +25,7 @@ export class VentaProductoService {
     @InjectRepository(VentaPromocionAplicada)
     private readonly ventaPromoRepo: Repository<VentaPromocionAplicada>,
     private readonly dataSource: DataSource,
+    private readonly comprobanteService: ComprobanteService,
   ) {}
 
   async findAll(filtros?: { desde?: string; hasta?: string }) {
@@ -112,10 +114,10 @@ export class VentaProductoService {
       const descuentoMonto = parseFloat((descuentoGlobalMonto + descuentoPromoMonto).toFixed(2));
       const total = Math.max(0, parseFloat((subtotal - descuentoMonto).toFixed(2)));
 
-      const codigoComprobante = await this.generarCodigoComprobante(manager, dto.tipo_comprobante_id);
+      const codigoComprobante = await this.comprobanteService.generarCodigo(manager, dto.tipo_comprobante_id);
 
       const venta = manager.create(VentaProducto, {
-        tipo_comprador_id: dto.tipo_comprador_id,
+        tipo_comprador_id: Number(dto.tipo_comprador_id),
         paciente_id: dto.paciente_id,
         responsable_id: dto.responsable_id,
         comprador_externo_id: dto.comprador_externo_id,
@@ -329,43 +331,5 @@ export class VentaProductoService {
     return 0;
   }
 
-  private async generarCodigoComprobante(manager: any, tipoComprobanteId: number): Promise<string> {
-    let prefijo: string;
-    let padding: number;
 
-    switch (tipoComprobanteId) {
-      case 1:
-        prefijo = 'NV-';
-        padding = 4;
-        break;
-      case 2:
-        prefijo = 'B001-';
-        padding = 5;
-        break;
-      case 3:
-        prefijo = 'F001-';
-        padding = 5;
-        break;
-      default:
-        throw new BadRequestException(`Tipo de comprobante ${tipoComprobanteId} no válido`);
-    }
-
-    const ultimaVenta = await manager
-      .createQueryBuilder(VentaProducto, 'v')
-      .where('v.codigo_comprobante LIKE :prefijo', { prefijo: `${prefijo}%` })
-      .orderBy('v.id', 'DESC')
-      .getOne();
-
-    let siguienteNumero = 1;
-    if (ultimaVenta?.codigo_comprobante) {
-      const partes = ultimaVenta.codigo_comprobante.split('-');
-      const numeroActual = parseInt(partes[partes.length - 1], 10);
-      if (!isNaN(numeroActual)) {
-        siguienteNumero = numeroActual + 1;
-      }
-    }
-
-    const numeroFormateado = siguienteNumero.toString().padStart(padding, '0');
-    return `${prefijo}${numeroFormateado}`;
-  }
 }

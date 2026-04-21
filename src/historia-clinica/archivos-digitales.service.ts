@@ -68,8 +68,8 @@ export class ArchivosDigitalesService {
         const usuarioNombre = `${terapeuta.nombres} ${terapeuta.apellidos || ''}`.trim();
         const pacienteNombre = `${paciente.nombres} ${paciente.apellido_paterno || ''} ${paciente.apellido_materno || ''}`.trim();
 
-        // ADMISIÓN (rol 2) sube archivo → notifica a terapeutas asignados Y al administrador
-        if (terapeuta.rol.id === 2) {
+        // ADMINISTRADOR (rol 1) o ADMISIÓN (rol 2) sube archivo → notifica a terapeutas asignados
+        if (terapeuta.rol.id === 1 || terapeuta.rol.id === 2) {
           const queryTerapeutas = `
             SELECT DISTINCT tc.id
             FROM asignacion_terapeuta at
@@ -96,15 +96,17 @@ export class ArchivosDigitalesService {
             );
           }
 
-          // Notificar al administrador (rol 1)
-          await this.notificacionesService.notificarDocumentoSubidoPorAdminOAdmision(
-            archivoGuardado.id,
-            terapeuta.id,
-            usuarioNombre,
-            paciente.id,
-            pacienteNombre,
-            tipoArchivo.nombre,
-          );
+          // Si es ADMISIÓN (rol 2), también notificar al administrador (rol 1)
+          if (terapeuta.rol.id === 2) {
+            await this.notificacionesService.notificarDocumentoSubidoPorAdminOAdmision(
+              archivoGuardado.id,
+              terapeuta.id,
+              usuarioNombre,
+              paciente.id,
+              pacienteNombre,
+              tipoArchivo.nombre,
+            );
+          }
         }
 
         // TERAPEUTA (rol 4) sube archivo → notifica solo al administrador

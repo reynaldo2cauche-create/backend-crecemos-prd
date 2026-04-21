@@ -12,6 +12,7 @@ import { DocumentoTarifa } from '../../inventario/entities/documento-tarifa.enti
 import { Paquete } from 'src/catalogos/paquete.entity';
 import { PaqueteCombo } from '../../inventario/entities/paquete-combo.entity';
 import { PaqueteComboItem } from '../../inventario/entities/paquete-combo-item.entity';
+import { ComprobanteService } from './comprobante.service';
 
 const TIPO_VENTA_SERVICIO = 2;
 
@@ -27,6 +28,7 @@ export class VentaServicioService {
     @InjectRepository(ServicioPaquetePrecio)
     private readonly paquetePrecioRepo: Repository<ServicioPaquetePrecio>,
     private readonly dataSource: DataSource,
+    private readonly comprobanteService: ComprobanteService,
   ) {}
 
   async findAll(filtros?: { pacienteId?: number; desde?: string; hasta?: string }) {
@@ -284,7 +286,7 @@ export class VentaServicioService {
       const descuentoMonto       = parseFloat((descuentoGlobalMonto + descuentoPromoMonto).toFixed(2));
       const total                = Math.max(0, parseFloat((subtotal - descuentoMonto).toFixed(2)));
 
-      const codigoComprobante = await this.generarCodigoComprobante(manager, dto.tipo_comprobante_id);
+      const codigoComprobante = await this.comprobanteService.generarCodigo(manager, dto.tipo_comprobante_id);
 
       const venta = manager.create(VentaServicio, {
         tipo_pagador_id:        dto.tipo_pagador_id,
@@ -363,18 +365,44 @@ export class VentaServicioService {
 
   /** Actualiza campos editables de una venta de servicio */
   async update(id: number, dto: UpdateVentaServicioDto) {
+    console.log(`🔥🔥🔥 INICIO: Intentando actualizar venta de servicio ID ${id}`);
+
     const venta = await this.ventaRepo.findOne({
       where: { id },
       relations: ['detalles']
     });
-    if (!venta) throw new NotFoundException(`Venta de servicio ${id} no encontrada`);
+    if (!venta) {
+      console.log(`❌ Venta ${id} no encontrada`);
+      throw new NotFoundException(`Venta de servicio ${id} no encontrada`);
+    }
 
-    // Verificar si algún detalle ya tiene sesiones usadas (citas registradas)
-    const tieneSesionesUsadas = venta.detalles.some(d => d.sesiones_usadas > 0);
-    if (tieneSesionesUsadas && dto.detalles) {
-      throw new BadRequestException(
-        'No se pueden modificar los detalles de una venta que ya tiene sesiones usadas (citas registradas)'
-      );
+    console.log(`✅ Venta ${id} encontrada, tiene ${venta.detalles.length} detalles`);
+
+    // 🔥 VERIFICAR SI REALMENTE HAY CITAS ASOCIADAS (no confiar solo en sesiones_usadas)
+    if (dto.detalles && dto.detalles.length > 0) {
+      const detalleIds = venta.detalles.map(d => d.id);
+
+      if (detalleIds.length > 0) {
+        const citasInfo = await this.dataSource.query(`
+          SELECT
+            c.id,
+            c.venta_servicio_detalle_id,
+            c.fecha,
+            c.flg_activo
+          FROM citas c
+          WHERE c.venta_servicio_detalle_id IN (?)
+        `, [detalleIds]);
+
+        console.log(`🔍 Citas encontradas (total ${citasInfo.length}):`, citasInfo);
+
+        const citasActivas = citasInfo.filter(c => c.flg_activo === 1);
+
+        if (citasActivas.length > 0) {
+          throw new BadRequestException(
+            `No se pueden modificar los detalles porque esta venta tiene ${citasActivas.length} cita(s) activa(s) asociada(s)`
+          );
+        }
+      }
     }
 
     return this.dataSource.transaction(async (manager) => {
@@ -528,20 +556,85 @@ export class VentaServicioService {
     });
   }
 
-  /** Elimina una venta de servicio (solo si no tiene sesiones usadas) */
-  async remove(id: number) {
+  /** Verifica si una venta tiene citas asociadas */
+  async verificarTieneCitas(id: number): Promise<{ tieneCitas: boolean; cantidadCitas: number; mensaje?: string }> {
     const venta = await this.ventaRepo.findOne({
       where: { id },
       relations: ['detalles']
     });
-    if (!venta) throw new NotFoundException(`Venta de servicio ${id} no encontrada`);
 
-    // Verificar si algún detalle ya tiene sesiones usadas (citas registradas)
-    const tieneSesionesUsadas = venta.detalles.some(d => d.sesiones_usadas > 0);
-    if (tieneSesionesUsadas) {
-      throw new BadRequestException(
-        'No se puede eliminar una venta que ya tiene sesiones usadas (citas registradas)'
-      );
+    if (!venta) {
+      throw new NotFoundException(`Venta de servicio ${id} no encontrada`);
+    }
+
+    const detalleIds = venta.detalles.map(d => d.id);
+
+    if (detalleIds.length === 0) {
+      return { tieneCitas: false, cantidadCitas: 0 };
+    }
+
+    const citasCount = await this.dataSource.query(`
+      SELECT COUNT(*) as total
+      FROM citas
+      WHERE venta_servicio_detalle_id IN (?)
+        AND flg_activo = 1
+    `, [detalleIds]);
+
+    const total = citasCount[0]?.total || 0;
+
+    return {
+      tieneCitas: total > 0,
+      cantidadCitas: total,
+      mensaje: total > 0 ? `Esta venta tiene ${total} cita(s) asociada(s)` : undefined
+    };
+  }
+
+  /** Elimina una venta de servicio (solo si no tiene sesiones usadas) */
+  async remove(id: number) {
+    console.log(`🔥🔥🔥 INICIO: Intentando eliminar venta de servicio ID ${id}`);
+
+    const venta = await this.ventaRepo.findOne({
+      where: { id },
+      relations: ['detalles']
+    });
+
+    if (!venta) {
+      console.log(`❌ Venta ${id} no encontrada`);
+      throw new NotFoundException(`Venta de servicio ${id} no encontrada`);
+    }
+
+    console.log(`✅ Venta ${id} encontrada, tiene ${venta.detalles.length} detalles`);
+
+    // 🔥 VERIFICAR SI REALMENTE HAY CITAS ASOCIADAS (no confiar solo en sesiones_usadas)
+    const detalleIds = venta.detalles.map(d => d.id);
+
+    console.log(`🔍 Eliminando venta ${id}`);
+    console.log(`🔍 Detalles encontrados:`, venta.detalles.map(d => ({
+      id: d.id,
+      sesiones_totales: d.sesiones_totales,
+      sesiones_usadas: d.sesiones_usadas
+    })));
+
+    if (detalleIds.length > 0) {
+      const citasInfo = await this.dataSource.query(`
+        SELECT
+          c.id,
+          c.venta_servicio_detalle_id,
+          c.fecha,
+          c.flg_activo
+        FROM citas c
+        WHERE c.venta_servicio_detalle_id IN (?)
+      `, [detalleIds]);
+
+      console.log(`🔍 Citas encontradas (total ${citasInfo.length}):`, citasInfo);
+
+      const citasActivas = citasInfo.filter(c => c.flg_activo === 1);
+
+      if (citasActivas.length > 0) {
+        throw new BadRequestException(
+          `No se puede eliminar esta venta porque tiene ${citasActivas.length} cita(s) activa(s) asociada(s)`
+        );
+      }
     }
 
     return this.dataSource.transaction(async (manager) => {

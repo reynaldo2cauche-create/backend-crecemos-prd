@@ -15,6 +15,11 @@ export class VentaServicioController {
     return this.service.findPendientesPorPaciente(+id);
   }
 
+  @Get(':id/verificar-citas')
+  verificarTieneCitas(@Param('id') id: string) {
+    return this.service.verificarTieneCitas(+id);
+  }
+
   @Get()
   findAll(
     @Query('pacienteId') pacienteId?: string,

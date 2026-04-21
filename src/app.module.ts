@@ -238,8 +238,8 @@ import { CampanaSeccion } from './campanas/entities/campana-seccion.entity';
       type: 'mysql',
       host: 'localhost',
       port: 3306,
-      username: 'root',  // Asegúrate de poner el nombre de usuario correcto
-      password: 'admin',  // Asegúrate de poner la contraseña correcta
+      username: 'crecemos',
+      password: 'd339yr8l',// Asegúrate de poner la contraseña correcta
       database: 'crecemos_website',
       entities: [
         Postulacion,

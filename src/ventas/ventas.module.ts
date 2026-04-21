@@ -22,10 +22,12 @@ import { VentaPromocionAplicada } from '../promociones/entities/venta-promocion-
 import { CompradorExternoService } from './services/comprador-externo.service';
 import { VentaServicioService } from './services/venta-servicio.service';
 import { VentaProductoService } from './services/venta-producto.service';
+import { ReportesService } from './services/reportes.service';
 
 import { CompradorExternoController } from './controllers/comprador-externo.controller';
 import { VentaServicioController } from './controllers/venta-servicio.controller';
 import { VentaProductoController } from './controllers/venta-producto.controller';
+import { ReportesController } from './controllers/reportes.controller';
 import { TipoComprobante } from './entities/tipo-comprobante.entity';
 import { TipoComprobanteService } from './services/tipo-comprobante.service';
 import { TipoComprobanteController } from './controllers/tipo-comprobante.controller';
@@ -35,6 +37,7 @@ import { PaqueteCombo } from 'src/inventario/entities/paquete-combo.entity';
 import { PaqueteComboItem } from 'src/inventario/entities/paquete-combo-item.entity';
 import { DocumentoTarifa } from 'src/inventario/entities/documento-tarifa.entity';
 import { ModalidadPago } from 'src/historia-clinica/entities/modalidad-pago.entity';
+import { ComprobanteService } from './services/comprobante.service';
 
 @Module({
   imports: [
@@ -60,7 +63,8 @@ import { ModalidadPago } from 'src/historia-clinica/entities/modalidad-pago.enti
       TipoComprobante,
       // ✅ FIX: registrar VentaPromocionAplicada para que los services puedan inyectar su repo
       VentaPromocionAplicada,
-      ModalidadPago
+      ModalidadPago,
+      
     ]),
   ],
   providers: [
@@ -68,12 +72,15 @@ import { ModalidadPago } from 'src/historia-clinica/entities/modalidad-pago.enti
     VentaServicioService,
     VentaProductoService,
     TipoComprobanteService,
+    ComprobanteService,
+    ReportesService,
   ],
   controllers: [
     CompradorExternoController,
     VentaServicioController,
     VentaProductoController,
     TipoComprobanteController,
+    ReportesController,
   ],
   exports: [VentaServicioService],
 })

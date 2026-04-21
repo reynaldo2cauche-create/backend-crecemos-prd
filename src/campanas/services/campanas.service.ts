@@ -27,18 +27,16 @@ export class CampanasService {
 
   /**
    * Obtener campañas activas (público)
+   * Devuelve TODAS las campañas con estado "activa", sin filtrar por fechas vigentes
+   * El filtro por año se hace en el frontend
    */
   async findActivas() {
-    const hoy = new Date().toISOString().split('T')[0];
-
     return this.campanaRepo.find({
       where: {
         estado_id: 1, // Estado "activa"
-        fecha_inicio: LessThanOrEqual(hoy),
-        fecha_fin: MoreThanOrEqual(hoy),
       },
       relations: ['secciones'],
-      order: { orden: 'ASC', created_at: 'DESC' },
+      order: { fecha_inicio: 'DESC', orden: 'ASC' },
     });
   }
 

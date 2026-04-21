@@ -1,6 +1,6 @@
 import { Injectable, UnauthorizedException, NotFoundException, ForbiddenException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository, LessThan } from 'typeorm';
+import { In, Repository, LessThan, Brackets } from 'typeorm';
 import { Paciente } from './paciente.entity';
 import { CreatePacienteDto } from './dto/create-paciente.dto';
 import { UpdatePacienteDto } from './dto/update-paciente.dto';
@@ -304,12 +304,28 @@ async findAll(filters?: {
     });
   }
 
-  // Filtro por nombre del paciente
+  // Filtro por nombre del paciente (búsqueda inteligente por palabras)
   if (filters?.nombre) {
-    queryBuilder.andWhere(
-      '(paciente.nombres LIKE :nombre OR paciente.apellido_paterno LIKE :nombre OR paciente.apellido_materno LIKE :nombre)',
-      { nombre: `%${filters.nombre}%` }
-    );
+    const palabras = filters.nombre.trim().split(/\s+/).filter(p => p.length > 0);
+
+    if (palabras.length === 1) {
+      // Un solo término: buscar en cualquier campo
+      queryBuilder.andWhere(
+        '(paciente.nombres LIKE :nombre OR paciente.apellido_paterno LIKE :nombre OR paciente.apellido_materno LIKE :nombre)',
+        { nombre: `%${palabras[0]}%` }
+      );
+    } else {
+      // Múltiples términos: cada palabra debe estar en algún campo
+      palabras.forEach((palabra, index) => {
+        queryBuilder.andWhere(
+          new Brackets(qb => {
+            qb.where(`paciente.nombres LIKE :palabra${index}`, { [`palabra${index}`]: `%${palabra}%` })
+              .orWhere(`paciente.apellido_paterno LIKE :palabra${index}`, { [`palabra${index}`]: `%${palabra}%` })
+              .orWhere(`paciente.apellido_materno LIKE :palabra${index}`, { [`palabra${index}`]: `%${palabra}%` });
+          })
+        );
+      });
+    }
   }
 
   // Filtro por distrito
@@ -892,15 +908,36 @@ async findAll(filters?: {
       return [];
     }
 
-    const pacientes = await this.pacienteRepository
+    // Dividir la query en palabras individuales y limpiar
+    const palabras = query.trim().split(/\s+/).filter(p => p.length > 0);
+
+    const queryBuilder = this.pacienteRepository
       .createQueryBuilder('paciente')
       .leftJoin('paciente.estado', 'estado')
       .where('paciente.mostrar_en_listado = :mostrarEnListado', { mostrarEnListado: true })
-      .andWhere('(estado.id IS NULL OR estado.id != :estadoExcluido)', { estadoExcluido: 5 })
-      .andWhere(
+      .andWhere('(estado.id IS NULL OR estado.id != :estadoExcluido)', { estadoExcluido: 5 });
+
+    // Si es un solo término, buscar en todos los campos (incluyendo documento)
+    if (palabras.length === 1) {
+      const termino = palabras[0];
+      queryBuilder.andWhere(
         '(paciente.nombres LIKE :query OR paciente.apellido_paterno LIKE :query OR paciente.apellido_materno LIKE :query OR paciente.numero_documento LIKE :query)',
-        { query: `%${query.trim()}%` }
-      )
+        { query: `%${termino}%` }
+      );
+    } else {
+      // Si son múltiples términos, buscar que TODAS las palabras estén presentes en alguna combinación
+      palabras.forEach((palabra, index) => {
+        queryBuilder.andWhere(
+          new Brackets(qb => {
+            qb.where(`paciente.nombres LIKE :palabra${index}`, { [`palabra${index}`]: `%${palabra}%` })
+              .orWhere(`paciente.apellido_paterno LIKE :palabra${index}`, { [`palabra${index}`]: `%${palabra}%` })
+              .orWhere(`paciente.apellido_materno LIKE :palabra${index}`, { [`palabra${index}`]: `%${palabra}%` });
+          })
+        );
+      });
+    }
+
+    const pacientes = await queryBuilder
       .orderBy('paciente.nombres', 'ASC')
       .limit(20)
       .getMany();
