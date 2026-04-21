@@ -1750,6 +1750,7 @@ async obtenerEstadisticasSesiones(
         if (!agrupado[servicioKey].paquetes[paqueteKey]) {
           agrupado[servicioKey].paquetes[paqueteKey] = {
             paquete_id: paqueteKey,
+            venta_servicio_detalle_id: Number(venta.id),
             paquete_combo_id: venta.paquete_combo_id,
             paquete_nombre: venta.paquete_nombre,
             paquete_combo_nombre: venta.paquete_combo_id ? venta.paquete_nombre : null,
@@ -1953,26 +1954,29 @@ async obtenerInfoVentaDeCita(citaId: number): Promise<any> {
   // 2. Reutilizar obtenerListadoCitasPorPaciente que ya tienes
   const listado = await this.obtenerListadoCitasPorPaciente(cita.paciente_id);
 
-  // 3. Buscar el paquete que corresponde a esta cita
-  let citasDelPaquete = null;
+  // 3. Buscar el paquete que corresponde a esta cita usando venta_servicio_detalle_id
+  let paqueteInfo = null;
   for (const servicio of listado.servicios) {
-    const paquetes = Object.values(servicio.paquetes) as any[];
-    const paqueteEncontrado = paquetes.find(
-      p => String(p.paquete_id) === String(cita.venta_servicio_detalle_id)
+    const paquetes = servicio.paquetes as any[];
+    const encontrado = paquetes.find(
+      p => Number(p.venta_servicio_detalle_id) === Number(cita.venta_servicio_detalle_id)
     );
-    if (paqueteEncontrado) {
-      citasDelPaquete = paqueteEncontrado.citas;
+    if (encontrado) {
+      paqueteInfo = encontrado;
       break;
     }
   }
 
-  if (!citasDelPaquete || citasDelPaquete.length === 0) return null;
+  if (!paqueteInfo) return null;
 
-  // 4. Ordenar por fecha y hora ASC — la última en el orden es la última sesión
-  const citasOrdenadas = [...citasDelPaquete].sort((a, b) => {
-    const fechaA = new Date(`${a.fecha}T${a.hora}`);
-    const fechaB = new Date(`${b.fecha}T${b.hora}`);
-    return fechaA.getTime() - fechaB.getTime();
+  // 4. Solo citas realmente agendadas (descartar slots vacíos sin fecha ni id)
+  const citasProgramadas = (paqueteInfo.citas as any[]).filter(c => c.programada === true && c.id !== null);
+
+  if (citasProgramadas.length === 0) return null;
+
+  // Ordenar por fecha y hora ASC
+  const citasOrdenadas = [...citasProgramadas].sort((a, b) => {
+    return new Date(`${a.fecha}T${a.hora}`).getTime() - new Date(`${b.fecha}T${b.hora}`).getTime();
   });
 
   const ultimaCita = citasOrdenadas[citasOrdenadas.length - 1];
@@ -1988,9 +1992,12 @@ async obtenerInfoVentaDeCita(citaId: number): Promise<any> {
     where: { id: cita.venta_servicio_detalle_id }
   });
 
+  const sesionesTotales = venta?.sesiones_totales || paqueteInfo.sesiones_totales || citasProgramadas.length;
+
   return {
-    sesiones_totales: venta?.sesiones_totales || citasDelPaquete.length,
-    total_citas_agendadas: citasDelPaquete.length,
+    sesiones_totales: sesionesTotales,
+    total_citas_agendadas: citasProgramadas.length,
+    sesiones_restantes: Math.max(0, sesionesTotales - citasProgramadas.length),
     es_ultima_cita: esUltimaCita,
     es_penultima_cita: esPenultimaCita,
     id_ultima_cita: ultimaCita?.id,

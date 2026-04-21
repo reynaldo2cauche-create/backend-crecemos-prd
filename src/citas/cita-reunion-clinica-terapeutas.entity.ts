@@ -9,7 +9,7 @@ export class CitaReunionClinicaTerapeutas {
 
   @Column({ type: 'int' })
   id_reunion: number;
-
+  
   @ManyToOne(() => CitaReunionClinica, reunion => reunion.terapeutas)
   @JoinColumn({ name: 'id_reunion' })
   reunion: CitaReunionClinica;
