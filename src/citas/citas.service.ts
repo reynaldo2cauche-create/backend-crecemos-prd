@@ -381,169 +381,115 @@ async crearMultiples(citas: CrearCitaDto[]): Promise<any> {
 
 async listar(filtros: any = {}): Promise<any[]> {
   const terapeutaId = filtros.terapeuta_id ? parseInt(filtros.terapeuta_id) : null;
-  console.log(`🔍 Listando citas. Filtro terapeuta_id: ${terapeutaId}`);
 
-  // Formatear fechas como YYYY-MM-DD
-  const formatearFecha = (fecha: Date) => {
-    const year = fecha.getFullYear();
-    const month = String(fecha.getMonth() + 1).padStart(2, '0');
-    const day = String(fecha.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-  };
-
-  // 🚀 FILTRO POR RANGO DE FECHAS
-  // Si no se envían fechas, usar el mes actual para evitar cargar 1000+ citas
+  // Rango de fechas
   let fechaDesde: string;
   let fechaHasta: string;
-
   if (filtros.fecha_desde && filtros.fecha_hasta) {
-    // Usar las fechas enviadas desde el frontend
     fechaDesde = filtros.fecha_desde;
     fechaHasta = filtros.fecha_hasta;
-    console.log(`📅 Usando rango de fechas del frontend: ${fechaDesde} al ${fechaHasta}`);
   } else {
-    // Fallback: usar mes actual
     const hoy = new Date();
-    const primerDiaMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
-    const ultimoDiaMes = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0);
-    fechaDesde = formatearFecha(primerDiaMes);
-    fechaHasta = formatearFecha(ultimoDiaMes);
-    console.log(`📅 Usando mes actual por defecto: ${fechaDesde} al ${fechaHasta}`);
+    const fmt = (d: Date) =>
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    fechaDesde = fmt(new Date(hoy.getFullYear(), hoy.getMonth(), 1));
+    fechaHasta = fmt(new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0));
   }
 
-  // 1. Obtener CITAS NORMALES del mes actual
-  const whereNormales: any = {
-    fecha: this.citaRepo.createQueryBuilder()
-      .where('fecha >= :fechaDesde', { fechaDesde })
-      .andWhere('fecha <= :fechaHasta', { fechaHasta })
-      .getQuery() ? undefined : undefined
-  };
+  // ── FASE 1: 3 queries en paralelo ─────────────────────────────────────────
+  // Responsables NO se carga aquí — se trae solo al abrir el detalle (getCitaById)
+  const [citasNormales, reunionesAll, visitasAll] = await Promise.all([
 
-  if (terapeutaId) {
-    whereNormales.doctor_id = terapeutaId;
-  }
-
-  const citasNormales = await this.citaRepo
-    .createQueryBuilder('cita')
-    .leftJoinAndSelect('cita.paciente', 'paciente')
-    .leftJoinAndSelect('paciente.responsables', 'responsables')
-    .leftJoinAndSelect('cita.doctor', 'doctor')
-    .leftJoinAndSelect('cita.servicio', 'servicio')
-    .leftJoinAndSelect('cita.motivo', 'motivo')
-    .leftJoinAndSelect('cita.estado', 'estado')
-    .where('cita.fecha >= :fechaDesde', { fechaDesde })
-    .andWhere('cita.fecha <= :fechaHasta', { fechaHasta })
-    .andWhere('cita.flg_activo = 1')
-    .andWhere(terapeutaId ? 'cita.doctor_id = :terapeutaId' : '1=1', { terapeutaId })
-    .orderBy('cita.fecha', 'ASC')
-    .addOrderBy('cita.hora_inicio', 'ASC')
-    .getMany();
-
-  // 2. Obtener REUNIONES CLÍNICAS del mes actual
-  let reuniones = [];
-  const reunionesIds = await this.reunionRepo.find();
-
-  console.log(`📋 Total reuniones encontradas: ${reunionesIds.length}`);
-
-  for (const r of reunionesIds) {
-    // 🔥 Soportar registros antiguos (id_cita = NULL) y nuevos (id_cita = X)
-    const idCitaBuscar = r.id_cita || r.id; // Si id_cita es NULL, usar el id de la reunión (estructura antigua)
-
-    console.log(`🔍 Procesando reunión ID: ${r.id}, id_cita: ${r.id_cita}, buscando cita con ID: ${idCitaBuscar}`);
-
-    // Primero verificar si la cita está en el rango de fechas y activa
-    const citaBase = await this.citaRepo
-      .createQueryBuilder('cita')
-      .where('cita.id = :id', { id: idCitaBuscar })
-      .andWhere('cita.fecha >= :fechaDesde', { fechaDesde })
-      .andWhere('cita.fecha <= :fechaHasta', { fechaHasta })
-      .andWhere('cita.flg_activo = 1')
-      .getOne();
-
-    if (!citaBase) {
-      console.log(`❌ Cita ${idCitaBuscar} NO encontrada en rango de fechas o está inactiva`);
-      continue; // Saltar si no está en el mes actual o está eliminada
-    }
-
-    console.log(`✅ Cita ${idCitaBuscar} encontrada: ${citaBase.fecha}`);
-
-    const reunion = await this.reunionRepo.findOne({
-      where: { id: r.id },
-      relations: ['terapeutas', 'terapeutas.terapeuta', 'servicios', 'servicios.servicio'],
-    });
-
-    if (!reunion) continue;
-
-    if (terapeutaId) {
-      const tieneTerapeuta = reunion.terapeutas.some(t => t.id_terapeuta === terapeutaId);
-      if (!tieneTerapeuta) continue;
-    }
-
-    const cita = await this.citaRepo.findOne({
-      where: { id: idCitaBuscar },
-      relations: ['paciente', 'paciente.responsables', 'motivo', 'estado'],
-    });
-
-    if (cita) {
-      reuniones.push({
-        ...cita,
-        terapeutas: reunion.terapeutas,
-        servicios: reunion.servicios,
-        tipo_cita: 'REUNION_CLINICA'
-      });
-    }
-  }
-
-  // 3. Obtener VISITAS ESCOLARES del mes actual
-  let visitas = [];
-  const visitasIds = await this.visitaEscolarRepo.find({ select: ['id_cita'] });
-
-  for (const v of visitasIds) {
-    const cita = await this.citaRepo
+    this.citaRepo
       .createQueryBuilder('cita')
       .leftJoinAndSelect('cita.paciente', 'paciente')
-      .leftJoinAndSelect('paciente.responsables', 'responsables')
       .leftJoinAndSelect('cita.doctor', 'doctor')
       .leftJoinAndSelect('cita.servicio', 'servicio')
       .leftJoinAndSelect('cita.motivo', 'motivo')
       .leftJoinAndSelect('cita.estado', 'estado')
-      .where('cita.id = :id', { id: v.id_cita })
-      .andWhere('cita.fecha >= :fechaDesde', { fechaDesde })
-      .andWhere('cita.fecha <= :fechaHasta', { fechaHasta })
+      .where('cita.fecha BETWEEN :fechaDesde AND :fechaHasta', { fechaDesde, fechaHasta })
       .andWhere('cita.flg_activo = 1')
       .andWhere(terapeutaId ? 'cita.doctor_id = :terapeutaId' : '1=1', { terapeutaId })
-      .getOne();
+      .orderBy('cita.fecha', 'ASC')
+      .addOrderBy('cita.hora_inicio', 'ASC')
+      .getMany(),
 
-    if (cita) {
-      const visita = await this.visitaEscolarRepo.findOne({
-        where: { id_cita: v.id_cita },
-      });
+    this.reunionRepo.find({
+      relations: ['terapeutas', 'terapeutas.terapeuta', 'servicios', 'servicios.servicio'],
+    }),
 
-      visitas.push({
-        ...cita,
-        nombre_colegio: visita.nombre_colegio,
-        nombre_intermediario: visita.nombre_intermediario,
-        telefono: visita.telefono,
-        observaciones: visita.observaciones,
-        tipo_cita: 'VISITA_ESCOLAR',
-        id: cita.id
-      });
-    }
-  }
+    this.visitaEscolarRepo.find(),
+  ]);
 
-  // 4. Filtrar citas normales
-  // Fix: usar id_cita (no id de la tabla reunion) para no duplicar citas como NORMAL
-  const idsReuniones = new Set(reunionesIds.map(r => r.id_cita ?? r.id));
-  const idsVisitas = new Set(visitasIds.map(v => v.id_cita));
+  // IDs de citas requeridas por reuniones y visitas
+  const reunionCitaIds = reunionesAll.map(r => r.id_cita ?? r.id).filter(Boolean);
+  const visitaCitaIds  = visitasAll.map(v => v.id_cita).filter(Boolean);
+
+  // ── FASE 2: citas de reuniones y visitas en paralelo ──────────────────────
+  const [citasDeReuniones, citasDeVisitas] = await Promise.all([
+
+    reunionCitaIds.length
+      ? this.citaRepo
+          .createQueryBuilder('cita')
+          .leftJoinAndSelect('cita.paciente', 'paciente')
+          .leftJoinAndSelect('cita.motivo', 'motivo')
+          .leftJoinAndSelect('cita.estado', 'estado')
+          .whereInIds(reunionCitaIds)
+          .andWhere('cita.fecha BETWEEN :fechaDesde AND :fechaHasta', { fechaDesde, fechaHasta })
+          .andWhere('cita.flg_activo = 1')
+          .getMany()
+      : Promise.resolve([]),
+
+    visitaCitaIds.length
+      ? this.citaRepo
+          .createQueryBuilder('cita')
+          .leftJoinAndSelect('cita.paciente', 'paciente')
+          .leftJoinAndSelect('cita.doctor', 'doctor')
+          .leftJoinAndSelect('cita.servicio', 'servicio')
+          .leftJoinAndSelect('cita.motivo', 'motivo')
+          .leftJoinAndSelect('cita.estado', 'estado')
+          .whereInIds(visitaCitaIds)
+          .andWhere('cita.fecha BETWEEN :fechaDesde AND :fechaHasta', { fechaDesde, fechaHasta })
+          .andWhere('cita.flg_activo = 1')
+          .andWhere(terapeutaId ? 'cita.doctor_id = :terapeutaId' : '1=1', { terapeutaId })
+          .getMany()
+      : Promise.resolve([]),
+  ]);
+
+  // ── FASE 3: combinar en memoria, sin más queries ───────────────────────────
+  const citaMapReunion = new Map(citasDeReuniones.map(c => [c.id, c]));
+  const visitaMap      = new Map(visitasAll.map(v => [v.id_cita, v]));
+
+  const reuniones = reunionesAll
+    .map(r => {
+      const citaId = r.id_cita ?? r.id;
+      const cita   = citaMapReunion.get(citaId);
+      if (!cita) return null;
+      if (terapeutaId && !r.terapeutas.some(t => t.id_terapeuta === terapeutaId)) return null;
+      return { ...cita, terapeutas: r.terapeutas, servicios: r.servicios, tipo_cita: 'REUNION_CLINICA' };
+    })
+    .filter(Boolean);
+
+  const visitas = citasDeVisitas.map(cita => {
+    const v = visitaMap.get(cita.id);
+    return {
+      ...cita,
+      nombre_colegio: v?.nombre_colegio,
+      nombre_intermediario: v?.nombre_intermediario,
+      telefono: v?.telefono,
+      observaciones: v?.observaciones,
+      tipo_cita: 'VISITA_ESCOLAR',
+    };
+  });
+
+  const idsReuniones = new Set(reunionCitaIds);
+  const idsVisitas   = new Set(visitaCitaIds);
 
   const citasNormalesFiltered = citasNormales
     .filter(c => !idsReuniones.has(c.id) && !idsVisitas.has(c.id))
     .map(c => ({ ...c, tipo_cita: 'NORMAL' }));
 
-  // 5. Unificar y ordenar
   const todasLasCitas = [...citasNormalesFiltered, ...reuniones, ...visitas];
-
-  console.log(`✅ Total citas: ${todasLasCitas.length} (Normales: ${citasNormalesFiltered.length}, Reuniones: ${reuniones.length}, Visitas: ${visitas.length})`);
 
   return todasLasCitas.sort((a, b) => {
     const fechaA = new Date(`${a.fecha} ${a.hora_inicio}`);
