@@ -238,9 +238,9 @@ import { CampanaSeccion } from './campanas/entities/campana-seccion.entity';
       type: 'mysql',
       host: 'localhost',
       port: 3306,
-      username: 'crecemos',
+      username: 'root',
       password: 'd339yr8l',
-      database: 'crecemos_website',
+      database: 'crecemos_websites',
       extra: {
         connectionLimit: 60,
         waitForConnections: true,
