@@ -56,6 +56,26 @@ export class ArchivoOficial {
   @Column({ type: 'tinyint', default: 1 })
   activo: number;
 
+  // Entrega digital (virtual) — obligatoria
+  @Column({ name: 'entrega_digital', type: 'tinyint', default: 0 })
+  entregaDigital: number;
+
+  @Column({ name: 'fecha_entrega_digital', type: 'datetime', nullable: true, default: null })
+  fechaEntregaDigital: Date | null;
+
+  @Column({ name: 'entregado_digital_por_id', nullable: true, default: null })
+  entregadoDigitalPorId: number | null;
+
+  // Entrega física — opcional
+  @Column({ name: 'entrega_fisica', type: 'tinyint', default: 0 })
+  entregaFisica: number;
+
+  @Column({ name: 'fecha_entrega_fisica', type: 'datetime', nullable: true, default: null })
+  fechaEntregaFisica: Date | null;
+
+  @Column({ name: 'entregado_fisico_por_id', nullable: true, default: null })
+  entregadoFisicoPorId: number | null;
+
   @CreateDateColumn({ name: 'fecha_creacion' })
   fechaCreacion: Date;
 
@@ -78,6 +98,14 @@ export class ArchivoOficial {
   @ManyToOne(() => TrabajadorCentro)
   @JoinColumn({ name: 'trabajador_subio_id' })
   trabajadorSubio: TrabajadorCentro;
+
+  @ManyToOne(() => TrabajadorCentro, { nullable: true })
+  @JoinColumn({ name: 'entregado_digital_por_id' })
+  entregadoDigitalPor: TrabajadorCentro;
+
+  @ManyToOne(() => TrabajadorCentro, { nullable: true })
+  @JoinColumn({ name: 'entregado_fisico_por_id' })
+  entregadoFisicoPor: TrabajadorCentro;
 
   @ManyToOne(() => TipoArchivo)
   @JoinColumn({ name: 'tipo_archivo_id' })

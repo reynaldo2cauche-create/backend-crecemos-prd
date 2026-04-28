@@ -113,11 +113,74 @@ export class CitasService {
     }
   }
 
+  /**
+   * Verifica que el terapeuta no tenga una cita solapada en el mismo horario.
+   * Lanza BadRequestException si existe conflicto.
+   */
+  private async verificarConflictoTerapeuta(
+    doctor_id: number,
+    fecha: string,
+    hora_inicio: string,
+    hora_fin: string,
+    excludeCitaId?: number,
+  ): Promise<void> {
+    const toMinutes = (time: string): number => {
+      if (!time) return 0;
+      const partes = time.split(':').map(Number);
+      return partes[0] * 60 + (partes[1] || 0);
+    };
+
+    const nuevaInicio = toMinutes(hora_inicio);
+    const nuevaFin = hora_fin ? toMinutes(hora_fin) : nuevaInicio + 40;
+
+    const query = this.citaRepo
+      .createQueryBuilder('cita')
+      .where('cita.doctor_id = :doctor_id', { doctor_id })
+      .andWhere('cita.fecha = :fecha', { fecha })
+      .andWhere('cita.flg_activo = 1');
+
+    if (excludeCitaId) {
+      query.andWhere('cita.id != :excludeId', { excludeId: excludeCitaId });
+    }
+
+    const citasExistentes = await query.getMany();
+
+    for (const cita of citasExistentes) {
+      const existInicio = toMinutes(cita.hora_inicio);
+      const existFin = cita.hora_fin
+        ? toMinutes(cita.hora_fin)
+        : existInicio + (cita.duracion_minutos || 40);
+
+      const hayConflicto =
+        (nuevaInicio >= existInicio && nuevaInicio < existFin) ||
+        (nuevaFin > existInicio && nuevaFin <= existFin) ||
+        (nuevaInicio <= existInicio && nuevaFin >= existFin);
+
+      if (hayConflicto) {
+        const ini = cita.hora_inicio.substring(0, 5);
+        const fin = cita.hora_fin?.substring(0, 5) ?? `${Math.floor(existFin / 60).toString().padStart(2, '0')}:${(existFin % 60).toString().padStart(2, '0')}`;
+        throw new BadRequestException(
+          `El terapeuta ya tiene una cita agendada en ese horario (${ini} - ${fin}). No se pueden superponer citas.`,
+        );
+      }
+    }
+  }
+
   async crear(dto: CrearCitaDto): Promise<any> {
     // Validar que el paciente no tenga otra cita solapada ese día (solo si hay paciente)
     if (dto.paciente_id) {
       await this.verificarConflictoPaciente(
         dto.paciente_id,
+        dto.fecha,
+        dto.hora_inicio,
+        dto.hora_fin,
+      );
+    }
+
+    // Validar que el terapeuta no tenga otra cita solapada ese día
+    if (dto.doctor_id) {
+      await this.verificarConflictoTerapeuta(
+        dto.doctor_id,
         dto.fecha,
         dto.hora_inicio,
         dto.hora_fin,
@@ -596,6 +659,17 @@ async listar(filtros: any = {}): Promise<any[]> {
   if (dto.paciente_id) {
     await this.verificarConflictoPaciente(
       dto.paciente_id,
+      dto.fecha,
+      dto.hora_inicio,
+      dto.hora_fin,
+      id,
+    );
+  }
+
+  // Validar que el terapeuta no tenga otra cita solapada en ese horario (excluyendo la cita actual)
+  if (dto.doctor_id) {
+    await this.verificarConflictoTerapeuta(
+      dto.doctor_id,
       dto.fecha,
       dto.hora_inicio,
       dto.hora_fin,
@@ -1682,8 +1756,10 @@ async obtenerEstadisticasSesiones(
           : `venta_${venta.id}`;
 
         const sesionesTotales = Number(venta.sesiones_totales) || 0;
-        const sesionesUsadas = Number(venta.sesiones_usadas) || 0;
-        const pendientes = Math.max(0, sesionesTotales - sesionesUsadas);
+        // Crear siempre sesionesTotales slots; PASO 2 reemplaza los que ya tienen cita real.
+        // No restar sesiones_usadas aquí porque PASO 2 ya hace ese reemplazo — de lo contrario
+        // las citas agendadas se cuentan dos veces y faltan slots.
+        const pendientes = sesionesTotales;
 
         if (!agrupado[servicioKey]) {
           agrupado[servicioKey] = {
@@ -1930,20 +2006,24 @@ async obtenerInfoVentaDeCita(citaId: number): Promise<any> {
     ? citasOrdenadas[citasOrdenadas.length - 2]
     : null;
 
-  const esUltimaCita = ultimaCita?.id === citaId;
-  const esPenultimaCita = penultimaCita?.id === citaId;
-
   // 5. Obtener sesiones_totales de la venta
   const venta = await this.ventaDetalleRepo.findOne({
     where: { id: cita.venta_servicio_detalle_id }
   });
 
   const sesionesTotales = venta?.sesiones_totales || paqueteInfo.sesiones_totales || citasProgramadas.length;
+  const sesionesRestantes = Math.max(0, sesionesTotales - citasProgramadas.length);
+  const todasAgendadas = sesionesRestantes === 0;
+
+  // Última sesión: solo cuando YA se agendaron TODAS las sesiones del paquete y ésta es la última cronológicamente
+  const esUltimaCita = todasAgendadas && ultimaCita?.id === citaId;
+  // Penúltima: falta exactamente 1 sesión por agendar y ésta es la última agendada hasta ahora
+  const esPenultimaCita = !todasAgendadas && sesionesRestantes === 1 && ultimaCita?.id === citaId;
 
   return {
     sesiones_totales: sesionesTotales,
     total_citas_agendadas: citasProgramadas.length,
-    sesiones_restantes: Math.max(0, sesionesTotales - citasProgramadas.length),
+    sesiones_restantes: sesionesRestantes,
     es_ultima_cita: esUltimaCita,
     es_penultima_cita: esPenultimaCita,
     id_ultima_cita: ultimaCita?.id,

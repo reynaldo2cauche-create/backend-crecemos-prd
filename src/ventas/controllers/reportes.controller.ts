@@ -8,6 +8,11 @@ import { TipoReporte } from '../types/reportes.types';
 export class ReportesController {
   constructor(private readonly reportesService: ReportesService) {}
 
+  @Get('sin-cita')
+  getVentasSinCita() {
+    return this.reportesService.getVentasSinCita();
+  }
+
   @Get()
   async getReportes(
     @Query('fechaInicio') fechaInicio: string,

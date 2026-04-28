@@ -79,7 +79,7 @@ export class ArchivosOficialesService {
     rolTrabajador: string,
   ): Promise<ArchivoOficial> {
     // Validar que solo admin o admisión puedan subir
-    if (!['admin', 'admision'].includes(rolTrabajador.toLowerCase())) {
+    if (!['admin', 'admision', 'administrador', 'admisión'].includes(rolTrabajador.toLowerCase())) {
       throw new ForbiddenException('Solo admin y admisión pueden subir archivos oficiales');
     }
 
@@ -167,7 +167,7 @@ export class ArchivosOficialesService {
     pacienteId?: number,
     trabajadorId?: number,
   ): Promise<ArchivoOficial[]> {
-    if (!['admin', 'admision'].includes(rolTrabajador.toLowerCase())) {
+    if (!['admin', 'admision', 'administrador', 'admisión'].includes(rolTrabajador.toLowerCase())) {
       throw new ForbiddenException('No tienes permisos para ver archivos oficiales');
     }
 
@@ -178,6 +178,8 @@ export class ArchivosOficialesService {
       .leftJoinAndSelect('archivo.terapeuta', 'terapeuta')
       .leftJoinAndSelect('archivo.trabajadorSubio', 'trabajadorSubio')
       .leftJoinAndSelect('archivo.tipoArchivo', 'tipoArchivo')
+      .leftJoinAndSelect('archivo.entregadoDigitalPor', 'entregadoDigitalPor')
+      .leftJoinAndSelect('archivo.entregadoFisicoPor', 'entregadoFisicoPor')
       .where('archivo.activo = :activo', { activo: 1 });
 
     if (pacienteId) {
@@ -199,7 +201,7 @@ export class ArchivosOficialesService {
     trabajadorId: number,
     rolTrabajador: string,
   ): Promise<{ buffer: Buffer; mimetype: string; filename: string }> {
-    if (!['admin', 'admision'].includes(rolTrabajador.toLowerCase())) {
+    if (!['admin', 'admision', 'administrador', 'admisión'].includes(rolTrabajador.toLowerCase())) {
       throw new ForbiddenException('No tienes permisos');
     }
 
@@ -226,7 +228,7 @@ export class ArchivosOficialesService {
     trabajadorId: number,
     rolTrabajador: string,
   ): Promise<{ stream: any; mimetype: string; filename: string; fileSize: number }> {
-    if (!['admin', 'admision'].includes(rolTrabajador.toLowerCase())) {
+    if (!['admin', 'admision', 'administrador', 'admisión'].includes(rolTrabajador.toLowerCase())) {
       throw new ForbiddenException('No tienes permisos');
     }
 
@@ -302,7 +304,7 @@ export class ArchivosOficialesService {
     trabajadorId: number,
     rolTrabajador: string,
   ): Promise<void> {
-    if (!['admin', 'admision'].includes(rolTrabajador.toLowerCase())) {
+    if (!['admin', 'admision', 'administrador', 'admisión'].includes(rolTrabajador.toLowerCase())) {
       throw new ForbiddenException('No tienes permisos');
     }
 
@@ -335,6 +337,39 @@ export class ArchivosOficialesService {
 
     console.log(`✅ Registro marcado como inactivo: ID ${id}`);
   }
+
+  // ============================================
+  // MARCAR ENTREGA (FÍSICO O DIGITAL)
+  // ============================================
+  async marcarEntrega(
+    id: number,
+    tipoEntrega: 'fisico' | 'digital',
+    trabajadorId: number,
+    rolTrabajador: string,
+  ): Promise<ArchivoOficial> {
+    if (!['admin', 'admision', 'administrador', 'admisión'].includes(rolTrabajador.toLowerCase())) {
+      throw new ForbiddenException('No tienes permisos para marcar la entrega');
+    }
+
+    const archivo = await this.archivoOficialRepo.findOne({ where: { id, activo: 1 } });
+
+    if (!archivo) {
+      throw new NotFoundException('Archivo no encontrado');
+    }
+
+    if (tipoEntrega === 'digital') {
+      archivo.entregaDigital = 1;
+      archivo.fechaEntregaDigital = new Date();
+      archivo.entregadoDigitalPorId = trabajadorId;
+    } else {
+      archivo.entregaFisica = 1;
+      archivo.fechaEntregaFisica = new Date();
+      archivo.entregadoFisicoPorId = trabajadorId;
+    }
+
+    return await this.archivoOficialRepo.save(archivo);
+  }
+
     /**
    * Determina si el estado es activo o inactivo
    */

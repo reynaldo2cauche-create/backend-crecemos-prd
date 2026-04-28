@@ -436,6 +436,53 @@ export class ReportesService {
       .sort((a, b) => b.ingresos - a.ingresos);
   }
 
+  // ── Ventas sin cita agendada ──────────────────────────────────────────────
+
+  async getVentasSinCita(): Promise<any[]> {
+    return this.ventaServicioRepo.query(`
+      SELECT
+      vs.id                  AS venta_id,
+      vs.codigo_comprobante,
+      vs.fecha_venta,
+      vsd.id                 AS detalle_id,
+      vsd.descripcion_linea,
+      vsd.sesiones_totales,
+
+      COUNT(c.id)            AS sesiones_agendadas,
+
+      (vsd.sesiones_totales - COUNT(c.id)) AS sesiones_pendientes,
+
+      CONCAT(
+        p.nombres, ' ', p.apellido_paterno,
+        IF(p.apellido_materno IS NOT NULL AND p.apellido_materno != '',
+          CONCAT(' ', p.apellido_materno), '')
+      ) AS paciente,
+
+      mc.nombre AS motivo_cita
+
+    FROM venta_servicio_detalle vsd
+
+    INNER JOIN venta_servicio vs ON vs.id = vsd.venta_id
+
+    LEFT JOIN paciente p ON p.id = vsd.paciente_id
+    LEFT JOIN motivo_cita mc ON mc.id = vsd.motivo_cita_id
+
+    LEFT JOIN citas c 
+      ON c.venta_servicio_detalle_id = vsd.id
+      AND c.flg_activo = 1
+
+    WHERE vsd.tipo_item_venta = 1
+
+    GROUP BY vsd.id
+
+    HAVING sesiones_pendientes > 0
+
+    ORDER BY vs.fecha_venta DESC, vs.id DESC
+
+    LIMIT 300;
+    `);
+  }
+
   // ── Queries base ──────────────────────────────────────────────────────────
 
   private queryVentasProducto(fechaInicio: string, fechaFin: string) {

@@ -4,6 +4,7 @@ import {
   Post,
   Get,
   Delete,
+  Patch,
   Param,
   Body,
   UseInterceptors,
@@ -20,12 +21,20 @@ import { Response } from 'express';
 import { ArchivosOficialesService } from './archivos-oficiales.service';
 import { CrearArchivoOficialDto } from './dto/crear-archivo-oficial.dto';
 import { ValidarDocumentoDto } from './dto/validar-documento.dto';
+import { MarcarEntregaArchivoOficialDto } from './dto/marcar-entrega-archivo-oficial.dto';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+
+const getRol = (req: any): string => {
+  const rol = req.user?.rol;
+  return (typeof rol === 'string' ? rol : rol?.nombre || '').toLowerCase();
+};
 
 @Controller('backend_api/archivos-oficiales')
 export class ArchivosOficialesController {
   constructor(private readonly archivosService: ArchivosOficialesService) {}
 
   @Post('subir')
+  @UseGuards(JwtAuthGuard)
   @UseInterceptors(FileInterceptor('archivo', {
     limits: {
       fileSize: 10 * 1024 * 1024,
@@ -37,7 +46,7 @@ export class ArchivosOficialesController {
     @Req() req: any,
   ) {
     const trabajadorId = req.user?.id || 1;
-    const rolTrabajador = req.user?.rol || 'admin';
+    const rolTrabajador = getRol(req);
 
     if (!file) {
       return { error: 'Debe seleccionar un archivo' };
@@ -63,10 +72,11 @@ export class ArchivosOficialesController {
   }
 
   @Get('generar-codigo')
+  @UseGuards(JwtAuthGuard)
   async generarCodigoPreview(@Req() req: any) {
-    const rolTrabajador = req.user?.rol || 'admin';
-    
-    if (!['admin', 'admision'].includes(rolTrabajador.toLowerCase())) {
+    const rolTrabajador = getRol(req);
+
+    if (!['admin', 'admision'].includes(rolTrabajador)) {
       throw new ForbiddenException('No tienes permisos');
     }
 
@@ -82,12 +92,13 @@ export class ArchivosOficialesController {
   }
 
   @Get()
+  @UseGuards(JwtAuthGuard)
   async listarArchivos(
     @Query('pacienteId') pacienteId: number,
     @Query('trabajadorId') trabajadorId: number,
     @Req() req: any,
   ) {
-    const rolTrabajador = req.user?.rol || 'admin';
+    const rolTrabajador = getRol(req);
 
     const archivos = await this.archivosService.listarArchivos(
       rolTrabajador,
@@ -102,13 +113,14 @@ export class ArchivosOficialesController {
   }
 
   @Get(':id/descargar')
+  @UseGuards(JwtAuthGuard)
   async descargarArchivo(
     @Param('id', ParseIntPipe) id: number,
     @Res() res: Response,
     @Req() req: any,
   ) {
     const trabajadorId = req.user?.id || 1;
-    const rolTrabajador = req.user?.rol || 'admin';
+    const rolTrabajador = getRol(req);
 
     const { stream, mimetype, filename, fileSize } = await this.archivosService.obtenerArchivoStream(
       id,
@@ -137,13 +149,55 @@ export class ArchivosOficialesController {
     });
   }
 
+  @Patch(':id/entrega')
+  @UseGuards(JwtAuthGuard)
+  async marcarEntrega(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: MarcarEntregaArchivoOficialDto,
+    @Req() req: any,
+  ) {
+    const trabajadorId = req.user.id;
+    const rolTrabajador = getRol(req);
+
+    // Nombre directo del JWT — sin consulta extra a BD
+    const usuarioLogueado = {
+      id: req.user.id,
+      nombres: req.user.nombres || '',
+      apellidos: req.user.apellidos || '',
+    };
+
+    const archivo = await this.archivosService.marcarEntrega(id, dto.tipoEntrega, trabajadorId, rolTrabajador);
+
+    const ahora = dto.tipoEntrega === 'digital' ? archivo.fechaEntregaDigital : archivo.fechaEntregaFisica;
+
+    // Solo enviamos al frontend el campo que acaba de cambiar para no pisar el otro
+    const campoActualizado = dto.tipoEntrega === 'digital'
+      ? {
+          entregaDigital: archivo.entregaDigital,
+          fechaEntregaDigital: archivo.fechaEntregaDigital,
+          entregadoDigitalPor: usuarioLogueado,
+        }
+      : {
+          entregaFisica: archivo.entregaFisica,
+          fechaEntregaFisica: archivo.fechaEntregaFisica,
+          entregadoFisicoPor: usuarioLogueado,
+        };
+
+    return {
+      success: true,
+      message: `Entrega ${dto.tipoEntrega === 'fisico' ? 'física' : 'digital'} registrada`,
+      data: { id: archivo.id, ...campoActualizado },
+    };
+  }
+
   @Delete(':id')
+  @UseGuards(JwtAuthGuard)
   async eliminarArchivo(
     @Param('id', ParseIntPipe) id: number,
     @Req() req: any,
   ) {
     const trabajadorId = req.user?.id || 1;
-    const rolTrabajador = req.user?.rol || 'admin';
+    const rolTrabajador = getRol(req);
 
     await this.archivosService.eliminarArchivo(id, trabajadorId, rolTrabajador);
 

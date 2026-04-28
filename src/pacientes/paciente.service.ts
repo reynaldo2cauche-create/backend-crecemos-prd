@@ -913,6 +913,14 @@ async findAll(filters?: {
 
     const queryBuilder = this.pacienteRepository
       .createQueryBuilder('paciente')
+      .select([
+        'paciente.id',
+        'paciente.nombres',
+        'paciente.apellido_paterno',
+        'paciente.apellido_materno',
+        'paciente.numero_documento',
+        'paciente.celular',
+      ])
       .leftJoin('paciente.estado', 'estado')
       .where('paciente.mostrar_en_listado = :mostrarEnListado', { mostrarEnListado: true })
       .andWhere('(estado.id IS NULL OR estado.id != :estadoExcluido)', { estadoExcluido: 5 });
