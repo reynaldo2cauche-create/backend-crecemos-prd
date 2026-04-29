@@ -10,6 +10,7 @@ import { Responsable } from 'src/pacientes/entities/responsable.entity';
 // ✅ FIX: importar la entidad de promociones aplicadas
 import { VentaPromocionAplicada } from '../../promociones/entities/venta-promocion-aplicada.entity';
 import { ModalidadPago } from '../../historia-clinica/entities/modalidad-pago.entity';
+import { VentaServicioPago } from './venta-servicio-pago.entity';
 
 @Entity('venta_servicio')
 export class VentaServicio {
@@ -106,6 +107,8 @@ export class VentaServicio {
 
   @OneToMany(() => VentaServicioDetalle, (d) => d.venta, { cascade: true })
   detalles: VentaServicioDetalle[];
+  @OneToMany(() => VentaServicioPago, (p) => p.venta, { cascade: true })
+  pagos: ModalidadPago[];
 
   // ✅ FIX: propiedad virtual para recibir las promociones aplicadas cargadas desde el service
   promociones_aplicadas?: VentaPromocionAplicada[];

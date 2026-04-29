@@ -76,7 +76,7 @@ export class ArchivosOficialesController {
   async generarCodigoPreview(@Req() req: any) {
     const rolTrabajador = getRol(req);
 
-    if (!['admin', 'admision'].includes(rolTrabajador)) {
+    if (!['admin', 'admision', 'administrador', 'admisión'].includes(rolTrabajador)) {
       throw new ForbiddenException('No tienes permisos');
     }
 

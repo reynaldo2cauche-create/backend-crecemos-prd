@@ -65,12 +65,10 @@ export class ReportesService {
       [...productos, ...servicios].reduce((s, v) => s + toNum(v.total), 0),
     );
 
-    // Descuentos de cabecera (venta_producto y venta_servicio)
     const descuentosCabecera = round2(
       [...productos, ...servicios].reduce((s, v) => s + toNum(v.descuento_monto), 0),
     );
 
-    // Descuentos de detalles (venta_producto_detalle y venta_servicio_detalle)
     const descuentosDetalleProductos = (productos as any[]).reduce(
       (s: number, v: any) => s + ((v.detalles as any[])?.reduce((sd: number, d: any) => sd + toNum(d.descuento_monto), 0) ?? 0),
       0,
@@ -86,12 +84,11 @@ export class ReportesService {
       [...productos, ...servicios].reduce((s, v) => s + toNum(v.descuento_promocion), 0),
     );
 
-    // Solo detalles con servicio_tarifa_id (servicios con cita), ignorando documentos
     const { sesionesTotalesVendidas, sesionesUsadas, sesionesPendientes } = (servicios as any[]).reduce(
       (acc: { sesionesTotalesVendidas: number; sesionesUsadas: number; sesionesPendientes: number }, v: any) => {
         const detalles: any[] = v.detalles ?? [];
         for (const d of detalles) {
-          if (!d.servicio_tarifa_id) continue; // ignorar documentos y combos sin tarifa
+          if (!d.servicio_tarifa_id) continue;
           const totales = d.sesiones_totales || 0;
           const usadas  = d.sesiones_usadas  || 0;
           acc.sesionesTotalesVendidas += totales;
@@ -120,7 +117,6 @@ export class ReportesService {
       sesionesPendientes,
     };
   }
-    
 
   private async calcularCrecimiento(
     fechaInicio: string,
@@ -155,7 +151,6 @@ export class ReportesService {
     fechaFin: string,
     tipo: TipoReporte,
   ): Promise<VentaDia[]> {
-    console.log('🔍 getVentasPorDia - Parámetros:', { fechaInicio, fechaFin, tipo });
     const queries: Promise<any[]>[] = [];
 
     if (incluyeProductos(tipo)) {
@@ -189,28 +184,26 @@ export class ReportesService {
     }
 
     const resultados = await Promise.all(queries);
-    console.log('📊 Resultados SQL crudos:', resultados);
     const mapa = new Map<string, { ventas: number; ingresos: number }>();
 
     for (const rows of resultados) {
-      console.log('📝 Procesando rows:', rows);
       for (const row of rows) {
-        // Convertir Date object a string ISO format YYYY-MM-DD
+        // DATE() de MySQL puede devolver un objeto Date o un string — normalizamos a YYYY-MM-DD
         const key = row.fecha instanceof Date
           ? row.fecha.toISOString().split('T')[0]
           : String(row.fecha).split('T')[0];
         const prev = mapa.get(key) ?? { ventas: 0, ingresos: 0 };
         mapa.set(key, {
-          ventas: prev.ventas + Number(row.ventas),
+          ventas:   prev.ventas   + Number(row.ventas),
           ingresos: prev.ingresos + toNum(row.ingresos),
         });
       }
     }
 
-    console.log('🗺️ Mapa final:', Array.from(mapa.entries()));
+    // Devuelve YYYY-MM-DD — el frontend se encarga de formatear para mostrar y para Excel
     return this.generarRangoDeFechas(fechaInicio, fechaFin).map((fecha) => {
       const data = mapa.get(fecha) ?? { ventas: 0, ingresos: 0 };
-      return { fecha: this.formatearFecha(fecha), ventas: data.ventas, ingresos: round2(data.ingresos) };
+      return { fecha, ventas: data.ventas, ingresos: round2(data.ingresos) };
     });
   }
 
@@ -261,20 +254,20 @@ export class ReportesService {
                 AND vs.fecha_venta <= ?
               GROUP BY COALESCE(s.nombre, dt.nombre, 'Servicio')
               ORDER BY cantidad DESC
-              LIMIT 10;`,
+              LIMIT 10`,
           [fechaInicio, fechaFin],
         ),
       );
     }
 
     const resultados = await Promise.all(queries);
-    const todos = resultados.flat();
 
-    return todos
+    return resultados
+      .flat()
       .sort((a, b) => Number(b.cantidad) - Number(a.cantidad))
       .slice(0, 5)
       .map((item) => ({
-        nombre: item.nombre as string,
+        nombre:   item.nombre as string,
         cantidad: Number(item.cantidad),
         ingresos: round2(toNum(item.ingresos)),
       }));
@@ -290,7 +283,6 @@ export class ReportesService {
     const queries: Promise<any[]>[] = [];
 
     if (incluyeProductos(tipo)) {
-      // Descuentos de cabecera de productos
       queries.push(
         this.ventaProductoRepo.query(
           `SELECT dt.nombre,
@@ -304,8 +296,6 @@ export class ReportesService {
           [fechaInicio, fechaFin],
         ),
       );
-
-      // Descuentos de detalle de productos
       queries.push(
         this.ventaProductoRepo.query(
           `SELECT dt.nombre,
@@ -323,7 +313,6 @@ export class ReportesService {
     }
 
     if (incluyeServicios(tipo)) {
-      // Descuentos de cabecera de servicios
       queries.push(
         this.ventaServicioRepo.query(
           `SELECT dt.nombre,
@@ -337,8 +326,6 @@ export class ReportesService {
           [fechaInicio, fechaFin],
         ),
       );
-
-      // Descuentos de detalle de servicios
       queries.push(
         this.ventaServicioRepo.query(
           `SELECT dt.nombre,
@@ -363,7 +350,7 @@ export class ReportesService {
         const nombre = (row.nombre as string) ?? 'Sin tipo';
         const prev = mapa.get(nombre) ?? { monto: 0, cantidad: 0 };
         mapa.set(nombre, {
-          monto: prev.monto + toNum(row.monto),
+          monto:    prev.monto    + toNum(row.monto),
           cantidad: prev.cantidad + Number(row.cantidad),
         });
       }
@@ -371,7 +358,7 @@ export class ReportesService {
 
     return Array.from(mapa.entries()).map(([nombre, data]) => ({
       nombre,
-      monto: round2(data.monto),
+      monto:    round2(data.monto),
       cantidad: data.cantidad,
     }));
   }
@@ -425,7 +412,7 @@ export class ReportesService {
         const nombre = row.nombre as string;
         const prev = mapa.get(nombre) ?? { ventas: 0, ingresos: 0 };
         mapa.set(nombre, {
-          ventas: prev.ventas + Number(row.ventas),
+          ventas:   prev.ventas   + Number(row.ventas),
           ingresos: prev.ingresos + toNum(row.ingresos),
         });
       }
@@ -441,45 +428,32 @@ export class ReportesService {
   async getVentasSinCita(): Promise<any[]> {
     return this.ventaServicioRepo.query(`
       SELECT
-      vs.id                  AS venta_id,
-      vs.codigo_comprobante,
-      vs.fecha_venta,
-      vsd.id                 AS detalle_id,
-      vsd.descripcion_linea,
-      vsd.sesiones_totales,
-
-      COUNT(c.id)            AS sesiones_agendadas,
-
-      (vsd.sesiones_totales - COUNT(c.id)) AS sesiones_pendientes,
-
-      CONCAT(
-        p.nombres, ' ', p.apellido_paterno,
-        IF(p.apellido_materno IS NOT NULL AND p.apellido_materno != '',
-          CONCAT(' ', p.apellido_materno), '')
-      ) AS paciente,
-
-      mc.nombre AS motivo_cita
-
-    FROM venta_servicio_detalle vsd
-
-    INNER JOIN venta_servicio vs ON vs.id = vsd.venta_id
-
-    LEFT JOIN paciente p ON p.id = vsd.paciente_id
-    LEFT JOIN motivo_cita mc ON mc.id = vsd.motivo_cita_id
-
-    LEFT JOIN citas c 
-      ON c.venta_servicio_detalle_id = vsd.id
-      AND c.flg_activo = 1
-
-    WHERE vsd.tipo_item_venta = 1
-
-    GROUP BY vsd.id
-
-    HAVING sesiones_pendientes > 0
-
-    ORDER BY vs.fecha_venta DESC, vs.id DESC
-
-    LIMIT 300;
+        vs.id                  AS venta_id,
+        vs.codigo_comprobante,
+        vs.fecha_venta,
+        vsd.id                 AS detalle_id,
+        vsd.descripcion_linea,
+        vsd.sesiones_totales,
+        COUNT(c.id)            AS sesiones_agendadas,
+        (vsd.sesiones_totales - COUNT(c.id)) AS sesiones_pendientes,
+        CONCAT(
+          p.nombres, ' ', p.apellido_paterno,
+          IF(p.apellido_materno IS NOT NULL AND p.apellido_materno != '',
+            CONCAT(' ', p.apellido_materno), '')
+        ) AS paciente,
+        mc.nombre AS motivo_cita
+      FROM venta_servicio_detalle vsd
+      INNER JOIN venta_servicio vs ON vs.id = vsd.venta_id
+      LEFT JOIN paciente p ON p.id = vsd.paciente_id
+      LEFT JOIN motivo_cita mc ON mc.id = vsd.motivo_cita_id
+      LEFT JOIN citas c 
+        ON c.venta_servicio_detalle_id = vsd.id
+        AND c.flg_activo = 1
+      WHERE vsd.tipo_item_venta = 1
+      GROUP BY vsd.id
+      HAVING sesiones_pendientes > 0
+      ORDER BY vs.fecha_venta DESC, vs.id DESC
+      LIMIT 300
     `);
   }
 
@@ -507,17 +481,12 @@ export class ReportesService {
 
   private generarRangoDeFechas(inicio: string, fin: string): string[] {
     const fechas: string[] = [];
-    const actual = new Date(inicio);
-    const final = new Date(fin);
+    const actual = new Date(inicio + 'T00:00:00'); // fuerza hora local, evita desfase UTC
+    const final  = new Date(fin   + 'T00:00:00');
     while (actual <= final) {
       fechas.push(actual.toISOString().split('T')[0]);
       actual.setDate(actual.getDate() + 1);
     }
     return fechas;
-  }
-
-  private formatearFecha(fecha: string): string {
-    const [, month, day] = fecha.split('-');
-    return `${day}/${month}`;
   }
 }
