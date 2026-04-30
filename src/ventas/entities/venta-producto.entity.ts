@@ -9,6 +9,7 @@ import { TipoComprobante } from './tipo-comprobante.entity';
 // ✅ FIX: importar la entidad de promociones aplicadas
 import { VentaPromocionAplicada } from '../../promociones/entities/venta-promocion-aplicada.entity';
 import { ModalidadPago } from '../../historia-clinica/entities/modalidad-pago.entity';
+import { VentaProductoPago } from './venta-producto-pago.entity';
 
 @Entity('venta_producto')
 export class VentaProducto {
@@ -105,6 +106,9 @@ export class VentaProducto {
 
   @OneToMany(() => VentaProductoDetalle, (d) => d.venta, { cascade: true })
   detalles: VentaProductoDetalle[];
+
+  @OneToMany(() => VentaProductoPago, (p) => p.venta, { cascade: true })
+  pagos: VentaProductoPago[];
 
   // ✅ FIX: relación con promociones aplicadas — permite traerlas en el mismo query
   // Nota: VentaPromocionAplicada usa venta_id + tipo_venta_id (1=producto, 2=servicio).

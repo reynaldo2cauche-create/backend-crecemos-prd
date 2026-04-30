@@ -1701,6 +1701,7 @@ async obtenerEstadisticasSesiones(
           vsd.id,
           vsd.venta_id,
           vsd.paquete_combo_id,
+          vsd.tipo_venta_id,
           vsd.sesiones_totales,
           vsd.sesiones_usadas,
           COALESCE(pc.nombre, vsd.descripcion_linea, 'Sesión individual') as paquete_nombre,
@@ -1774,6 +1775,7 @@ async obtenerEstadisticasSesiones(
             paquete_id: paqueteKey,
             venta_servicio_detalle_id: Number(venta.id),
             paquete_combo_id: venta.paquete_combo_id,
+            tipo_venta_id: Number(venta.tipo_venta_id),
             paquete_nombre: venta.paquete_nombre,
             paquete_combo_nombre: venta.paquete_combo_id ? venta.paquete_nombre : null,
             sesiones_totales: sesionesTotales,
@@ -2018,10 +2020,13 @@ async obtenerInfoVentaDeCita(citaId: number): Promise<any> {
   // Última sesión: solo cuando YA se agendaron TODAS las sesiones del paquete y ésta es la última cronológicamente
   const esUltimaCita = todasAgendadas && ultimaCita?.id === citaId;
   // Penúltima: falta exactamente 1 sesión por agendar y ésta es la última agendada hasta ahora
-  const esPenultimaCita = !todasAgendadas && sesionesRestantes === 1 && ultimaCita?.id === citaId;
+  const esPenultimaCita = 
+  (!todasAgendadas && sesionesRestantes === 1 && ultimaCita?.id === citaId) ||
+  (todasAgendadas && sesionesTotales > 2 && penultimaCita?.id === citaId);
 
   return {
     sesiones_totales: sesionesTotales,
+    tipo_venta_id: venta?.tipo_venta_id ?? null,
     total_citas_agendadas: citasProgramadas.length,
     sesiones_restantes: sesionesRestantes,
     es_ultima_cita: esUltimaCita,

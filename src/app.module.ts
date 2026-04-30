@@ -159,6 +159,8 @@ import { DocumentoTarifa } from './inventario/entities/documento-tarifa.entity';
 import { PaqueteCombo } from './inventario/entities/paquete-combo.entity';
 import { PaqueteComboItem } from './inventario/entities/paquete-combo-item.entity';
 import { TipoComprobante } from './ventas/entities/tipo-comprobante.entity';
+import { VentaServicioPago } from './ventas/entities/venta-servicio-pago.entity';
+import { VentaProductoPago } from './ventas/entities/venta-producto-pago.entity';
 import { ResponsablePaciente } from './pacientes/entities/responsable-paciente.entity';
 import { Responsable } from './pacientes/entities/responsable.entity';
 
@@ -229,25 +231,23 @@ import { CampanaSeccion } from './campanas/entities/campana-seccion.entity';
       },
     }),
     TypeOrmModule.forRoot({
-      // type: 'mysql',
-      // host: 'localhost',
-      // port: 3306,
-      // username: 'crecemos',
-      // password: 'DB_PASSWORD_REMOVED',
-      // database: 'crecemos_website',
       type: 'mysql',
       host: 'localhost',
       port: 3306,
-      username: 'root',
-      password: 'd339yr8l',
-      database: 'crecemos_websites',
+      username: 'crecemos',
+      password: 'DB_PASSWORD_REMOVED',
+      database: 'crecemos_website',
+      // type: 'mysql',
+      // host: 'localhost',
+      // port: 3306,
+      // username: 'root',
+      // password: 'd339yr8l',
+      // database: 'crecemos_websites',
       extra: {
-        connectionLimit: 60,
+        connectionLimit: 10,
         waitForConnections: true,
         queueLimit: 0,
         connectTimeout: 20000,
-        enableKeepAlive: false,    // no mantener vivas conexiones inactivas (reduce Sleep)
-        idleTimeoutMillis: 30000,  // cerrar conexión si lleva 30s sin usarse
       },
       entities: [
         Postulacion,
@@ -383,6 +383,8 @@ import { CampanaSeccion } from './campanas/entities/campana-seccion.entity';
         VentaProducto,
         VentaProductoDetalle,
         TipoComprobante,
+        VentaServicioPago,
+        VentaProductoPago,
         // Promociones
         Promocion,
         PromocionRegla,

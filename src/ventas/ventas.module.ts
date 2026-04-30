@@ -7,8 +7,10 @@ import { TipoDescuento } from './entities/tipo-descuento.entity';
 import { CompradorExterno } from './entities/comprador-externo.entity';
 import { VentaServicio } from './entities/venta-servicio.entity';
 import { VentaServicioDetalle } from './entities/venta-servicio-detalle.entity';
+import { VentaServicioPago } from './entities/venta-servicio-pago.entity';
 import { VentaProducto } from './entities/venta-producto.entity';
 import { VentaProductoDetalle } from './entities/venta-producto-detalle.entity';
+import { VentaProductoPago } from './entities/venta-producto-pago.entity';
 
 import { Paciente } from '../pacientes/paciente.entity';
 import { PacienteResponsable } from '../pacientes/entities/paciente-responsable.entity';
@@ -48,8 +50,10 @@ import { ComprobanteService } from './services/comprobante.service';
       CompradorExterno,
       VentaServicio,
       VentaServicioDetalle,
+      VentaServicioPago,
       VentaProducto,
       VentaProductoDetalle,
+      VentaProductoPago,
       // Entidades externas necesarias para los repositorios
       Paciente,
       PacienteResponsable,

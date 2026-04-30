@@ -1,6 +1,21 @@
 import { IsNumber, IsString, IsOptional, IsArray, ValidateNested, IsPositive, Min, IsIn } from 'class-validator';
 import { Type } from 'class-transformer';
 
+export class PagoVentaServicioDto {
+  @IsNumber()
+  @Type(() => Number)
+  modalidad_pago_id: number;
+
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0.01)
+  @Type(() => Number)
+  monto: number;
+
+  @IsOptional()
+  @IsString()
+  referencia?: string;
+}
+
 export class DetalleVentaServicioDto {
   @IsNumber()
   @Type(() => Number)
@@ -124,6 +139,12 @@ export class CreateVentaServicioDto {
   @ValidateNested({ each: true })
   @Type(() => DetalleVentaServicioDto)
   detalles: DetalleVentaServicioDto[];
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => PagoVentaServicioDto)
+  pagos?: PagoVentaServicioDto[];
 
   @IsOptional()
   user_crea_id?: number;

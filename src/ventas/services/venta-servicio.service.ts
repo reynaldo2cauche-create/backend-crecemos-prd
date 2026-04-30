@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 import { VentaServicio } from '../entities/venta-servicio.entity';
 import { VentaServicioDetalle } from '../entities/venta-servicio-detalle.entity';
+import { VentaServicioPago } from '../entities/venta-servicio-pago.entity';
 import { CreateVentaServicioDto, DetalleVentaServicioDto } from '../dto/create-venta-servicio.dto';
 import { UpdateVentaServicioDto } from '../dto/update-venta-servicio.dto';
 import { VentaPromocionAplicada } from '../../promociones/entities/venta-promocion-aplicada.entity';
@@ -27,6 +28,8 @@ export class VentaServicioService {
     private readonly ventaPromoRepo: Repository<VentaPromocionAplicada>,
     @InjectRepository(ServicioPaquetePrecio)
     private readonly paquetePrecioRepo: Repository<ServicioPaquetePrecio>,
+    @InjectRepository(VentaServicioPago)
+    private readonly ventaPagoRepo: Repository<VentaServicioPago>,
     private readonly dataSource: DataSource,
     private readonly comprobanteService: ComprobanteService,
   ) {}
@@ -51,6 +54,8 @@ export class VentaServicioService {
       .leftJoinAndSelect('detalles.paciente', 'detalle_paciente')
       .leftJoinAndSelect('v.tipo_comprobante', 'tipo_comprobante')
       .leftJoinAndSelect('v.modalidad_pago', 'modalidad_pago')
+      .leftJoinAndSelect('v.pagos', 'pagos')
+      .leftJoinAndSelect('pagos.modalidad_pago', 'pago_modalidad')
       .orderBy('v.created_at', 'DESC');
 
     if (filtros?.pacienteId) {
@@ -193,6 +198,8 @@ export class VentaServicioService {
         .leftJoinAndSelect('detalles.paciente', 'detalle_paciente')
         .leftJoinAndSelect('v.tipo_comprobante', 'tipo_comprobante')
         .leftJoinAndSelect('v.modalidad_pago', 'modalidad_pago')
+        .leftJoinAndSelect('v.pagos', 'pagos')
+        .leftJoinAndSelect('pagos.modalidad_pago', 'pago_modalidad')
         .whereInIds(servicioIds)
         .getMany() : Promise.resolve([]),
 
@@ -210,6 +217,8 @@ export class VentaServicioService {
         .leftJoinAndSelect('detalles.descuento_tipo', 'detalle_descuento_tipo')
         .leftJoinAndSelect('v.tipo_comprobante', 'tipo_comprobante')
         .leftJoinAndSelect('v.modalidad_pago', 'modalidad_pago')
+        .leftJoinAndSelect('v.pagos', 'pagos')
+        .leftJoinAndSelect('pagos.modalidad_pago', 'pago_modalidad')
         .whereInIds(productoIds)
         .getMany() : Promise.resolve([]),
     ]);
@@ -262,7 +271,9 @@ export class VentaServicioService {
         'detalles.documento_tarifa',               // nombre del documento
         'detalles.descuento_tipo', 'detalles.paciente',
         'tipo_comprobante',
-        'modalidad_pago',                          // modalidad de pago
+        'modalidad_pago',
+        'pagos',
+        'pagos.modalidad_pago',
       ],
     });
     if (!v) throw new NotFoundException(`Venta de servicio ${id} no encontrada`);
@@ -494,6 +505,19 @@ export class VentaServicioService {
         await manager.save(detalle);
       }
 
+      // Guardar pagos múltiples
+      if (dto.pagos && dto.pagos.length > 0) {
+        for (const p of dto.pagos) {
+          const pago = manager.create(VentaServicioPago, {
+            venta_id: savedVenta.id,
+            modalidad_pago_id: p.modalidad_pago_id,
+            monto: p.monto,
+            referencia: p.referencia ?? null,
+          });
+          await manager.save(pago);
+        }
+      }
+
       const ventaCompleta = await manager.findOne(VentaServicio, {
         where: { id: savedVenta.id },
         relations: [
@@ -502,10 +526,9 @@ export class VentaServicioService {
           'detalles.servicio_tarifa',
           'detalles.servicio_tarifa.servicio',
           'detalles.servicio_tarifa.motivo_cita',
-          
           'detalles.tipo_venta', 'detalles.paquete',
           'detalles.descuento_tipo', 'detalles.paciente',
-          'tipo_comprobante',
+          'tipo_comprobante', 'modalidad_pago', 'pagos', 'pagos.modalidad_pago',
         ],
       });
 

@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 import { VentaProducto } from '../entities/venta-producto.entity';
 import { VentaProductoDetalle } from '../entities/venta-producto-detalle.entity';
+import { VentaProductoPago } from '../entities/venta-producto-pago.entity';
 import { CreateVentaProductoDto, DetalleVentaProductoDto } from '../dto/create-venta-producto.dto';
 import { UpdateVentaProductoDto } from '../dto/update-venta-producto.dto';
 import { Producto } from '../../inventario/entities/producto.entity';
@@ -24,6 +25,8 @@ export class VentaProductoService {
     // ✅ FIX: inyectar el repositorio de VentaPromocionAplicada
     @InjectRepository(VentaPromocionAplicada)
     private readonly ventaPromoRepo: Repository<VentaPromocionAplicada>,
+    @InjectRepository(VentaProductoPago)
+    private readonly ventaPagoRepo: Repository<VentaProductoPago>,
     private readonly dataSource: DataSource,
     private readonly comprobanteService: ComprobanteService,
   ) {}
@@ -41,6 +44,8 @@ export class VentaProductoService {
       .leftJoinAndSelect('detalles.descuento_tipo', 'detalle_descuento_tipo')
       .leftJoinAndSelect('v.tipo_comprobante', 'tipo_comprobante')
       .leftJoinAndSelect('v.modalidad_pago', 'modalidad_pago')
+      .leftJoinAndSelect('v.pagos', 'pagos')
+      .leftJoinAndSelect('pagos.modalidad_pago', 'pago_modalidad')
       .orderBy('v.created_at', 'DESC');
 
     if (filtros?.desde) qb.andWhere('v.fecha_venta >= :desde', { desde: filtros.desde });
@@ -80,7 +85,7 @@ export class VentaProductoService {
       relations: [
         'tipo_comprador', 'paciente', 'responsable', 'comprador_externo',
         'descuento_tipo', 'detalles', 'detalles.producto', 'detalles.descuento_tipo',
-        'tipo_comprobante',
+        'tipo_comprobante', 'modalidad_pago', 'pagos', 'pagos.modalidad_pago',
       ],
     });
     if (!v) throw new NotFoundException(`Venta de producto ${id} no encontrada`);
@@ -158,18 +163,28 @@ export class VentaProductoService {
           .execute();
       }
 
+      // Guardar pagos múltiples
+      if (dto.pagos && dto.pagos.length > 0) {
+        for (const p of dto.pagos) {
+          const pago = manager.create(VentaProductoPago, {
+            venta_id: savedVenta.id,
+            modalidad_pago_id: p.modalidad_pago_id,
+            monto: p.monto,
+            referencia: p.referencia ?? null,
+          });
+          await manager.save(pago);
+        }
+      }
+
       const ventaCompleta = await manager.findOne(VentaProducto, {
         where: { id: savedVenta.id },
         relations: [
           'tipo_comprador', 'paciente', 'responsable', 'comprador_externo',
           'descuento_tipo', 'detalles', 'detalles.producto', 'detalles.descuento_tipo',
-          'tipo_comprobante',
+          'tipo_comprobante', 'modalidad_pago', 'pagos', 'pagos.modalidad_pago',
         ],
       });
 
-      // ✅ FIX: la venta recién creada aún no tiene promociones registradas en BD
-      // (el frontend las registra justo después con POST /promociones/registrar-aplicacion).
-      // Dejamos el array vacío aquí; el historial las mostrará en la siguiente consulta.
       ventaCompleta.promociones_aplicadas = [];
 
       return ventaCompleta;
