@@ -205,6 +205,16 @@ export class SolicitudInformeController {
   }
 
   /**
+   * GET /solicitudes-informe/por-venta/:ventaId
+   * Verifica si una venta de servicio ya tiene una solicitud de informe asociada.
+   * Usado por el frontend para bloquear eliminar/editar ventas con solicitud activa.
+   */
+  @Get('por-venta/:ventaId')
+  verificarPorVenta(@Param('ventaId', ParseIntPipe) ventaId: number) {
+    return this.service.verificarPorVenta(ventaId);
+  }
+
+  /**
    * GET /solicitudes-informe/:id
    * Todos pueden consultar una solicitud, pero la vista varía según el rol.
    * IMPORTANTE: Esta ruta genérica DEBE ir AL FINAL para no capturar rutas específicas

@@ -789,6 +789,34 @@ export class SolicitudInformeService {
   }
 
   // ══════════════════════════════════════════════════════════════════════════
+  // VERIFICAR POR VENTA
+  // ══════════════════════════════════════════════════════════════════════════
+
+  async verificarPorVenta(ventaId: number): Promise<{ tieneSolicitud: boolean; mensaje?: string }> {
+    const solicitud = await this.solicitudRepo.findOne({
+      where: { venta_servicio_id: ventaId },
+    });
+
+    if (!solicitud) {
+      return { tieneSolicitud: false };
+    }
+
+    const estadoLabels: Record<number, string> = {
+      1: 'Pendiente de Subida',
+      2: 'Pendiente de Revisión',
+      3: 'Rechazado',
+      4: 'Aprobado',
+      5: 'Entregado',
+    };
+    const estadoLabel = estadoLabels[solicitud.estado_solicitud_id] ?? 'En proceso';
+
+    return {
+      tieneSolicitud: true,
+      mensaje: `Esta venta tiene una solicitud de informe asociada (solicitud #${solicitud.id} — ${estadoLabel})`,
+    };
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
   // CATÁLOGOS
   // ══════════════════════════════════════════════════════════════════════════
 
