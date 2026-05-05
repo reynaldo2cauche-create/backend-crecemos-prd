@@ -218,9 +218,9 @@ export class CitasService {
 
     // 🛒 VALIDAR QUE LA VENTA EXISTE Y TIENE SESIONES DISPONIBLES
     const ventaDetalle = await this.ventaDetalleRepo.findOne({
-      where: { id: dto.venta_servicio_detalle_id },
-      relations: ['venta', 'servicio_tarifa', 'servicio_tarifa.servicio', 'servicio_tarifa.motivo_cita'],
-    });
+    where: { id: dto.venta_servicio_detalle_id },
+    relations: ['venta', 'servicio_tarifa', 'servicio_tarifa.servicio', 'servicio_tarifa.motivo_cita'],
+  });
 
     if (!ventaDetalle) {
       throw new BadRequestException(`La venta seleccionada (ID: ${dto.venta_servicio_detalle_id}) no existe.`);

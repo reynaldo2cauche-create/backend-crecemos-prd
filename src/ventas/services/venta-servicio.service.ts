@@ -353,6 +353,9 @@ export class VentaServicioService {
           let precioUnitario = 0;
           let motivoCitaId = null;
           let descripcionLinea = d.descripcion_linea;
+          let _servicio_id: number | null = null;
+          let _motivo_nombre: string | null = null;
+          let _servicio_nombre: string | null = null;
 
           // Si es paquete combo (tipo_venta_id=3), precio_unitario = 0
           // El precio total está en paquete_combo.precioTotal
@@ -377,6 +380,9 @@ export class VentaServicioService {
 
             // Copiar motivo_cita_id desde servicio_tarifa (DESNORMALIZACIÓN)
             motivoCitaId = tarifa.motivo_cita_id;
+            _servicio_id = tarifa.servicio_id;
+            _motivo_nombre = tarifa.motivo_cita?.nombre ?? null;
+            _servicio_nombre = tarifa.servicio?.nombre ?? null;
 
             // Precio: Si tiene paquete_combo_id con precio del frontend, usar ese precio
             if (tieneComboConPrecio) {
@@ -447,11 +453,67 @@ export class VentaServicioService {
             motivo_cita_id: motivoCitaId,
             precio_unitario: precioUnitario,
             descripcion_linea: descripcionLinea,
+            _servicio_id,
+            _motivo_nombre,
+            _servicio_nombre,
           };
         }),
       );
 
-      const detallesCalculados = detallesEnriquecidos.map((d) => this.calcularDetalle(d));
+      // Regla clínica: Psicología Infantil (4), Psicología Adolescentes (12),
+      // Psicoterapia Individual (7) — si el motivo es Evaluación y sesiones >= 2,
+      // la última sesión se convierte en Informe Verbal.
+      const SERVICIOS_REGLA_EVALUACION = [4, 7, 12];
+      const detallesConRegla: typeof detallesEnriquecidos = [];
+
+      for (const d of detallesEnriquecidos) {
+        const aplicaRegla =
+          d.tipo_item_venta === 1 &&
+          d.sesiones_totales >= 2 &&
+          SERVICIOS_REGLA_EVALUACION.includes(d._servicio_id) &&
+          d._motivo_nombre?.toLowerCase().includes('evaluaci');
+
+        if (aplicaRegla) {
+          const tarifaInformeVerbal = await manager
+            .createQueryBuilder(ServicioTarifa, 'st')
+            .innerJoinAndSelect('st.motivo_cita', 'mc')
+            .where('st.servicio_id = :sid', { sid: d._servicio_id })
+            .andWhere('LOWER(mc.nombre) LIKE :nombre', { nombre: '%informe verbal%' })
+            .andWhere('st.flg_activo = 1')
+            .getOne();
+
+          if (!tarifaInformeVerbal) {
+            throw new BadRequestException(
+              `No existe tarifa de "Informe Verbal" configurada para el servicio "${d._servicio_nombre}". Configúrela en tarifas antes de registrar la venta.`,
+            );
+          }
+
+          const sesionesEval = d.sesiones_totales - 1;
+          const labelEval = sesionesEval === 1 ? 'Sesión' : 'Sesiones';
+
+          detallesConRegla.push({
+            ...d,
+            sesiones_totales: sesionesEval,
+            descripcion_linea: `${sesionesEval} ${labelEval} de ${d._motivo_nombre} - ${d._servicio_nombre}`,
+          });
+
+          detallesConRegla.push({
+            ...d,
+            servicio_tarifa_id: tarifaInformeVerbal.id,
+            motivo_cita_id: tarifaInformeVerbal.motivo_cita_id,
+            precio_unitario: parseFloat(String(tarifaInformeVerbal.precio)),
+            sesiones_totales: 1,
+            tipo_venta_id: 1,
+            paquete_id: null,
+            paquete_combo_id: null,
+            descripcion_linea: `1 Sesión de ${tarifaInformeVerbal.motivo_cita.nombre} - ${d._servicio_nombre}`,
+          });
+        } else {
+          detallesConRegla.push(d);
+        }
+      }
+
+      const detallesCalculados = detallesConRegla.map((d) => this.calcularDetalle(d));
 
       const subtotal = detallesCalculados.reduce((s, d) => s + d.subtotal, 0);
       const descuentoGlobalMonto = this.calcularDescuentoMonto(subtotal, dto.descuento_tipo_id, dto.descuento_valor);
