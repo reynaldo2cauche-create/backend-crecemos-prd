@@ -47,7 +47,7 @@ async function bootstrap() {
   //   origin: 'https://www.crecemos.com.pe',
   //   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   //   allowedHeaders: ['Content-Type', 'Authorization'],
-  //   credentials: true,
+  //   credentials: true, 
   //   optionsSuccessStatus: 200, // <-- Esto es importante para algunos navegadores
   // });
 
@@ -63,7 +63,7 @@ app.useGlobalPipes(new ValidationPipe({
         });
       const messages = flatten(errors);
       console.error('❌ VALIDATION DETAIL:', JSON.stringify(messages, null, 2));
-      return new BadRequestException(messages);
+      return new BadRequestException(messages.join(', '));
     },
   }));
 
