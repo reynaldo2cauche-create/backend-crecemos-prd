@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
+import { Injectable, BadRequestException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { PacienteServicio } from './paciente-servicio.entity';
@@ -8,9 +8,12 @@ import { Servicios } from '../catalogos/servicios.entity';
 import { AsignarServicioTerapeutaDto } from './dto/asignar-servicio-terapeuta.dto';
 import { AsignacionTerapeuta } from './asignacion-terapeuta.entity';
 import { TrabajadorCentro } from '../usuarios/trabajador-centro.entity';
+import { NotificacionesService } from 'src/notificaciones/notificaciones.service';
 
 @Injectable()
 export class PacienteServicioService {
+  private readonly logger = new Logger(PacienteServicioService.name);
+
   constructor(
     @InjectRepository(PacienteServicio)
     private pacienteServicioRepository: Repository<PacienteServicio>,
@@ -22,6 +25,7 @@ export class PacienteServicioService {
     private asignacionTerapeutaRepository: Repository<AsignacionTerapeuta>,
     @InjectRepository(TrabajadorCentro)
     private trabajadorRepository: Repository<TrabajadorCentro>,
+    private readonly notificacionesService: NotificacionesService,
   ) {}
 
   async create(createPacienteServicioDto: CreatePacienteServicioDto): Promise<PacienteServicio> {
@@ -59,10 +63,10 @@ export class PacienteServicioService {
 
   async findByPaciente(pacienteId: number): Promise<PacienteServicio[]> {
     return this.pacienteServicioRepository.find({
-      relations: ['paciente', 'servicio', 'asignaciones', 'asignaciones.terapeuta'],
-      where: { 
+      relations: ['paciente', 'servicio', 'asignaciones', 'asignaciones.terapeuta', 'estadoPaciente'],
+      where: {
         paciente: { id: pacienteId },
-        activo: true 
+        activo: true
       }
     });
   }
@@ -85,13 +89,110 @@ export class PacienteServicioService {
   }
 
   async update(id: number, updatePacienteServicioDto: Partial<CreatePacienteServicioDto>): Promise<PacienteServicio> {
-    const pacienteServicio = await this.findOne(id);
-    if (!pacienteServicio) {
-      throw new Error('PacienteServicio no encontrado');
+    const updateData: any = { ...updatePacienteServicioDto };
+    const estadoCambiado = updatePacienteServicioDto.estado_paciente_id !== undefined;
+
+    this.logger.log(`📝 update() PS id=${id} | estado_paciente_id=${updatePacienteServicioDto.estado_paciente_id} | estadoCambiado=${estadoCambiado}`);
+
+    // Capturar estado anterior antes de modificar
+    let estadoAnteriorNombre: string | null = null;
+    if (estadoCambiado) {
+      const anterior = await this.pacienteServicioRepository.findOne({
+        where: { id },
+        relations: ['estadoPaciente'],
+      });
+      estadoAnteriorNombre = anterior?.estadoPaciente?.nombre ?? 'Sin estado';
+
+      // Map raw FK to relation so TypeORM doesn't reset it to null via save()
+      updateData.estadoPaciente = updatePacienteServicioDto.estado_paciente_id
+        ? { id: updatePacienteServicioDto.estado_paciente_id }
+        : null;
+      delete updateData.estado_paciente_id;
     }
 
-    Object.assign(pacienteServicio, updatePacienteServicioDto);
-    return this.pacienteServicioRepository.save(pacienteServicio);
+    await this.pacienteServicioRepository.update(id, updateData);
+
+    const result = await this.pacienteServicioRepository.findOne({
+      relations: ['paciente', 'servicio', 'asignaciones', 'asignaciones.terapeuta', 'estadoPaciente'],
+      where: { id }
+    });
+
+    this.logger.log(`📝 update() result.paciente.id=${result?.paciente?.id} | estadoNuevo=${result?.estadoPaciente?.nombre}`);
+
+    if (estadoCambiado && result?.paciente?.id) {
+      await this.recalcularEstadoGlobal(result.paciente.id);
+      await this.notificarCambioEstadoServicio(result, estadoAnteriorNombre);
+    }
+
+    return result;
+  }
+
+  private async notificarCambioEstadoServicio(
+    ps: PacienteServicio,
+    estadoAnterior: string | null,
+  ): Promise<void> {
+    try {
+      const pacienteNombre = ps.paciente
+        ? `${ps.paciente.nombres} ${ps.paciente.apellido_paterno ?? ''} ${ps.paciente.apellido_materno ?? ''}`.trim()
+        : `Paciente #${ps.id}`;
+      const servicioNombre = ps.servicio?.nombre ?? 'servicio';
+      const estadoNuevo = ps.estadoPaciente?.nombre ?? 'Sin estado';
+
+      this.logger.log(`🔔 Notificando cambio: PS id=${ps.id} | ${pacienteNombre} | ${servicioNombre} | "${estadoAnterior}" → "${estadoNuevo}"`);
+
+      const evento = await this.notificacionesService.crearEvento({
+        tipo_evento: 'CAMBIO_ESTADO_SERVICIO',
+        descripcion: `Estado del servicio ${servicioNombre} de ${pacienteNombre} cambió de "${estadoAnterior}" a "${estadoNuevo}"`,
+        usuario_id: 1,
+        datos_adicionales: {
+          paciente_servicio_id: ps.id,
+          paciente_id: ps.paciente?.id,
+          paciente_nombre: pacienteNombre,
+          servicio_id: ps.servicio?.id,
+          servicio_nombre: servicioNombre,
+          estado_anterior: estadoAnterior,
+          estado_nuevo: estadoNuevo,
+        },
+      });
+
+      await this.notificacionesService.crearNotificacion({
+        tipo_notificacion: 'CAMBIO_ESTADO_SERVICIO',
+        titulo: 'Cambio de estado de servicio',
+        mensaje: `${pacienteNombre} - ${servicioNombre}: "${estadoAnterior}" -> "${estadoNuevo}"`,
+        evento_id: evento.id,
+        roles_destino: [1],
+      });
+
+      this.logger.log(`✅ Notificación CAMBIO_ESTADO_SERVICIO creada correctamente`);
+    } catch (error) {
+      this.logger.error(`❌ Error al notificar cambio de estado de servicio: ${error?.message}`, error?.stack);
+    }
+  }
+
+  private async recalcularEstadoGlobal(pacienteId: number): Promise<void> {
+    const servicios = await this.pacienteServicioRepository.find({
+      where: { paciente: { id: pacienteId }, activo: true },
+      relations: ['estadoPaciente'],
+    });
+    if (servicios.length === 0) return;
+
+    const estadoIds = servicios
+      .map(ps => ps.estadoPaciente?.id ?? null)
+      .filter((id): id is number => id !== null);
+    if (estadoIds.length === 0) return;
+
+    const PRIORIDAD = [4, 3, 2, 1];
+    const todosInactivos = estadoIds.every(id => id === 5);
+    let nuevoEstadoId: number;
+
+    if (todosInactivos) {
+      nuevoEstadoId = 5;
+    } else {
+      const activos = estadoIds.filter(id => id !== 5);
+      nuevoEstadoId = PRIORIDAD.find(p => activos.includes(p)) ?? 1;
+    }
+
+    await this.pacienteRepository.update(pacienteId, { estado: { id: nuevoEstadoId } as any });
   }
 
   async remove(id: number): Promise<void> {

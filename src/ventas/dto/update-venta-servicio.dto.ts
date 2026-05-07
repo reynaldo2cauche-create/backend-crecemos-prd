@@ -1,6 +1,6 @@
 import { IsNumber, IsString, IsOptional, IsArray, ValidateNested, Min, IsIn } from 'class-validator';
 import { Type } from 'class-transformer';
-import { DetalleVentaServicioDto } from './create-venta-servicio.dto';
+import { DetalleVentaServicioDto, PagoVentaServicioDto } from './create-venta-servicio.dto';
 
 export class UpdateVentaServicioDto {
   @IsOptional()
@@ -56,6 +56,12 @@ export class UpdateVentaServicioDto {
   @IsNumber()
   @Type(() => Number)
   modalidad_pago_id?: number;
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => PagoVentaServicioDto)
+  pagos?: PagoVentaServicioDto[];
 
   @IsOptional()
   @IsArray()

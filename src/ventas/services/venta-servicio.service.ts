@@ -668,6 +668,9 @@ export class VentaServicioService {
             let motivoCitaId = null;
             let descripcionLinea = d.descripcion_linea;
 
+            // Si el ítem pertenece a un combo, el frontend ya envía el precio correcto
+            const tieneComboConPrecio = d.paquete_combo_id && d.precio_unitario !== undefined && d.precio_unitario !== null;
+
             if (tipoItem === 1) {
               if (!d.servicio_tarifa_id) {
                 throw new BadRequestException('servicio_tarifa_id es obligatorio para tipo_item_venta=1');
@@ -682,26 +685,28 @@ export class VentaServicioService {
               }
 
               motivoCitaId = tarifa.motivo_cita_id;
-              precioUnitario = parseFloat(String(tarifa.precio));
 
-              if (d.tipo_venta_id === 2 && d.paquete_id) {
-              const config = await manager.findOne(ServicioPaquetePrecio, {
-                where: { servicio_tarifa_id: d.servicio_tarifa_id, paquete_id: d.paquete_id, flg_activo: 1 },
-              });
-              if (config) {
-                // Buscar el paquete para obtener sus sesiones base
-                const paquete = await manager.findOne(Paquete, {  // ← ajusta el nombre de tu entidad
-                  where: { id: d.paquete_id },
-                });
-                const sesionesPaquete = paquete?.cantidadSesiones ;
-                
-                if (config.tipo_calculo === 'precio_total') {
-                  precioUnitario = parseFloat(String(config.valor)) / sesionesPaquete;  // ← divide por sesiones del paquete
-                } else if (config.tipo_calculo === 'descuento_porcentaje') {
-                  precioUnitario = precioUnitario * (1 - parseFloat(String(config.valor)) / 100);
+              if (tieneComboConPrecio) {
+                // Respetar el precio enviado por el frontend (precio total del combo o 0 para ítems secundarios)
+                precioUnitario = parseFloat(String(d.precio_unitario));
+              } else {
+                precioUnitario = parseFloat(String(tarifa.precio));
+
+                if (d.tipo_venta_id === 2 && d.paquete_id) {
+                  const config = await manager.findOne(ServicioPaquetePrecio, {
+                    where: { servicio_tarifa_id: d.servicio_tarifa_id, paquete_id: d.paquete_id, flg_activo: 1 },
+                  });
+                  if (config) {
+                    const paquete = await manager.findOne(Paquete, { where: { id: d.paquete_id } });
+                    const sesionesPaquete = paquete?.cantidadSesiones;
+                    if (config.tipo_calculo === 'precio_total') {
+                      precioUnitario = parseFloat(String(config.valor)) / sesionesPaquete;
+                    } else if (config.tipo_calculo === 'descuento_porcentaje') {
+                      precioUnitario = precioUnitario * (1 - parseFloat(String(config.valor)) / 100);
+                    }
+                  }
                 }
               }
-            }
 
               if (!descripcionLinea && tarifa.motivo_cita && tarifa.servicio) {
                 const sesionLabel = d.sesiones_totales === 1 ? 'Sesión' : 'Sesiones';
@@ -720,7 +725,11 @@ export class VentaServicioService {
                 throw new BadRequestException(`DocumentoTarifa ${d.documento_tarifa_id} no encontrado o inactivo`);
               }
 
-              precioUnitario = parseFloat(String(documento.precio));
+              if (tieneComboConPrecio) {
+                precioUnitario = parseFloat(String(d.precio_unitario));
+              } else {
+                precioUnitario = parseFloat(String(documento.precio));
+              }
 
               if (!descripcionLinea) {
                 descripcionLinea = documento.nombre;
@@ -798,6 +807,20 @@ export class VentaServicioService {
       }
 
       await manager.update(VentaServicio, id, camposActualizables);
+
+      // Reemplazar pagos si se envían
+      if (dto.pagos && dto.pagos.length > 0) {
+        await manager.delete(VentaServicioPago, { venta_id: id });
+        for (const p of dto.pagos) {
+          const pago = manager.create(VentaServicioPago, {
+            venta_id: id,
+            modalidad_pago_id: p.modalidad_pago_id,
+            monto: p.monto,
+            referencia: p.referencia ?? null,
+          });
+          await manager.save(pago);
+        }
+      }
 
       return this.findOne(id);
     });

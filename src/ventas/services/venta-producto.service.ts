@@ -288,6 +288,20 @@ export class VentaProductoService {
 
       await manager.update(VentaProducto, id, camposActualizables);
 
+      // Reemplazar pagos si se envían
+      if (dto.pagos && dto.pagos.length > 0) {
+        await manager.delete(VentaProductoPago, { venta_id: id });
+        for (const p of dto.pagos) {
+          const pago = manager.create(VentaProductoPago, {
+            venta_id: id,
+            modalidad_pago_id: p.modalidad_pago_id,
+            monto: p.monto,
+            referencia: p.referencia ?? null,
+          });
+          await manager.save(pago);
+        }
+      }
+
       return this.findOne(id);
     });
   }

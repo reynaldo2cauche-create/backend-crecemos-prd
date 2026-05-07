@@ -57,6 +57,7 @@ export class PacienteController {
     @Query('distritoId') distritoId?: string,
     @Query('estadoId') estadoId?: string,
     @Query('servicioId') servicioId?: string,
+    @Query('estadoServicioId') estadoServicioId?: string,
   ) {
     const parsedTerapeutaId = terapeutaId && !isNaN(Number(terapeutaId))
       ? parseInt(terapeutaId, 10)
@@ -80,6 +81,7 @@ export class PacienteController {
       distritoId: distritoId && !isNaN(Number(distritoId)) ? parseInt(distritoId, 10) : undefined,
       estadoId: estadoId && !isNaN(Number(estadoId)) ? parseInt(estadoId, 10) : undefined,
       servicioId: servicioId && !isNaN(Number(servicioId)) ? parseInt(servicioId, 10) : undefined,
+      estadoServicioId: estadoServicioId && !isNaN(Number(estadoServicioId)) ? parseInt(estadoServicioId, 10) : undefined,
     };
 
     return this.pacienteService.findAll(parsedFilters);
@@ -240,9 +242,8 @@ async findAllIncludingInactive(@Query() query: any) {
 
       return {
         success: true,
-        message: 'Actualización de pacientes inactivos ejecutada manualmente',
+        message: 'Actualización de servicios inactivos ejecutada manualmente',
         actualizados: resultado.actualizados,
-        pacientes_ids: resultado.pacientesIds,
         detalles: resultado.detalles,
         ejecutado_por: usuarioId,
         fecha: new Date().toISOString(),

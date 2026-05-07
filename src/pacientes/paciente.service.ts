@@ -17,6 +17,7 @@ import { ConveniosService } from 'src/convenios/convenios.service';
 import { tieneAccesoBeneficios } from '../constants/estados-paciente.constants';
 import { Cita } from '../citas/entities/cita.entity';
 import { NotificacionesService } from 'src/notificaciones/notificaciones.service';
+import { AuditoriaService } from 'src/auditoria/auditoria.service';
 
 @Injectable()
 export class PacienteService {
@@ -39,6 +40,7 @@ export class PacienteService {
     private parejaPacienteService: ParejaPacienteService,
     private pacienteResponsableService: PacienteResponsableService,
     private readonly notificacionesService: NotificacionesService,
+    private readonly auditoriaService: AuditoriaService,
   ) {}
 
   /**
@@ -254,6 +256,7 @@ async findAll(filters?: {
   distritoId?: number;
   estadoId?: number;
   servicioId?: number;
+  estadoServicioId?: number;
 }): Promise<Paciente[]> {
   const queryBuilder = this.pacienteRepository
     .createQueryBuilder('paciente')
@@ -344,9 +347,16 @@ async findAll(filters?: {
 
   // Filtro por servicio asignado
   if (filters?.servicioId) {
-    queryBuilder.andWhere('pacienteServicioGeneral.servicio.id = :servicioId', { 
-      servicioId: filters.servicioId 
+    queryBuilder.andWhere('pacienteServicioGeneral.servicio.id = :servicioId', {
+      servicioId: filters.servicioId
     });
+  }
+
+  // Filtro por estado de servicio (por servicio específico, no global)
+  if (filters?.estadoServicioId) {
+    queryBuilder
+      .innerJoin('paciente.pacienteServicios', 'ps_estado', 'ps_estado.activo = :psEstActivo', { psEstActivo: true })
+      .innerJoin('ps_estado.estadoPaciente', 'ep_estado', 'ep_estado.id = :estadoServicioId', { estadoServicioId: filters.estadoServicioId });
   }
 
   queryBuilder.orderBy('paciente.created_at', 'DESC');
@@ -359,14 +369,17 @@ async findAll(filters?: {
       const servicios = await this.pacienteServicioRepository
         .createQueryBuilder('ps')
         .leftJoinAndSelect('ps.servicio', 'servicio')
+        .leftJoinAndSelect('ps.estadoPaciente', 'estadoPaciente')
         .where('ps.paciente_id = :pacienteId', { pacienteId: paciente.id })
         .andWhere('ps.activo = :activo', { activo: true })
-        .andWhere('ps.estado = :estado', { estado: 'ACTIVO' })
         .getMany();
 
       (paciente as any).servicios = servicios.map(ps => ({
+        id: ps.id,
         servicio_id: ps.servicio.id,
-        servicio_nombre: ps.servicio.nombre
+        servicio_nombre: ps.servicio.nombre,
+        estado_paciente_id: ps.estadoPaciente?.id ?? null,
+        estado_nombre: ps.estadoPaciente?.nombre ?? null,
       }));
 
       // Mantener compatibilidad con código antiguo que usa .servicio
@@ -987,18 +1000,20 @@ async findAll(filters?: {
       .andWhere('paciente.fecha_actua <= :fin', { fin: ultimoDiaMes })
       .getCount();
 
-    // Estadísticas por estado (excluyendo "Inactivo")
-    const estadisticasPorEstado = await this.pacienteRepository
-      .createQueryBuilder('paciente')
-      .leftJoinAndSelect('paciente.estado', 'estado')
-      .select('estado.id', 'id')
-      .addSelect('estado.nombre', 'nombre')
-      .addSelect('COUNT(paciente.id)', 'total')
-      .where('paciente.activo = :activo', { activo: true })
+    // Estadísticas por estado desde paciente_servicio (suma todos los servicios activos)
+    const estadisticasPorEstado = await this.pacienteServicioRepository
+      .createQueryBuilder('ps')
+      .innerJoin('ps.estadoPaciente', 'ep')
+      .innerJoin('ps.paciente', 'paciente')
+      .select('ep.id', 'id')
+      .addSelect('ep.nombre', 'nombre')
+      .addSelect('COUNT(ps.id)', 'total')
+      .where('ps.activo = :activo', { activo: true })
+      .andWhere('ep.nombre != :inactivo', { inactivo: 'Inactivo' })
+      .andWhere('paciente.activo = :pacActivo', { pacActivo: true })
       .andWhere('paciente.mostrar_en_listado = :mostrar', { mostrar: true })
-      .andWhere('estado.nombre != :inactivo', { inactivo: 'Inactivo' })
-      .groupBy('estado.id')
-      .addGroupBy('estado.nombre')
+      .groupBy('ep.id')
+      .addGroupBy('ep.nombre')
       .getRawMany();
 
     return {
@@ -1007,8 +1022,8 @@ async findAll(filters?: {
       estadisticas: estadisticasPorEstado.map(e => ({
         estadoId: e.id,
         estadoNombre: e.nombre,
-        total: parseInt(e.total)
-      }))
+        total: parseInt(e.total),
+      })),
     };
   }
 
@@ -1141,4 +1156,191 @@ async actualizarPacientesInactivos(): Promise<{
     detalles: pacientesParaInactivar,
   };
 }
+
+  /**
+   * Marca como Inactivo (estado_paciente_id = 5) cada paciente_servicio activo
+   * cuyo paciente no tenga citas para ese servicio en los últimos 15 días
+   * ni citas futuras programadas para el mismo servicio.
+   * Envía notificación al administrador por cada servicio inactivado.
+   */
+  async actualizarServiciosInactivos(): Promise<{
+    actualizados: number;
+    detalles: Array<{ pacienteServicioId: number; paciente: string; servicio: string; ultimaCita: string | null }>;
+  }> {
+    this.logger.log('🔄 Iniciando verificación de servicios inactivos por paciente...');
+
+    const estadoInactivo = await this.estadoPacienteRepository.findOne({ where: { id: 5 } });
+    if (!estadoInactivo) {
+      this.logger.error('❌ Estado "Inactivo" (id=5) no encontrado');
+      return { actualizados: 0, detalles: [] };
+    }
+
+    const hoy = new Date().toISOString().split('T')[0];
+    const fechaLimite = new Date();
+    fechaLimite.setDate(fechaLimite.getDate() - 15);
+    const fechaLimiteStr = fechaLimite.toISOString().split('T')[0];
+
+    // Obtener todos los paciente_servicio activos que NO estén ya inactivos
+    const serviciosActivos = await this.pacienteServicioRepository.find({
+      where: { activo: true },
+      relations: ['paciente', 'servicio', 'estadoPaciente'],
+    });
+
+    const paraInactivar = serviciosActivos.filter(
+      ps => ps.estadoPaciente?.id !== 5 && ps.paciente?.activo && ps.paciente?.mostrar_en_listado,
+    );
+
+    this.logger.log(`👥 Servicios activos a verificar: ${paraInactivar.length}`);
+
+    const detalles: Array<{ pacienteServicioId: number; paciente: string; servicio: string; ultimaCita: string | null }> = [];
+
+    for (const ps of paraInactivar) {
+      // Última cita pasada para este paciente + servicio
+      const ultimaCita = await this.citaRepository
+        .createQueryBuilder('cita')
+        .where('cita.paciente_id = :pacienteId', { pacienteId: ps.paciente.id })
+        .andWhere('cita.servicio_id = :servicioId', { servicioId: ps.servicio.id })
+        .andWhere('cita.flg_activo = 1')
+        .andWhere('cita.fecha <= :hoy', { hoy })
+        .orderBy('cita.fecha', 'DESC')
+        .addOrderBy('cita.hora_inicio', 'DESC')
+        .getOne();
+
+      // Si tiene citas futuras para este servicio, no inactivar
+      const citasFuturas = await this.citaRepository
+        .createQueryBuilder('cita')
+        .where('cita.paciente_id = :pacienteId', { pacienteId: ps.paciente.id })
+        .andWhere('cita.servicio_id = :servicioId', { servicioId: ps.servicio.id })
+        .andWhere('cita.flg_activo = 1')
+        .andWhere('cita.fecha > :hoy', { hoy })
+        .getCount();
+
+      if (citasFuturas > 0) continue;
+
+      // Sin ninguna cita pasada → no inactivar (es nuevo en el servicio)
+      if (!ultimaCita) continue;
+
+      const fechaRaw = ultimaCita.fecha as unknown as string | Date;
+      const fechaUltima = fechaRaw instanceof Date
+        ? fechaRaw.toISOString().split('T')[0]
+        : String(fechaRaw).split('T')[0];
+
+      // Si la última cita fue hace más de 15 días → inactivar
+      if (fechaUltima > fechaLimiteStr) continue;
+
+      // Marcar como Inactivo
+      await this.pacienteServicioRepository.update(ps.id, {
+        estadoPaciente: { id: 5 },
+      });
+
+      const nombrePaciente = `${ps.paciente.nombres} ${ps.paciente.apellido_paterno} ${ps.paciente.apellido_materno}`;
+      const nombreServicio = ps.servicio.nombre;
+
+      detalles.push({
+        pacienteServicioId: ps.id,
+        paciente: nombrePaciente,
+        servicio: nombreServicio,
+        ultimaCita: fechaUltima,
+      });
+
+      // Notificación solo al administrador
+      try {
+        const evento = await this.notificacionesService['crearEvento']({
+          tipo_evento: 'SERVICIO_INACTIVO_AUTOMATICO',
+          descripcion: `El servicio "${nombreServicio}" del paciente ${nombrePaciente} fue marcado como Inactivo por inactividad de mas de 15 dias`,
+          usuario_id: 1,
+          datos_adicionales: {
+            entidad_afectada: 'paciente_servicio',
+            paciente_servicio_id: ps.id,
+            paciente_id: ps.paciente.id,
+            servicio_id: ps.servicio.id,
+            servicio_nombre: nombreServicio,
+            estado_anterior: ps.estadoPaciente?.nombre ?? 'Sin estado',
+            estado_nuevo: 'Inactivo',
+            ultima_cita: fechaUltima,
+          },
+        });
+
+        await this.notificacionesService['crearNotificacion']({
+          tipo_notificacion: 'SERVICIO_INACTIVO',
+          titulo: 'Servicio marcado como Inactivo',
+          mensaje: `El paciente ${nombrePaciente} no ha asistido al servicio "${nombreServicio}" en más de 15 días. Última cita: ${new Date(fechaUltima).toLocaleDateString('es-PE')}`,
+          evento_id: evento.id,
+          roles_destino: [1], // Solo administrador
+        });
+
+        this.logger.log(`📢 Notificación enviada al admin — PS ID ${ps.id} (${nombrePaciente} · ${nombreServicio})`);
+      } catch (error) {
+        this.logger.error(`❌ Error al notificar PS ID ${ps.id}: ${error instanceof Error ? error.message : error}`);
+      }
+
+      // Auditoría del cambio automático de estado
+      try {
+        await this.auditoriaService.registrar({
+          trabajadorId: 1,
+          accion: 'SERVICIO_INACTIVADO_AUTOMATICO',
+          modulo: 'PACIENTES',
+          descripcion: `Sistema: servicio "${nombreServicio}" de ${nombrePaciente} inactivado automáticamente por inactividad de más de 15 días (última cita: ${fechaUltima})`,
+          datosNuevos: {
+            paciente_servicio_id: ps.id,
+            paciente_id: ps.paciente.id,
+            servicio_nombre: nombreServicio,
+            ultima_cita: fechaUltima,
+            estado_nuevo: 'Inactivo',
+          },
+        });
+      } catch (error) {
+        this.logger.error(`❌ Error al registrar auditoría PS ID ${ps.id}: ${error instanceof Error ? error.message : error}`);
+      }
+
+      this.logger.log(`✅ Servicio inactivado — PS ID ${ps.id}: ${nombrePaciente} · ${nombreServicio} (última cita: ${fechaUltima})`);
+    }
+
+    this.logger.log(`✨ Servicios inactivados: ${detalles.length}`);
+
+    // Recalcular estado global para cada paciente afectado
+    const pacientesAfectados = [...new Set(paraInactivar
+      .filter(ps => detalles.some(d => d.pacienteServicioId === ps.id))
+      .map(ps => ps.paciente.id))];
+
+    for (const pacienteId of pacientesAfectados) {
+      await this.recalcularEstadoGlobal(pacienteId);
+    }
+
+    return { actualizados: detalles.length, detalles };
+  }
+
+  /**
+   * Recalcula el estado global del paciente según los estados de sus servicios:
+   * - Todos Inactivo → global Inactivo (5)
+   * - Alguno no Inactivo → global = estado de mayor prioridad (Terapia > Evaluacion > Entrevista > Nuevo)
+   */
+  async recalcularEstadoGlobal(pacienteId: number): Promise<void> {
+    const servicios = await this.pacienteServicioRepository.find({
+      where: { paciente: { id: pacienteId }, activo: true },
+      relations: ['estadoPaciente'],
+    });
+
+    if (servicios.length === 0) return;
+
+    const estadoIds = servicios
+      .map(ps => ps.estadoPaciente?.id ?? null)
+      .filter((id): id is number => id !== null);
+
+    if (estadoIds.length === 0) return;
+
+    const PRIORIDAD = [4, 3, 2, 1]; // Terapia > Evaluacion > Entrevista > Nuevo
+    const todosInactivos = estadoIds.every(id => id === 5);
+
+    let nuevoEstadoId: number;
+    if (todosInactivos) {
+      nuevoEstadoId = 5;
+    } else {
+      const activos = estadoIds.filter(id => id !== 5);
+      nuevoEstadoId = PRIORIDAD.find(p => activos.includes(p)) ?? 1;
+    }
+
+    await this.pacienteRepository.update(pacienteId, { estado: { id: nuevoEstadoId } });
+    this.logger.log(`🔄 Estado global paciente ${pacienteId} → ${nuevoEstadoId}`);
+  }
 }

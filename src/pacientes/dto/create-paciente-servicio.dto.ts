@@ -25,4 +25,8 @@ export class CreatePacienteServicioDto {
   @IsBoolean()
   @IsOptional()
   activo?: boolean;
+
+  @IsNumber()
+  @IsOptional()
+  estado_paciente_id?: number;
 } 

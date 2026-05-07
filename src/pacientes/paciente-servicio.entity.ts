@@ -2,6 +2,7 @@ import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, OneToMan
 import { Paciente } from './paciente.entity';
 import { Servicios } from '../catalogos/servicios.entity';
 import { AsignacionTerapeuta } from './asignacion-terapeuta.entity';
+import { EstadoPaciente } from './estado-paciente.entity';
 
 @Entity('paciente_servicio')
 export class PacienteServicio {
@@ -24,6 +25,13 @@ export class PacienteServicio {
 
   @Column({ default: 'ACTIVO' })
   estado: string; // ACTIVO, INACTIVO, FINALIZADO
+
+  @Column({ nullable: true })
+  estado_paciente_id: number;
+
+  @ManyToOne(() => EstadoPaciente, { nullable: true, eager: true })
+  @JoinColumn({ name: 'estado_paciente_id' })
+  estadoPaciente: EstadoPaciente;
 
   @Column({ nullable: true })
   motivo_consulta: string;

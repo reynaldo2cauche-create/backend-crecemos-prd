@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, Query, UseGuards, Request } from '@nestjs/common';
 import { PacienteServicioService } from './paciente-servicio.service';
 import { CreatePacienteServicioDto } from './dto/create-paciente-servicio.dto';
 import { AsignarServicioTerapeutaDto } from './dto/asignar-servicio-terapeuta.dto';
@@ -40,6 +40,11 @@ export class PacienteServicioController {
   }
 
   @Patch(':id')
+  @UseGuards(JwtAuthGuard)
+  @Auditable({
+    modulo: 'PACIENTES',
+    accion: 'CAMBIAR_ESTADO_SERVICIO',
+  })
   update(@Param('id') id: string, @Body() updatePacienteServicioDto: Partial<CreatePacienteServicioDto>) {
     return this.pacienteServicioService.update(+id, updatePacienteServicioDto);
   }

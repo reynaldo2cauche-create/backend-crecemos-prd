@@ -57,22 +57,21 @@ export class PacientesInactivosScheduler implements OnModuleInit {
   }
 
   /**
-   * Lógica principal: delega en PacienteService y registra resultado.
+   * Lógica principal: actualiza estado global de pacientes Y estado por servicio.
    * También puede ser invocado manualmente desde el controller.
    */
   async ejecutarActualizacionAutomatica() {
-    this.logger.log('⚙️  Iniciando actualización de pacientes inactivos...');
+    this.logger.log('⚙️  Iniciando actualización de servicios inactivos por paciente...');
 
     try {
-      const resultado = await this.pacienteService.actualizarPacientesInactivos();
+      const resultado = await this.pacienteService.actualizarServiciosInactivos();
 
       this.ultimaEjecucion = new Date();
 
-      this.logger.log(`✅ Completado. Pacientes marcados como inactivos: ${resultado.actualizados}`);
-
+      this.logger.log(`✅ Completado. Servicios inactivados: ${resultado.actualizados}`);
       if (resultado.actualizados > 0) {
-        resultado.detalles.forEach(p =>
-          this.logger.log(`   - ID ${p.id}: ${p.nombre} (última cita: ${p.ultimaCita})`)
+        resultado.detalles.forEach(d =>
+          this.logger.log(`   - PS ${d.pacienteServicioId}: ${d.paciente} · ${d.servicio} (última cita: ${d.ultimaCita})`)
         );
       }
 

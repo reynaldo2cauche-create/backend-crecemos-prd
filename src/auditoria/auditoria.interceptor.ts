@@ -286,6 +286,7 @@ export class AuditoriaInterceptor implements NestInterceptor {
       CREAR_ASIGNACION_TERAPEUTA: this.generarDescripcionCrearAsignacionTerapeuta(responseData),
       EDITAR_TERAPEUTA: this.generarDescripcionEditarTerapeuta(responseData),
       DESASIGNAR_TERAPEUTA: this.generarDescripcionDesasignarTerapeuta(responseData),
+      CAMBIAR_ESTADO_SERVICIO: this.generarDescripcionCambiarEstadoServicio(responseData),
 
       // HISTORIA CLÍNICA Y EVOLUCIÓN
       CREAR_HISTORIA_CLINICA: `Creó historia clínica${pacienteDescripcion}`,
@@ -629,6 +630,26 @@ export class AuditoriaInterceptor implements NestInterceptor {
     }
 
     return `Editó cita del paciente ${pacienteNombre}`;
+  }
+
+  /**
+   * 🔥 Genera descripción detallada para CAMBIAR_ESTADO_SERVICIO
+   */
+  private generarDescripcionCambiarEstadoServicio(responseData: any): string {
+    if (!responseData) return 'Cambió estado de servicio de un paciente';
+
+    const pacienteNombre = responseData.paciente
+      ? `${responseData.paciente.nombres} ${responseData.paciente.apellido_paterno || ''} ${responseData.paciente.apellido_materno || ''}`.trim()
+      : 'un paciente';
+
+    const servicioNombre = responseData.servicio?.nombre || 'un servicio';
+    const estadoNuevo = responseData.estadoPaciente?.nombre || responseData.estadoPaciente?.id || '';
+
+    if (estadoNuevo) {
+      return `Cambió estado del servicio ${servicioNombre} a "${estadoNuevo}" para el paciente ${pacienteNombre}`;
+    }
+
+    return `Cambió estado del servicio ${servicioNombre} del paciente ${pacienteNombre}`;
   }
 
   /**

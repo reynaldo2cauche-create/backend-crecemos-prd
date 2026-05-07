@@ -38,6 +38,7 @@ import { ConveniosModule } from 'src/convenios/convenios.module';
 import { NotificacionesModule } from 'src/notificaciones/notificaciones.module';
 import { NotificacionesService } from 'src/notificaciones/notificaciones.service';
 import { GeofencingModule } from 'src/geofencing/geofencing.module';
+import { AuditoriaModule } from 'src/auditoria/auditoria.module';
 import { Cita } from '../citas/entities/cita.entity';
 import { PacientesInactivosScheduler } from './pacientes-inactivos.task';
 
@@ -62,6 +63,7 @@ import { PacientesInactivosScheduler } from './pacientes-inactivos.task';
     ConveniosModule,
     NotificacionesModule,
     GeofencingModule,
+    AuditoriaModule,
   ],
   providers: [
     PacienteService,
