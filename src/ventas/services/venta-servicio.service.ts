@@ -469,6 +469,7 @@ export class VentaServicioService {
       for (const d of detallesEnriquecidos) {
         const aplicaRegla =
           d.tipo_item_venta === 1 &&
+          !d.paquete_combo_id &&   // los combos ya incluyen su propio informe
           d.sesiones_totales >= 2 &&
           SERVICIOS_REGLA_EVALUACION.includes(d._servicio_id) &&
           d._motivo_nombre?.toLowerCase().includes('evaluaci');
@@ -927,7 +928,10 @@ export class VentaServicioService {
   // ── Helpers privados ──────────────────────────────────────────────────────────
 
   private calcularDetalle(d: DetalleVentaServicioDto & { precio_unitario: number; tipo_item_venta?: number; motivo_cita_id?: number; descripcion_linea?: string; documento_tarifa_id?: number }) {
-    const subtotalSinDescuento = d.precio_unitario * d.sesiones_totales;
+    // Para ítems de paquete combo, precio_unitario ya es el total (no se multiplica por sesiones)
+    const subtotalSinDescuento = d.paquete_combo_id
+      ? d.precio_unitario
+      : d.precio_unitario * d.sesiones_totales;
     const descuentoMonto = this.calcularDescuentoMonto(subtotalSinDescuento, d.descuento_tipo_id, d.descuento_valor);
     return {
       ...d,
