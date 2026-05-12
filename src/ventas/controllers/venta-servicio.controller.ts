@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param, Query, Patch, Delete, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Query, Patch, Delete, UseGuards, Request } from '@nestjs/common';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { VentaServicioService } from '../services/venta-servicio.service';
 import { CreateVentaServicioDto } from '../dto/create-venta-servicio.dto';
@@ -28,6 +28,7 @@ export class VentaServicioController {
     @Query('desde') desde?: string,
     @Query('hasta') hasta?: string,
     @Query('pacienteId') pacienteId?: string,
+    @Query('metodoPagoId') metodoPagoId?: string,
   ) {
     return this.service.findHistorial({
       page: page ? +page : 0,
@@ -36,6 +37,7 @@ export class VentaServicioController {
       desde,
       hasta,
       pacienteId: pacienteId ? +pacienteId : undefined,
+      metodoPagoId: metodoPagoId ? +metodoPagoId : undefined,
     });
   }
 
@@ -63,6 +65,11 @@ export class VentaServicioController {
     console.log('📦 BODY RECIBIDO:', JSON.stringify(dto, null, 2));
     return this.service.create(dto);
     
+  }
+
+  @Patch('pago/:pagoId/validar')
+  validarPago(@Param('pagoId') pagoId: string, @Request() req) {
+    return this.service.validarPago(+pagoId, req.user?.id);
   }
 
   @Patch('detalle/:detalleId/sesion-usada')

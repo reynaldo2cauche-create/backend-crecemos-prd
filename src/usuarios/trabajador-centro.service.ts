@@ -476,6 +476,59 @@ async getCamposBloqueados(id: number) {
     };
   }
 
+  async getCumpleanos() {
+    const hoy = new Date();
+    const mesHoy = hoy.getMonth() + 1;
+    const diaHoy = hoy.getDate();
+    const anioHoy = hoy.getFullYear();
+
+    const trabajadores = await this.trabajadorCentroRepository
+      .createQueryBuilder('t')
+      .leftJoinAndSelect('t.cargo', 'cargo')
+      .where('t.fecha_nacimiento IS NOT NULL')
+      .andWhere('t.estado = :estado', { estado: true })
+      .select([
+        't.id', 't.nombres', 't.apellidos', 't.fecha_nacimiento',
+        't.opciones_regalo',
+        'cargo.id', 'cargo.nombre',
+      ])
+      .getMany();
+
+    return trabajadores.map(t => {
+      // Parsear directo del string para evitar desfase UTC→local
+      const [anioFnac, mesFnac, diaFnac] = String(t.fecha_nacimiento).substring(0, 10).split('-').map(Number);
+
+      // Edad que cumple este año
+      let edadEsteAnio = anioHoy - anioFnac;
+
+      // Días hasta el próximo cumpleaños
+      let proximoCumple = new Date(anioHoy, mesFnac - 1, diaFnac);
+      if (proximoCumple < hoy) {
+        proximoCumple = new Date(anioHoy + 1, mesFnac - 1, diaFnac);
+        edadEsteAnio++;
+      }
+      const diffMs = proximoCumple.getTime() - hoy.setHours(0, 0, 0, 0);
+      const diasRestantes = Math.round(diffMs / (1000 * 60 * 60 * 24));
+
+      // Es hoy?
+      const esHoy = mesFnac === mesHoy && diaFnac === diaHoy;
+
+      return {
+        id: t.id,
+        nombres: t.nombres,
+        apellidos: t.apellidos,
+        fecha_nacimiento: t.fecha_nacimiento,
+        dia: diaFnac,
+        mes: mesFnac,
+        edad: edadEsteAnio,
+        dias_restantes: diasRestantes,
+        es_hoy: esHoy,
+        opciones_regalo: t.opciones_regalo,
+        cargo: t.cargo?.nombre ?? null,
+      };
+    }).sort((a, b) => a.dias_restantes - b.dias_restantes);
+  }
+
   async findAllForRRHH(estado?: string) {
     const query = this.trabajadorCentroRepository
       .createQueryBuilder('trabajador')

@@ -1343,4 +1343,227 @@ async actualizarPacientesInactivos(): Promise<{
     await this.pacienteRepository.update(pacienteId, { estado: { id: nuevoEstadoId } });
     this.logger.log(`🔄 Estado global paciente ${pacienteId} → ${nuevoEstadoId}`);
   }
+
+  /**
+   * Recalcula el estado de UN paciente_servicio basado en sus citas.
+   * Llamar después de crear, editar o cancelar una cita.
+   */
+  async recalcularEstadoPS(pacienteId: number, servicioId: number): Promise<void> {
+    const ps = await this.pacienteServicioRepository.findOne({
+      where: { paciente: { id: pacienteId }, servicio: { id: servicioId }, activo: true },
+      relations: ['paciente', 'servicio', 'estadoPaciente'],
+    });
+    if (!ps) return;
+
+    const hoy = new Date().toISOString().split('T')[0];
+    const fechaLimite = new Date();
+    fechaLimite.setDate(fechaLimite.getDate() - 15);
+    const fechaLimiteStr = fechaLimite.toISOString().split('T')[0];
+
+    // Última cita pasada o presente para este servicio exacto
+    const [ultimaCita] = await this.pacienteServicioRepository.query(
+      `SELECT c.id, c.fecha, mc.nombre AS motivo
+       FROM citas c
+       JOIN motivo_cita mc ON mc.id = c.motivo_id
+       WHERE c.paciente_id = ? AND c.servicio_id = ? AND c.flg_activo = 1 AND c.estado_id != 5
+       ORDER BY c.fecha DESC, c.id DESC LIMIT 1`,
+      [pacienteId, servicioId],
+    );
+
+    const [futuras] = await this.pacienteServicioRepository.query(
+      `SELECT COUNT(*) AS total FROM citas
+       WHERE paciente_id = ? AND servicio_id = ? AND flg_activo = 1 AND estado_id != 5 AND fecha > ?`,
+      [pacienteId, servicioId, hoy],
+    );
+    const tieneFutura = Number(futuras?.total ?? 0) > 0;
+
+    const fechaInicioStr: string = ps.fecha_inicio instanceof Date
+      ? ps.fecha_inicio.toISOString().split('T')[0]
+      : String(ps.fecha_inicio).split('T')[0];
+
+    const ultimaFechaStr: string | null = ultimaCita
+      ? (ultimaCita.fecha instanceof Date
+          ? ultimaCita.fecha.toISOString().split('T')[0]
+          : String(ultimaCita.fecha).split('T')[0])
+      : null;
+
+    let nuevoEstadoId: number;
+
+    if (!ultimaCita && !tieneFutura) {
+      nuevoEstadoId = fechaInicioStr <= fechaLimiteStr ? 5 : 1;
+    } else if (!tieneFutura && ultimaFechaStr <= fechaLimiteStr) {
+      nuevoEstadoId = 5;
+    } else {
+      const m = (ultimaCita?.motivo ?? '') as string;
+      if (m === 'Sesión de Terapia')                                        nuevoEstadoId = 4;
+      else if (['Evaluación','Reevaluación','Informe Verbal'].includes(m))   nuevoEstadoId = 3;
+      else if (['Entrevista Adolescentes o Adultos','Entrevista de Padres'].includes(m)) nuevoEstadoId = 2;
+      else                                                                   nuevoEstadoId = 4;
+    }
+
+    const estadoAnteriorId = ps.estadoPaciente?.id ?? null;
+
+    await this.pacienteServicioRepository.query(
+      'UPDATE paciente_servicio SET estado_paciente_id = ? WHERE id = ?',
+      [nuevoEstadoId, ps.id],
+    );
+
+    // Notificar si el estado cambió
+    if (estadoAnteriorId !== nuevoEstadoId) {
+      const NOMBRES_ESTADO = ['', 'Nuevo', 'Entrevista', 'Evaluacion', 'Terapia', 'Inactivo'];
+      const nombrePaciente = `${ps.paciente.nombres} ${ps.paciente.apellido_paterno ?? ''} ${ps.paciente.apellido_materno ?? ''}`.trim();
+      const nombreServicio = ps.servicio.nombre;
+      await this.notificacionesService.notificarCambioEstadoPaciente(
+        nombrePaciente,
+        nombreServicio,
+        NOMBRES_ESTADO[estadoAnteriorId] ?? 'Sin estado',
+        NOMBRES_ESTADO[nuevoEstadoId],
+        pacienteId,
+      ).catch(() => {});
+    }
+
+    await this.recalcularEstadoGlobal(pacienteId);
+  }
+
+  /**
+   * Migración: asigna estado_paciente_id en paciente_servicio según la última cita de cada paciente+servicio.
+   * Reglas:
+   *   - Sin citas                          → Nuevo (1)
+   *   - Última cita > 15 días y sin futuras → Inactivo (5)
+   *   - Motivo = 'Sesión de Terapia'        → Terapia (4)
+   *   - Motivo = Evaluación/Reevaluación/Informe Verbal → Evaluacion (3)
+   *   - Motivo = Entrevista...              → Entrevista (2)
+   */
+  async migrarEstadosPorCitas(): Promise<any> {
+    this.logger.log('🚀 Iniciando migración de estados por historial de citas...');
+
+    const hoy = new Date().toISOString().split('T')[0];
+    const fechaLimite = new Date();
+    fechaLimite.setDate(fechaLimite.getDate() - 15);
+    const fechaLimiteStr = fechaLimite.toISOString().split('T')[0];
+
+    // Cargar todos los ps activos con sus relaciones
+    const servicios = await this.pacienteServicioRepository.find({
+      where: { activo: true },
+      relations: ['paciente', 'servicio'],
+    });
+
+    this.logger.log(`📋 Total paciente_servicio activos: ${servicios.length}`);
+
+    const resumen = { Nuevo: 0, Entrevista: 0, Evaluacion: 0, Terapia: 0, Inactivo: 0 };
+    const detalles: any[] = [];
+
+    for (const ps of servicios) {
+      if (!ps.paciente || !ps.servicio) continue;
+
+      const pid = ps.paciente.id;
+      const sid = ps.servicio.id;
+
+      // Última cita para este paciente+servicio exacto
+      const rows: any[] = await this.pacienteServicioRepository.query(
+        `SELECT c.id, c.fecha, mc.nombre AS motivo
+         FROM citas c
+         JOIN motivo_cita mc ON mc.id = c.motivo_id
+         WHERE c.paciente_id = ? AND c.servicio_id = ? AND c.flg_activo = 1 AND c.estado_id != 5
+         ORDER BY c.fecha DESC, c.id DESC
+         LIMIT 1`,
+        [pid, sid],
+      );
+
+      const ultimaCita = rows[0] ?? null;
+
+      // Normalizar fecha a string YYYY-MM-DD independientemente de si MySQL devuelve Date o string
+      const ultimaFechaStr: string | null = ultimaCita
+        ? (ultimaCita.fecha instanceof Date
+            ? ultimaCita.fecha.toISOString().split('T')[0]
+            : String(ultimaCita.fecha).split('T')[0])
+        : null;
+
+      // ¿Tiene cita futura para ESTE servicio? Sin fallback — cada registro refleja su propio servicio
+      const futuras: any[] = await this.pacienteServicioRepository.query(
+        `SELECT COUNT(*) AS total FROM citas
+         WHERE paciente_id = ? AND servicio_id = ? AND flg_activo = 1 AND estado_id != 5 AND fecha > ?`,
+        [pid, sid, hoy],
+      );
+      const tieneFutura = Number(futuras[0]?.total ?? 0) > 0;
+
+      // Normalizar fecha_inicio del PS a string
+      const fechaInicioStr: string = ps.fecha_inicio instanceof Date
+        ? ps.fecha_inicio.toISOString().split('T')[0]
+        : String(ps.fecha_inicio).split('T')[0];
+
+      let nuevoEstadoId: number;
+
+      if (!ultimaCita && !tieneFutura) {
+        // Nunca tuvo cita para este servicio
+        // Si el servicio fue asignado hace >15 días → Inactivo, si no → Nuevo
+        nuevoEstadoId = fechaInicioStr <= fechaLimiteStr ? 5 : 1;
+      } else if (!tieneFutura && ultimaFechaStr <= fechaLimiteStr) {
+        nuevoEstadoId = 5; // Sin futuras y última cita > 15 días → Inactivo
+      } else {
+        const m = (ultimaCita?.motivo ?? '') as string;
+        if (m === 'Sesión de Terapia')                                       nuevoEstadoId = 4;
+        else if (['Evaluación','Reevaluación','Informe Verbal'].includes(m))  nuevoEstadoId = 3;
+        else if (['Entrevista Adolescentes o Adultos','Entrevista de Padres'].includes(m)) nuevoEstadoId = 2;
+        else                                                                  nuevoEstadoId = 4;
+      }
+
+      // UPDATE directo por SQL para evitar problemas de TypeORM con FK columns
+      const upd = await this.pacienteServicioRepository.query(
+        'UPDATE paciente_servicio SET estado_paciente_id = ? WHERE id = ?',
+        [nuevoEstadoId, ps.id],
+      );
+
+      const nombreEstado = ['','Nuevo','Entrevista','Evaluacion','Terapia','Inactivo'][nuevoEstadoId];
+      resumen[nombreEstado] = (resumen[nombreEstado] || 0) + 1;
+
+      detalles.push({
+        ps_id: ps.id,
+        paciente_id: pid,
+        servicio_id: sid,
+        ultima_cita: ultimaCita?.fecha ?? 'ninguna',
+        motivo: ultimaCita?.motivo ?? '-',
+        tiene_futura: tieneFutura,
+        estado_asignado: nombreEstado,
+        affected: upd?.affectedRows ?? upd,
+      });
+    }
+
+    // Sincronizar estado global del paciente
+    await this.pacienteServicioRepository.query(`
+      UPDATE paciente p
+      JOIN (
+        SELECT ps.paciente_id,
+          CASE
+            WHEN SUM(CASE WHEN ps.estado_paciente_id != 5 THEN 1 ELSE 0 END) = 0 THEN 5
+            WHEN SUM(CASE WHEN ps.estado_paciente_id = 4 THEN 1 ELSE 0 END) > 0  THEN 4
+            WHEN SUM(CASE WHEN ps.estado_paciente_id = 3 THEN 1 ELSE 0 END) > 0  THEN 3
+            WHEN SUM(CASE WHEN ps.estado_paciente_id = 2 THEN 1 ELSE 0 END) > 0  THEN 2
+            ELSE 1
+          END AS nuevo_estado_id
+        FROM paciente_servicio ps
+        WHERE ps.activo = 1 AND ps.estado_paciente_id IS NOT NULL
+        GROUP BY ps.paciente_id
+      ) calc ON p.id = calc.paciente_id
+      SET p.estado_paciente_id = calc.nuevo_estado_id
+      WHERE p.activo = 1
+    `);
+
+    this.logger.log(`✅ Migración completada. Resumen: ${JSON.stringify(resumen)}`);
+
+    return { resumen, total: servicios.length, detalles };
+  }
+
+  private estadoPorMotivo(
+    motivo: string | undefined,
+    terapia: string[],
+    evaluacion: string[],
+    entrevista: string[],
+  ): number {
+    if (!motivo) return 4;
+    if (terapia.includes(motivo))    return 4;
+    if (evaluacion.includes(motivo)) return 3;
+    if (entrevista.includes(motivo)) return 2;
+    return 4;
+  }
 }

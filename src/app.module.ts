@@ -194,6 +194,7 @@ import { CampanasModule } from './campanas/campanas.module';
 import { Campana } from './campanas/entities/campana.entity';
 import { CampanaEstado } from './campanas/entities/campana-estado.entity';
 import { CampanaSeccion } from './campanas/entities/campana-seccion.entity';
+import { HistorialEstadoSolicitud } from './historia-clinica/entities/historial-estado-solicitud.entity';
 
 
 @Module({
@@ -243,11 +244,13 @@ import { CampanaSeccion } from './campanas/entities/campana-seccion.entity';
       username: 'root',
       password: 'd339yr8l',
       database: 'crecemos_websites',
+      charset: 'utf8mb4',
       extra: {
         connectionLimit: 10,
         waitForConnections: true,
         queueLimit: 0,
         connectTimeout: 20000,
+        charset: 'utf8mb4',
       },
       entities: [
         Postulacion,
@@ -411,6 +414,7 @@ import { CampanaSeccion } from './campanas/entities/campana-seccion.entity';
         EstadoPago,
         EstadoSolicitudInforme,
         RevisionInforme,
+        HistorialEstadoSolicitud,
 
       ],
         synchronize: false,   // true en desarrollo, false en producción - DESHABILITADO para evitar conflictos con foreign keys

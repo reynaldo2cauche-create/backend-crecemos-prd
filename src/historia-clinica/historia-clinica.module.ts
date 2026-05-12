@@ -50,6 +50,7 @@ import { SolicitudInformeService } from './solicitud-informe.service';
 import { VentaServicio } from '../ventas/entities/venta-servicio.entity';
 import { RevisionInforme } from './entities/revision-informe.entity';
 import { EstadoSolicitudInforme } from './entities/estado-solicitud-informe.entity';
+import { HistorialEstadoSolicitud } from './entities/historial-estado-solicitud.entity';
 
 
 @Module({
@@ -73,9 +74,10 @@ import { EstadoSolicitudInforme } from './entities/estado-solicitud-informe.enti
      SolicitudInforme,
       ModalidadPago,
       EstadoPago,
-      EstadoSolicitudInforme,   // ← NUEVO
+      EstadoSolicitudInforme,
       RevisionInforme,
-      VentaServicio,            // ← AGREGADO
+      HistorialEstadoSolicitud,
+      VentaServicio,
       Paciente,
       TrabajadorCentro,
       Servicios,

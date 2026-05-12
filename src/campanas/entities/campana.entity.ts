@@ -11,7 +11,7 @@ export class Campana {
   @Column({ length: 255 })
   titulo: string;
 
-  @Column({ length: 500, nullable: true })
+  @Column({ type: 'text', nullable: true })
   descripcion_corta: string;
 
   @Column({ type: 'date' })

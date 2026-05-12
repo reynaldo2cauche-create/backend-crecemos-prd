@@ -14,6 +14,7 @@ import { HistorialCitasService } from './historial-citas.service';
 import { NotificacionesService } from '../notificaciones/notificaciones.service';
 import { VentaServicioDetalle } from '../ventas/entities/venta-servicio-detalle.entity';
 import { ResponsablePaciente } from '../pacientes/entities/responsable-paciente.entity';
+import { PacienteService } from '../pacientes/paciente.service';
 
 
 @Injectable()
@@ -43,7 +44,8 @@ export class CitasService {
     private historialService: HistorialCitasService,
     @Inject(forwardRef(() => NotificacionesService))
     private notificacionesService: NotificacionesService,
-
+    @Inject(forwardRef(() => PacienteService))
+    private pacienteService: PacienteService,
   ) {}
 
   private async determinarTipoCita(motivo_id: number): Promise<string> {
@@ -281,6 +283,9 @@ export class CitasService {
       'CREATE',
       dto.user_id_crea,
     );
+
+    // Recalcular estado del paciente en este servicio
+    await this.pacienteService.recalcularEstadoPS(dto.paciente_id, dto.servicio_id).catch(() => {});
 
     return guardada;
   }
@@ -818,6 +823,11 @@ async listar(filtros: any = {}): Promise<any[]> {
     // No detener la actualización si falla la notificación
   }
 
+  // Recalcular estado del paciente en este servicio
+  if (dto.paciente_id && dto.servicio_id) {
+    await this.pacienteService.recalcularEstadoPS(dto.paciente_id, dto.servicio_id).catch(() => {});
+  }
+
   // Retornar datos anteriores y nuevos para auditoría detallada
   return {
     datosAnteriores: datosAntiguosCompletos,
@@ -1164,6 +1174,11 @@ private async actualizarVisitaEscolar(id: number, dto: CrearCitaDto): Promise<an
         [cita.venta_servicio_detalle_id]
       );
       console.log(`✅ Sesión devuelta a venta ID ${cita.venta_servicio_detalle_id}`);
+    }
+
+    // Recalcular estado del paciente en este servicio tras cancelar/eliminar
+    if (cita.paciente_id && cita.servicio_id) {
+      await this.pacienteService.recalcularEstadoPS(cita.paciente_id, cita.servicio_id).catch(() => {});
     }
 
     // 🔥 Retornar con motivo y datos de la cita para auditoría

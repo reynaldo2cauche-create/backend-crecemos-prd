@@ -1,4 +1,5 @@
 import { Module, forwardRef } from '@nestjs/common';
+import { PacienteModule } from '../pacientes/paciente.module';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
 // Entidades principales (de la carpeta entities - para el nuevo sistema)
@@ -62,6 +63,7 @@ import { SorteoModule } from '../sorteos/sorteo.module';
     ]),
     forwardRef(() => NotificacionesModule),
     forwardRef(() => SorteoModule),
+    forwardRef(() => PacienteModule),
   ],
   providers: [CitasService, HistorialCitasService, AsistenciaService],
   controllers: [CitasController, AsistenciaController],

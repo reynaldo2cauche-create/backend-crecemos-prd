@@ -41,10 +41,16 @@ export class CampanasController {
   @Post()
   @UseGuards(JwtAuthGuard)
   @Auditable({ modulo: 'CAMPAÑAS', accion: 'CREAR_CAMPANA' })
-  create(@Body() createCampanaDto: CreateCampanaDto) {
- 
-   
-    return this.campanasService.create(createCampanaDto);
+  async create(@Body() createCampanaDto: CreateCampanaDto) {
+    console.log('📥 CREATE CAMPANA DTO:', JSON.stringify(createCampanaDto, null, 2));
+    try {
+      const result = await this.campanasService.create(createCampanaDto);
+      console.log('✅ CAMPANA CREADA ID:', result.id);
+      return result;
+    } catch (err) {
+      console.error('❌ ERROR CREAR CAMPANA:', err.message, err.stack);
+      throw err;
+    }
   }
 
   @Patch(':id')

@@ -79,6 +79,21 @@ export class VentaProductoService {
     return ventas;
   }
 
+  async validarPago(pagoId: number, userId: number) {
+    const pago = await this.ventaPagoRepo.findOne({ where: { id: pagoId } });
+    if (!pago) throw new NotFoundException(`Pago de producto #${pagoId} no encontrado`);
+    if (pago.pago_validado) return this.ventaPagoRepo.findOne({ where: { id: pagoId }, relations: ['modalidad_pago', 'validado_por'] });
+    await this.ventaPagoRepo.update(pagoId, {
+      pago_validado:     true,
+      pago_validado_por: userId,
+      pago_validado_at:  new Date(),
+    });
+    return this.ventaPagoRepo.findOne({
+      where: { id: pagoId },
+      relations: ['modalidad_pago', 'validado_por'],
+    });
+  }
+
   async findOne(id: number) {
     const v = await this.ventaRepo.findOne({
       where: { id },
@@ -171,6 +186,7 @@ export class VentaProductoService {
             modalidad_pago_id: p.modalidad_pago_id,
             monto: p.monto,
             referencia: p.referencia ?? null,
+            fecha_pago: p.fecha_pago ?? null,
           });
           await manager.save(pago);
         }
@@ -288,15 +304,21 @@ export class VentaProductoService {
 
       await manager.update(VentaProducto, id, camposActualizables);
 
-      // Reemplazar pagos si se envían
+      // Reemplazar pagos si se envían, preservando el estado de validación
       if (dto.pagos && dto.pagos.length > 0) {
+        const pagosExistentes = await manager.find(VentaProductoPago, { where: { venta_id: id } });
         await manager.delete(VentaProductoPago, { venta_id: id });
         for (const p of dto.pagos) {
+          const prev = pagosExistentes.find(pe => pe.modalidad_pago_id === p.modalidad_pago_id);
           const pago = manager.create(VentaProductoPago, {
             venta_id: id,
-            modalidad_pago_id: p.modalidad_pago_id,
-            monto: p.monto,
-            referencia: p.referencia ?? null,
+            modalidad_pago_id:  p.modalidad_pago_id,
+            monto:              p.monto,
+            referencia:         p.referencia ?? null,
+            fecha_pago:         p.fecha_pago ?? null,
+            pago_validado:      prev?.pago_validado     ?? false,
+            pago_validado_por:  prev?.pago_validado_por ?? null,
+            pago_validado_at:   prev?.pago_validado_at  ?? null,
           });
           await manager.save(pago);
         }

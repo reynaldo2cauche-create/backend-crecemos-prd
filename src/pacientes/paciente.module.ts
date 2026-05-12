@@ -89,6 +89,7 @@ import { PacientesInactivosScheduler } from './pacientes-inactivos.task';
     PacienteResponsableController,
     ResponsablesController,
     EstadoPacienteController
-  ]
+  ],
+  exports: [PacienteService],
 })
 export class PacienteModule{}

@@ -370,11 +370,20 @@ export class SolicitudInformeController {
 
   /**
    * GET /solicitudes-informe/:id/revisiones
-   * Admin, jefa y el terapeuta asignado pueden ver el historial.
+   * Admin, jefa y el terapeuta asignado pueden ver el historial de revisiones.
    */
   @Get(':id/revisiones')
   findRevisiones(@Param('id', ParseIntPipe) id: number) {
     return this.service.findRevisiones(id);
+  }
+
+  /**
+   * GET /solicitudes-informe/:id/historial
+   * Historial completo de cambios de estado.
+   */
+  @Get(':id/historial')
+  findHistorial(@Param('id', ParseIntPipe) id: number) {
+    return this.service.findHistorial(id);
   }
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -395,7 +404,7 @@ export class SolicitudInformeController {
     if (rolId !== ROL_ADMIN && rolId !== ROL_ADMISION) {
       throw new ForbiddenException('No tienes permiso para editar esta solicitud.');
     }
-    return this.service.update(id, dto);
+    return this.service.update(id, dto, req.user?.id);
   }
 
   /**

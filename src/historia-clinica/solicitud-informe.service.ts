@@ -12,6 +12,7 @@ import { ModalidadPago } from './entities/modalidad-pago.entity';
 import { EstadoPago } from './entities/estado-pago.entity';
 import { EstadoSolicitudInforme } from './entities/estado-solicitud-informe.entity';
 import { RevisionInforme } from './entities/revision-informe.entity';
+import { HistorialEstadoSolicitud } from './entities/historial-estado-solicitud.entity';
 
 import {
   CreateSolicitudInformeDto,
@@ -134,8 +135,39 @@ export class SolicitudInformeService {
     @InjectRepository(RevisionInforme)
     private readonly revisionRepo: Repository<RevisionInforme>,
 
+    @InjectRepository(HistorialEstadoSolicitud)
+    private readonly historialRepo: Repository<HistorialEstadoSolicitud>,
+
     private readonly notificacionesService: NotificacionesService,
   ) {}
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // HISTORIAL DE ESTADO
+  // ══════════════════════════════════════════════════════════════════════════
+
+  private async registrarCambioEstado(
+    solicitudId: number,
+    estadoAnteriorId: number | null,
+    estadoNuevoId: number,
+    userId?: number | null,
+    observacion?: string,
+  ): Promise<void> {
+    const entrada = this.historialRepo.create({
+      solicitud_informe_id: solicitudId,
+      estado_anterior_id:   estadoAnteriorId ?? null,
+      estado_nuevo_id:      estadoNuevoId,
+      user_id:              userId ?? null,
+      observacion:          observacion ?? null,
+    });
+    await this.historialRepo.save(entrada);
+  }
+
+  async findHistorial(solicitudId: number): Promise<HistorialEstadoSolicitud[]> {
+    return this.historialRepo.find({
+      where:   { solicitud_informe_id: solicitudId },
+      order:   { created_at: 'ASC' },
+    });
+  }
 
   // ══════════════════════════════════════════════════════════════════════════
   // QUERY BUILDER BASE  (reutilizado en todos los métodos)
@@ -157,8 +189,13 @@ export class SolicitudInformeService {
       .leftJoinAndSelect('si.estado_pago',           'estado_pago')
       .leftJoinAndSelect('si.estado_solicitud',      'estado_solicitud')
       .leftJoinAndSelect('si.revisor',               'revisor')
-      .leftJoinAndSelect('si.venta_servicio',        'venta_servicio')
-      .leftJoinAndSelect('venta_servicio.paciente',  'paciente');
+      .leftJoinAndSelect('si.user_crea',             'user_crea')
+      .leftJoinAndSelect('si.venta_servicio',               'venta_servicio')
+      .leftJoinAndSelect('venta_servicio.paciente',         'paciente')
+      .leftJoinAndSelect('venta_servicio.pagos',            'venta_pagos')
+      .leftJoinAndSelect('venta_pagos.modalidad_pago',      'venta_pago_modalidad')
+      .leftJoinAndSelect('venta_servicio.detalles',         'venta_detalles')
+      .leftJoinAndSelect('venta_detalles.paqueteCombo',     'detalle_paquete_combo');
   }
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -198,6 +235,8 @@ export class SolicitudInformeService {
       estado_solicitud_id: ESTADO_SOLICITUD.PENDIENTE_SUBIDA,
     });
     const resultado = await this.solicitudRepo.save(solicitud);
+
+    await this.registrarCambioEstado(resultado.id, null, ESTADO_SOLICITUD.PENDIENTE_SUBIDA, dto.user_crea_id, 'Solicitud creada');
 
     // Necesitamos el objeto completo para construir mensajes descriptivos
     const completa = await this.findOne(resultado.id);
@@ -249,7 +288,7 @@ export class SolicitudInformeService {
 
   async findAll(): Promise<SolicitudInforme[]> {
     return this.baseQuery()
-      .orderBy('si.fecha_solicitud', 'DESC')
+      .orderBy('si.created_at', 'DESC')
       .getMany();
   }
 
@@ -293,7 +332,7 @@ export class SolicitudInformeService {
     }
 
     const solicitudes = await query
-      .orderBy('si.fecha_solicitud', 'DESC')
+      .orderBy('si.created_at', 'DESC')
       .getMany();
 
     console.log('📋 Solicitudes encontradas:', solicitudes.length);
@@ -385,7 +424,7 @@ export class SolicitudInformeService {
     }
 
     const solicitudes = await query
-      .orderBy('si.fecha_solicitud', 'DESC')
+      .orderBy('si.created_at', 'DESC')
       .getMany();
 
     console.log('📋 Solicitudes encontradas:', solicitudes.length);
@@ -418,7 +457,7 @@ export class SolicitudInformeService {
   ): Promise<Partial<SolicitudInforme>[]> {
     const solicitudes = await this.baseQuery()
       .where('si.especialista_id = :especialistaId', { especialistaId })
-      .orderBy('si.fecha_solicitud', 'DESC')
+      .orderBy('si.created_at', 'DESC')
       .getMany();
 
     return solicitudes.map(sanitizarParaTerapeuta);
@@ -428,7 +467,13 @@ export class SolicitudInformeService {
   // UPDATE / DELETE  (solo Admin y Admisión)
   // ──────────────────────────────────────────────────────────────────────────
 
-  async update(id: number, dto: UpdateSolicitudInformeDto): Promise<SolicitudInforme> {
+  async update(id: number, dto: UpdateSolicitudInformeDto, userId?: number): Promise<SolicitudInforme> {
+    if (dto.estado_solicitud_id !== undefined) {
+      const actual = await this.solicitudRepo.findOne({ where: { id }, select: ['id', 'estado_solicitud_id'] });
+      if (actual && actual.estado_solicitud_id !== dto.estado_solicitud_id) {
+        await this.registrarCambioEstado(id, actual.estado_solicitud_id, dto.estado_solicitud_id, userId ?? dto.user_actua_id ?? null);
+      }
+    }
     await this.solicitudRepo.update(id, dto);
     return this.findOne(id);
   }
@@ -471,12 +516,19 @@ export class SolicitudInformeService {
       fecha_subida_archivo: new Date(),
       estado_solicitud_id:  nuevoEstado,
       user_actua_id:        dto.user_actua_id,
-      // Si es jefa, también marcamos como revisado por ella misma
       ...(terapeutaEsJefa ? {
         fecha_revision: new Date(),
         revisor_id: solicitud.especialista_id,
       } : {}),
     });
+
+    await this.registrarCambioEstado(
+      id,
+      solicitud.estado_solicitud_id,
+      nuevoEstado,
+      dto.user_actua_id ?? solicitud.especialista_id,
+      terapeutaEsJefa ? 'Archivo subido (aprobación automática, terapeuta jefa)' : 'Archivo subido por terapeuta',
+    );
 
     // Datos descriptivos para notificación
     const pacienteNombreCompleto  = nombreCompletoPaciente(solicitud);
@@ -656,6 +708,16 @@ export class SolicitudInformeService {
       revisor_id:          dto.revisor_id,
     });
 
+    await this.registrarCambioEstado(
+      id,
+      solicitud.estado_solicitud_id,
+      dto.estado_id,
+      dto.revisor_id ?? null,
+      dto.estado_id === ESTADO_SOLICITUD.RECHAZADO
+        ? `Rechazado por jefa. Motivo: ${dto.comentario}`
+        : 'Aprobado por jefa',
+    );
+
     // Datos descriptivos
     const pacienteNombreCompleto  = nombreCompletoPaciente(solicitud);
     const tipoInforme = nombreTipoInforme(solicitud);
@@ -745,6 +807,14 @@ export class SolicitudInformeService {
       estado_solicitud_id: ESTADO_SOLICITUD.ENTREGADO,
       ...(dto.user_actua_id ? { user_actua_id: dto.user_actua_id } : {}),
     });
+
+    await this.registrarCambioEstado(
+      id,
+      solicitud.estado_solicitud_id,
+      ESTADO_SOLICITUD.ENTREGADO,
+      dto.user_actua_id ?? null,
+      'Informe entregado al paciente',
+    );
 
     const pacienteNombreCompleto = nombreCompletoPaciente(solicitud);
     const tipoInforme = nombreTipoInforme(solicitud);

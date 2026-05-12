@@ -49,6 +49,7 @@ export class PacienteServicioService {
       motivo_consulta: createPacienteServicioDto.motivo_consulta,
       observaciones: createPacienteServicioDto.observaciones,
       activo: createPacienteServicioDto.activo ?? true,
+      estado_paciente_id: 1, // Nuevo por defecto
     });
 
     return this.pacienteServicioRepository.save(pacienteServicio);
@@ -380,11 +381,12 @@ export class PacienteServicioService {
       const pacienteServicio = this.pacienteServicioRepository.create({
         paciente: { id: dto.paciente_id },
         servicio: { id: dto.servicio_id },
-        fecha_inicio: fechaInicio, // Usar la fecha procesada
+        fecha_inicio: fechaInicio,
         estado: 'ACTIVO',
         activo: true,
         motivo_consulta: dto.motivo_consulta || '',
-        observaciones: dto.observaciones || ''
+        observaciones: dto.observaciones || '',
+        estado_paciente_id: 1, // Nuevo por defecto
       });
       
       savedPacienteServicio = await this.pacienteServicioRepository.save(pacienteServicio);

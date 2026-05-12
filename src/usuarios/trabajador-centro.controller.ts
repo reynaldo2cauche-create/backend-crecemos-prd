@@ -32,6 +32,12 @@ export class TrabajadorCentroController {
     return this.service.findTerapeutas();
   }
 
+  @Get('cumpleanos')
+  @UseGuards(JwtAuthGuard)
+  getCumpleanos() {
+    return this.service.getCumpleanos();
+  }
+
   // ============== ENDPOINTS RRHH ==============
   @Get('empleados')
   @UseGuards(JwtAuthGuard)

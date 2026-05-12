@@ -943,4 +943,26 @@ export class NotificacionesService {
       throw error;
     }
   }
+
+  async notificarCambioEstadoPaciente(
+    pacienteNombre: string,
+    servicioNombre: string,
+    estadoAnterior: string,
+    estadoNuevo: string,
+    pacienteId: number,
+  ) {
+    const evento = await this.crearEvento({
+      tipo_evento: 'CAMBIO_ESTADO_SERVICIO',
+      descripcion: `Estado del servicio ${servicioNombre} de ${pacienteNombre} cambió de "${estadoAnterior}" a "${estadoNuevo}"`,
+      usuario_id: 1,
+      datos_adicionales: { paciente_id: pacienteId, paciente_nombre: pacienteNombre, servicio_nombre: servicioNombre, estado_anterior: estadoAnterior, estado_nuevo: estadoNuevo },
+    });
+    await this.crearNotificacion({
+      tipo_notificacion: 'CAMBIO_ESTADO_SERVICIO',
+      titulo: 'Cambio de estado de servicio',
+      mensaje: `${pacienteNombre} - ${servicioNombre}: "${estadoAnterior}" -> "${estadoNuevo}"`,
+      evento_id: evento.id,
+      roles_destino: [ROL_ADMIN, ROL_ADMISION],
+    });
+  }
 }

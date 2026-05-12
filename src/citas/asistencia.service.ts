@@ -196,7 +196,9 @@ async obtenerAsistenciasPorTerapeuta(
         sa.id,
         sa.cita_id,
         CONCAT(c.fecha, ' ', c.hora_inicio) AS fecha_cita,
+        p.id AS paciente_id,
         CONCAT(p.nombres, ' ', p.apellido_paterno, ' ', p.apellido_materno) AS paciente_nombre,
+        ep.nombre AS paciente_estado,
         sa.recepcion_marco,
         sa.recepcion_estado_id,
         sa.recepcion_fecha,
@@ -206,6 +208,7 @@ async obtenerAsistenciasPorTerapeuta(
       FROM seguimiento_asistencia sa
       INNER JOIN citas c ON sa.cita_id = c.id
       INNER JOIN paciente p ON c.paciente_id = p.id
+      LEFT JOIN estado_paciente ep ON p.estado_paciente_id = ep.id
       WHERE c.doctor_id = ?
         AND c.fecha BETWEEN ? AND ?
         AND c.flg_activo = 1

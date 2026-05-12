@@ -1,9 +1,13 @@
 import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
 import { EstadoPacienteService } from './estado-paciente.service';
+import { PacienteService } from './paciente.service';
 
 @Controller('backend_api/estados-paciente')
 export class EstadoPacienteController {
-  constructor(private readonly estadoPacienteService: EstadoPacienteService) {}
+  constructor(
+    private readonly estadoPacienteService: EstadoPacienteService,
+    private readonly pacienteService: PacienteService,
+  ) {}
 
   @Get()
   findAll() {
@@ -13,6 +17,11 @@ export class EstadoPacienteController {
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.estadoPacienteService.findOne(+id);
+  }
+
+  @Post('migrar-desde-citas')
+  migrarDesideCitas() {
+    return this.pacienteService.migrarEstadosPorCitas();
   }
 
   @Post()

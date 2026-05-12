@@ -98,8 +98,9 @@ export class VentaServicioService {
     desde?: string;
     hasta?: string;
     pacienteId?: number;
+    metodoPagoId?: number;
   }) {
-    const { page, limit, tipo, desde, hasta, pacienteId } = filtros;
+    const { page, limit, tipo, desde, hasta, pacienteId, metodoPagoId } = filtros;
     const offset = page * limit;
 
     // Condiciones para venta_servicio
@@ -108,6 +109,7 @@ export class VentaServicioService {
     if (desde) { condS.push('vs.fecha_venta >= ?'); paramsS.push(desde); }
     if (hasta) { condS.push('vs.fecha_venta <= ?'); paramsS.push(hasta); }
     if (pacienteId) { condS.push('vs.paciente_id = ?'); paramsS.push(pacienteId); }
+    if (metodoPagoId) { condS.push('EXISTS (SELECT 1 FROM venta_servicio_pago vsp2 WHERE vsp2.venta_id = vs.id AND vsp2.modalidad_pago_id = ?)'); paramsS.push(metodoPagoId); }
     const whereS = condS.length ? 'AND ' + condS.join(' AND ') : '';
 
     // Condiciones para venta_producto
@@ -115,6 +117,7 @@ export class VentaServicioService {
     const paramsP: any[] = [];
     if (desde) { condP.push('vp.fecha_venta >= ?'); paramsP.push(desde); }
     if (hasta) { condP.push('vp.fecha_venta <= ?'); paramsP.push(hasta); }
+    if (metodoPagoId) { condP.push('EXISTS (SELECT 1 FROM venta_producto_pago vpp2 WHERE vpp2.venta_id = vp.id AND vpp2.modalidad_pago_id = ?)'); paramsP.push(metodoPagoId); }
     const whereP = condP.length ? 'AND ' + condP.join(' AND ') : '';
 
     let countSql: string;
@@ -200,6 +203,8 @@ export class VentaServicioService {
         .leftJoinAndSelect('v.modalidad_pago', 'modalidad_pago')
         .leftJoinAndSelect('v.pagos', 'pagos')
         .leftJoinAndSelect('pagos.modalidad_pago', 'pago_modalidad')
+        .leftJoinAndSelect('pagos.validado_por', 'pagos_validador')
+        .leftJoinAndSelect('v.user_crea', 'user_crea')
         .whereInIds(servicioIds)
         .getMany() : Promise.resolve([]),
 
@@ -219,6 +224,8 @@ export class VentaServicioService {
         .leftJoinAndSelect('v.modalidad_pago', 'modalidad_pago')
         .leftJoinAndSelect('v.pagos', 'pagos')
         .leftJoinAndSelect('pagos.modalidad_pago', 'pago_modalidad')
+        .leftJoinAndSelect('pagos.validado_por', 'pagos_validador')
+        .leftJoinAndSelect('v.user_crea', 'user_crea')
         .whereInIds(productoIds)
         .getMany() : Promise.resolve([]),
     ]);
@@ -255,6 +262,21 @@ export class VentaServicioService {
     const data = pageRows.map(r => r.tipo === 'servicio' ? sMap.get(+r.id) : pMap.get(+r.id)).filter(Boolean);
 
     return { data, total: +total, totalMonto: +total_monto, totalMontoGlobal: +total_monto_global, page, limit };
+  }
+
+  async validarPago(pagoId: number, userId: number) {
+    const pago = await this.ventaPagoRepo.findOne({ where: { id: pagoId } });
+    if (!pago) throw new NotFoundException(`Pago de servicio #${pagoId} no encontrado`);
+    if (pago.pago_validado) return this.ventaPagoRepo.findOne({ where: { id: pagoId }, relations: ['modalidad_pago', 'validado_por'] });
+    await this.ventaPagoRepo.update(pagoId, {
+      pago_validado:     true,
+      pago_validado_por: userId,
+      pago_validado_at:  new Date(),
+    });
+    return this.ventaPagoRepo.findOne({
+      where: { id: pagoId },
+      relations: ['modalidad_pago', 'validado_por'],
+    });
   }
 
   async findOne(id: number) {
@@ -576,6 +598,7 @@ export class VentaServicioService {
             modalidad_pago_id: p.modalidad_pago_id,
             monto: p.monto,
             referencia: p.referencia ?? null,
+            fecha_pago: p.fecha_pago ?? null,
           });
           await manager.save(pago);
         }
@@ -589,6 +612,7 @@ export class VentaServicioService {
           'detalles.servicio_tarifa',
           'detalles.servicio_tarifa.servicio',
           'detalles.servicio_tarifa.motivo_cita',
+          'detalles.documento_tarifa',
           'detalles.tipo_venta', 'detalles.paquete',
           'detalles.descuento_tipo', 'detalles.paciente',
           'tipo_comprobante', 'modalidad_pago', 'pagos', 'pagos.modalidad_pago',
@@ -809,15 +833,21 @@ export class VentaServicioService {
 
       await manager.update(VentaServicio, id, camposActualizables);
 
-      // Reemplazar pagos si se envían
+      // Reemplazar pagos si se envían, preservando el estado de validación
       if (dto.pagos && dto.pagos.length > 0) {
+        const pagosExistentes = await manager.find(VentaServicioPago, { where: { venta_id: id } });
         await manager.delete(VentaServicioPago, { venta_id: id });
         for (const p of dto.pagos) {
+          const prev = pagosExistentes.find(pe => pe.modalidad_pago_id === p.modalidad_pago_id);
           const pago = manager.create(VentaServicioPago, {
             venta_id: id,
-            modalidad_pago_id: p.modalidad_pago_id,
-            monto: p.monto,
-            referencia: p.referencia ?? null,
+            modalidad_pago_id:  p.modalidad_pago_id,
+            monto:              p.monto,
+            referencia:         p.referencia ?? null,
+            fecha_pago:         p.fecha_pago ?? null,
+            pago_validado:      prev?.pago_validado     ?? false,
+            pago_validado_por:  prev?.pago_validado_por ?? null,
+            pago_validado_at:   prev?.pago_validado_at  ?? null,
           });
           await manager.save(pago);
         }

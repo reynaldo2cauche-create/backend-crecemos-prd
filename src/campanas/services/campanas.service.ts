@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, LessThanOrEqual, MoreThanOrEqual } from 'typeorm';
+import { InjectRepository, InjectDataSource } from '@nestjs/typeorm';
+import { Repository, DataSource } from 'typeorm';
 import { Campana } from '../entities/campana.entity';
 import { CampanaSeccion } from '../entities/campana-seccion.entity';
 import { CreateCampanaDto } from '../dto/create-campana.dto';
@@ -13,6 +13,8 @@ export class CampanasService {
     private readonly campanaRepo: Repository<Campana>,
     @InjectRepository(CampanaSeccion)
     private readonly seccionRepo: Repository<CampanaSeccion>,
+    @InjectDataSource()
+    private readonly dataSource: DataSource,
   ) {}
 
   /**
@@ -65,32 +67,35 @@ export class CampanasService {
    * Crear una nueva campaña
    */
   async create(dto: CreateCampanaDto) {
-    const campana = this.campanaRepo.create({
-      titulo: dto.titulo,
-      descripcion_corta: dto.descripcion_corta,
-      fecha_inicio: dto.fecha_inicio,
-      fecha_fin: dto.fecha_fin,
-      estado_id: dto.estado_id ?? 2, // Por defecto "inactiva"
-      orden: dto.orden ?? 0,
-      user_crea_id: dto.user_crea_id,
+    const campanaSaved = await this.dataSource.transaction(async (manager) => {
+      const campana = manager.create(Campana, {
+        titulo: dto.titulo,
+        descripcion_corta: dto.descripcion_corta,
+        fecha_inicio: dto.fecha_inicio,
+        fecha_fin: dto.fecha_fin,
+        estado_id: dto.estado_id ?? 2,
+        orden: dto.orden ?? 0,
+        user_crea_id: dto.user_crea_id,
+      });
+
+      const saved = await manager.save(campana);
+
+      if (dto.secciones && dto.secciones.length > 0) {
+        const secciones = dto.secciones.map((secDto, index) =>
+          manager.create(CampanaSeccion, {
+            campana_id: saved.id,
+            titulo: secDto.titulo,
+            contenido: secDto.contenido,
+            orden: secDto.orden ?? index,
+            user_crea_id: dto.user_crea_id,
+          }),
+        );
+        await manager.save(CampanaSeccion, secciones);
+      }
+
+      return saved;
     });
 
-    const campanaSaved = await this.campanaRepo.save(campana);
-
-    // Crear secciones si las hay
-    if (dto.secciones && dto.secciones.length > 0) {
-      const secciones = dto.secciones.map((secDto, index) =>
-        this.seccionRepo.create({
-          campana_id: campanaSaved.id,
-          titulo: secDto.titulo,
-          contenido: secDto.contenido,
-          orden: secDto.orden ?? index,
-          user_crea_id: dto.user_crea_id,
-        }),
-      );
-      await this.seccionRepo.save(secciones);
-    }
-    console.log(campana);
     return this.findOne(campanaSaved.id);
   }
 
@@ -98,38 +103,36 @@ export class CampanasService {
    * Actualizar una campaña
    */
   async update(id: number, dto: UpdateCampanaDto) {
-    const campana = await this.findOne(id);
+    await this.dataSource.transaction(async (manager) => {
+      const campana = await this.findOne(id);
 
-    // Actualizar campos de la campaña
-    if (dto.titulo !== undefined) campana.titulo = dto.titulo;
-    if (dto.descripcion_corta !== undefined) campana.descripcion_corta = dto.descripcion_corta;
-    if (dto.fecha_inicio !== undefined) campana.fecha_inicio = dto.fecha_inicio;
-    if (dto.fecha_fin !== undefined) campana.fecha_fin = dto.fecha_fin;
-    if (dto.estado_id !== undefined) campana.estado_id = dto.estado_id;
-    if (dto.orden !== undefined) campana.orden = dto.orden;
-    if (dto.user_actua_id !== undefined) campana.user_actua_id = dto.user_actua_id;
+      if (dto.titulo !== undefined) campana.titulo = dto.titulo;
+      if (dto.descripcion_corta !== undefined) campana.descripcion_corta = dto.descripcion_corta;
+      if (dto.fecha_inicio !== undefined) campana.fecha_inicio = dto.fecha_inicio;
+      if (dto.fecha_fin !== undefined) campana.fecha_fin = dto.fecha_fin;
+      if (dto.estado_id !== undefined) campana.estado_id = dto.estado_id;
+      if (dto.orden !== undefined) campana.orden = dto.orden;
+      if (dto.user_actua_id !== undefined) campana.user_actua_id = dto.user_actua_id;
 
-    await this.campanaRepo.save(campana);
+      await manager.save(Campana, campana);
 
-    // Actualizar secciones si las hay
-    if (dto.secciones !== undefined) {
-      // Eliminar secciones antiguas
-      await this.seccionRepo.delete({ campana_id: id });
+      if (dto.secciones !== undefined) {
+        await manager.delete(CampanaSeccion, { campana_id: id });
 
-      // Crear nuevas secciones
-      if (dto.secciones.length > 0) {
-        const secciones = dto.secciones.map((secDto, index) =>
-          this.seccionRepo.create({
-            campana_id: id,
-            titulo: secDto.titulo,
-            contenido: secDto.contenido,
-            orden: secDto.orden ?? index,
-            user_crea_id: dto.user_actua_id || campana.user_crea_id,
-          }),
-        );
-        await this.seccionRepo.save(secciones);
+        if (dto.secciones.length > 0) {
+          const secciones = dto.secciones.map((secDto, index) =>
+            manager.create(CampanaSeccion, {
+              campana_id: id,
+              titulo: secDto.titulo,
+              contenido: secDto.contenido,
+              orden: secDto.orden ?? index,
+              user_crea_id: dto.user_actua_id || campana.user_crea_id,
+            }),
+          );
+          await manager.save(CampanaSeccion, secciones);
+        }
       }
-    }
+    });
 
     return this.findOne(id);
   }

@@ -14,6 +14,10 @@ export class PagoVentaProductoDto {
   @IsOptional()
   @IsString()
   referencia?: string;
+
+  @IsOptional()
+  @IsString()
+  fecha_pago?: string;
 }
 
 export class DetalleVentaProductoDto {

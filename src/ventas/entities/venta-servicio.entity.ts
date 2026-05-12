@@ -7,10 +7,10 @@ import { PacienteResponsable } from '../../pacientes/entities/paciente-responsab
 import { VentaServicioDetalle } from './venta-servicio-detalle.entity';
 import { TipoComprobante } from './tipo-comprobante.entity';
 import { Responsable } from 'src/pacientes/entities/responsable.entity';
-// ✅ FIX: importar la entidad de promociones aplicadas
 import { VentaPromocionAplicada } from '../../promociones/entities/venta-promocion-aplicada.entity';
 import { ModalidadPago } from '../../historia-clinica/entities/modalidad-pago.entity';
 import { VentaServicioPago } from './venta-servicio-pago.entity';
+import { TrabajadorCentro } from '../../evaluaciones/trabajador-centro.entity';
 
 @Entity('venta_servicio')
 export class VentaServicio {
@@ -95,6 +95,10 @@ export class VentaServicio {
 
   @Column({ nullable: true })
   user_crea_id: number;
+
+  @ManyToOne(() => TrabajadorCentro, { nullable: true, eager: false })
+  @JoinColumn({ name: 'user_crea_id' })
+  user_crea: TrabajadorCentro;
 
   @Column({ nullable: true })
   user_actua_id: number;

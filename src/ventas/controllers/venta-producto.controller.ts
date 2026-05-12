@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param, Query, Patch, Delete, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Query, Patch, Delete, UseGuards, Request } from '@nestjs/common';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { VentaProductoService } from '../services/venta-producto.service';
 import { CreateVentaProductoDto } from '../dto/create-venta-producto.dto';
@@ -27,6 +27,11 @@ export class VentaProductoController {
   @Auditable({ modulo: 'VENTAS', accion: 'REGISTRAR_VENTA_PRODUCTO' })
   create(@Body() dto: CreateVentaProductoDto) {
     return this.service.create(dto);
+  }
+
+  @Patch('pago/:pagoId/validar')
+  validarPago(@Param('pagoId') pagoId: string, @Request() req) {
+    return this.service.validarPago(+pagoId, req.user?.id);
   }
 
   @Patch(':id')

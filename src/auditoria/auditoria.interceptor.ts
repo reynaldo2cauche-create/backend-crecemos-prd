@@ -159,29 +159,24 @@ export class AuditoriaInterceptor implements NestInterceptor {
           this.logger.error('❌ Error en interceptor de auditoría:', error);
         }
       }),
-      catchError(async (error) => {
-        // Completar datos del usuario para el registro de error
-        const userCompleto = await this.auditoriaService.completarDatosUsuario(user);
-
-        // Registrar también los errores
-        const descripcion = this.generarDescripcion(
-          metadata,
-          userCompleto,
-          request,
-          null,
-        );
-
-        this.auditoriaService.registrar({
-          trabajadorId: userCompleto.id,
-          accion: metadata.accion,
-          modulo: metadata.modulo,
-          descripcion: `${descripcion} - ERROR: ${error.message}`,
-          datosNuevos,
-          ipAddress: this.obtenerIPReal(request),
-          userAgent: request.headers['user-agent'],
-          ...coordenadas, // 📍 Coordenadas GPS también en errores
+      catchError((error) => {
+        // Guardar auditoría en background sin bloquear la propagación del error
+        setImmediate(async () => {
+          try {
+            const userCompleto = await this.auditoriaService.completarDatosUsuario(user);
+            const descripcion = this.generarDescripcion(metadata, userCompleto, request, null);
+            await this.auditoriaService.registrar({
+              trabajadorId: userCompleto.id,
+              accion: metadata.accion,
+              modulo: metadata.modulo,
+              descripcion: `${descripcion} - ERROR: ${error.message}`,
+              datosNuevos,
+              ipAddress: this.obtenerIPReal(request),
+              userAgent: request.headers['user-agent'],
+              ...coordenadas,
+            });
+          } catch {}
         });
-
         return throwError(() => error);
       }),
     );

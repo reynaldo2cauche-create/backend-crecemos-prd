@@ -22,6 +22,9 @@ async function bootstrap() {
   // Confiar en proxies para obtener la IP real del cliente
   app.set('trust proxy', true);
 
+  // CORS debe ir ANTES de los archivos estáticos para que los cubra también
+  app.enableCors();
+
   // Servir archivos estáticos desde la carpeta uploads
   app.useStaticAssets(join(__dirname, '..', 'uploads'), {
     prefix: '/uploads/',
@@ -38,10 +41,7 @@ async function bootstrap() {
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api/docs', app, document);
 
-  app.enableCors(); 
-  
-  
-  app.useGlobalInterceptors(new LoggingInterceptor());// Habilita CORS
+  app.useGlobalInterceptors(new LoggingInterceptor());
 
   // app.enableCors({
   //   origin: 'https://www.crecemos.com.pe',

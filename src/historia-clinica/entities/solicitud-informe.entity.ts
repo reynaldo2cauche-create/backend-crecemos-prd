@@ -136,6 +136,10 @@ export class SolicitudInforme {
   @Column({ nullable: true })
   user_crea_id: number;
 
+  @ManyToOne(() => TrabajadorCentro, { eager: false, nullable: true })
+  @JoinColumn({ name: 'user_crea_id' })
+  user_crea: TrabajadorCentro;
+
   @Column({ nullable: true })
   user_actua_id: number;
 
