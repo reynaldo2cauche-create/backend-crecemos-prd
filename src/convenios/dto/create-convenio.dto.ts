@@ -1,5 +1,6 @@
 // src/convenios/dto/create-convenio.dto.ts
 import { IsString, IsOptional, IsBoolean, IsUrl, MaxLength } from 'class-validator';
+import { Transform } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateConvenioDto {
@@ -21,6 +22,11 @@ export class CreateConvenioDto {
 
   @ApiPropertyOptional({ description: 'Estado activo/inactivo', default: true })
   @IsOptional()
+  @Transform(({ value }) => {
+    if (value === 'true' || value === true) return true;
+    if (value === 'false' || value === false) return false;
+    return value;
+  })
   @IsBoolean()
   activo?: boolean;
 }

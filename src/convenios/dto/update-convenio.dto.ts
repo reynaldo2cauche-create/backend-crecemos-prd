@@ -6,6 +6,7 @@ export class UpdateConvenioDto extends PartialType(CreateConvenioDto) {}
 
 // src/convenios/dto/create-paciente-convenio.dto.ts
 import { IsNumber, IsOptional, IsDateString, IsBoolean, IsString } from 'class-validator';
+import { Transform } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreatePacienteConvenioDto {
@@ -29,6 +30,11 @@ export class CreatePacienteConvenioDto {
 
   @ApiPropertyOptional({ description: 'Estado activo/inactivo', default: true })
   @IsOptional()
+  @Transform(({ value }) => {
+    if (value === 'true' || value === true) return true;
+    if (value === 'false' || value === false) return false;
+    return value;
+  })
   @IsBoolean()
   activo?: boolean;
 

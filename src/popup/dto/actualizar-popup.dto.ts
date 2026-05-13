@@ -1,4 +1,5 @@
 import { IsString, IsDateString, IsBoolean, IsOptional } from 'class-validator';
+import { Transform } from 'class-transformer';
 
 export class ActualizarPopupDto {
   @IsString()
@@ -13,6 +14,11 @@ export class ActualizarPopupDto {
   @IsOptional()
   fechaFin?: string;
 
+  @Transform(({ value }) => {
+    if (value === 'true' || value === true) return true;
+    if (value === 'false' || value === false) return false;
+    return value;
+  })
   @IsBoolean()
   @IsOptional()
   activo?: boolean;

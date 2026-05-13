@@ -1,4 +1,8 @@
 import { IsString, IsNumber, IsOptional, IsEmail, IsBoolean } from 'class-validator';
+import { Transform } from 'class-transformer';
+
+const toNumber = ({ value }) =>
+  value !== undefined && value !== '' && value !== null ? Number(value) : undefined;
 
 export class CreateTrabajadorCentroDto {
   @IsString()
@@ -23,8 +27,9 @@ export class CreateTrabajadorCentroDto {
   @IsOptional()
   @IsEmail()
   correo_corporativo?: string;
-  
+
   @IsOptional()
+  @Transform(toNumber)
   @IsNumber()
   rol_id?: number;
 
@@ -33,18 +38,22 @@ export class CreateTrabajadorCentroDto {
   cargo?: string;
 
   @IsOptional()
+  @Transform(toNumber)
   @IsNumber()
   institucion_id?: number;
 
   @IsOptional()
+  @Transform(toNumber)
   @IsNumber()
   especialidad_id?: number;
 
   @IsOptional()
+  @Transform(toNumber)
   @IsNumber()
   cargo_id?: number;
 
   @IsOptional()
+  @Transform(toNumber)
   @IsNumber()
   jefe_id?: number;
 
@@ -98,14 +107,17 @@ export class CreateTrabajadorCentroDto {
   fecha_nacimiento?: string;
 
   @IsOptional()
+  @Transform(toNumber)
   @IsNumber()
   sexo_id?: number;
 
   @IsOptional()
+  @Transform(toNumber)
   @IsNumber()
   estado_civil_id?: number;
 
   @IsOptional()
+  @Transform(toNumber)
   @IsNumber()
   hijos?: number;
 
@@ -119,10 +131,12 @@ export class CreateTrabajadorCentroDto {
   referencia_direccion?: string;
 
   @IsOptional()
+  @Transform(toNumber)
   @IsNumber()
   parentesco_emergencia_id?: number;
 
   @IsOptional()
+  @Transform(toNumber)
   @IsNumber()
   distrito_id?: number;
 
@@ -144,7 +158,7 @@ export class CreateTrabajadorCentroDto {
   motivo_renuncia?: string;
 
   // Datos adicionales
- @IsOptional()
+  @IsOptional()
   @IsString()
   hobbies?: string;
 
@@ -154,6 +168,7 @@ export class CreateTrabajadorCentroDto {
 
   // Datos académicos principales
   @IsOptional()
+  @Transform(toNumber)
   @IsNumber()
   nivel_educacion_id?: number;
 
@@ -184,6 +199,7 @@ export class CreateTrabajadorCentroDto {
 
   // Campos de RRHH
   @IsOptional()
+  @Transform(toNumber)
   @IsNumber()
   sueldo_base?: number;
 
@@ -200,6 +216,7 @@ export class CreateTrabajadorCentroDto {
   banco?: string;
 
   @IsOptional()
+  @Transform(toNumber)
   @IsNumber()
   user_id_actua?: number;
-} 
+}

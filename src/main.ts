@@ -54,6 +54,7 @@ async function bootstrap() {
 app.useGlobalPipes(new ValidationPipe({
     whitelist: true,
     transform: true,
+    transformOptions: { enableImplicitConversion: true },
     exceptionFactory: (errors) => {
       const flatten = (errs: any[], prefix = ''): string[] =>
         errs.flatMap(e => {
