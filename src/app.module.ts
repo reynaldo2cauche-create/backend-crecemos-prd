@@ -196,6 +196,14 @@ import { CampanaEstado } from './campanas/entities/campana-estado.entity';
 import { CampanaSeccion } from './campanas/entities/campana-seccion.entity';
 import { HistorialEstadoSolicitud } from './historia-clinica/entities/historial-estado-solicitud.entity';
 
+// ── Centro Operativo ───────────────────────────────────────────────────────────
+import { TareasModule } from './tareas/tareas.module';
+import { Tarea } from './tareas/entities/tarea.entity';
+import { TareaAsignacion } from './tareas/entities/tarea-asignacion.entity';
+import { TareaComentario } from './tareas/entities/tarea-comentario.entity';
+import { TareaPrioridad } from './tareas/entities/tarea-prioridad.entity';
+import { TareaColumna } from './tareas/entities/tarea-columna.entity';
+
 
 @Module({
   imports: [
@@ -409,6 +417,12 @@ import { HistorialEstadoSolicitud } from './historia-clinica/entities/historial-
         CampanaEstado,
         CampanaSeccion,
         EntrevistaAdultos,
+        // Centro Operativo
+        Tarea,
+        TareaAsignacion,
+        TareaComentario,
+        TareaPrioridad,
+        TareaColumna,
         SolicitudInforme,
         ModalidadPago,
         EstadoPago,
@@ -458,6 +472,7 @@ import { HistorialEstadoSolicitud } from './historia-clinica/entities/historial-
     PromocionesModule,
     LibroReclamacionesModule,
     CampanasModule,
+    TareasModule,
   ],
   controllers: [AppController],
   providers: [
