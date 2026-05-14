@@ -7,6 +7,8 @@ import { TareaAsignacion } from './entities/tarea-asignacion.entity';
 import { TareaComentario } from './entities/tarea-comentario.entity';
 import { TareaPrioridad } from './entities/tarea-prioridad.entity';
 import { TareaColumna } from './entities/tarea-columna.entity';
+import { TareaArchivo } from './entities/tarea-archivo.entity';
+import { TareaComentarioArchivo } from './entities/tarea-comentario-archivo.entity';
 
 @Module({
   imports: [
@@ -16,6 +18,8 @@ import { TareaColumna } from './entities/tarea-columna.entity';
       TareaComentario,
       TareaPrioridad,
       TareaColumna,
+      TareaArchivo,
+      TareaComentarioArchivo,
     ]),
   ],
   providers: [TareasService],

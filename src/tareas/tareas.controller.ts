@@ -1,4 +1,7 @@
-import { Controller, Get, Post, Put, Delete, Patch, Body, Param, Query, Request, UseGuards, ParseIntPipe } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Patch, Body, Param, Query, Request, UseGuards, ParseIntPipe, UseInterceptors, UploadedFiles } from '@nestjs/common';
+import { FilesInterceptor } from '@nestjs/platform-express';
+import { diskStorage } from 'multer';
+import { extname } from 'path';
 import { TareasService } from './tareas.service';
 import { CreateTareaDto } from './dto/create-tarea.dto';
 import { UpdateTareaDto } from './dto/update-tarea.dto';
@@ -115,12 +118,60 @@ export class TareasController {
   }
 
   @Post(':id/comentarios')
+  @UseInterceptors(FilesInterceptor('archivos', 10, {
+    storage: diskStorage({
+      destination: './uploads/tareas',
+      filename: (req, file, cb) => {
+        const unique = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+        cb(null, `comentario-${unique}${extname(file.originalname)}`);
+      },
+    }),
+    limits: { fileSize: 50 * 1024 * 1024 },
+  }))
   agregarComentario(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: CreateComentarioDto,
+    @UploadedFiles() files: Express.Multer.File[],
     @Request() req,
   ) {
     const userId = req.user?.id;
-    return this.tareasService.agregarComentario(id, dto, userId);
+    console.log('[comentario] files recibidos:', files?.length, files?.map(f => ({ name: f.originalname, size: f.size, mime: f.mimetype })));
+    console.log('[comentario] content-type:', req.headers['content-type']);
+    return this.tareasService.agregarComentario(id, dto, userId, files);
+  }
+
+  // ─── Archivos ────────────────────────────────────────────────────────────────
+
+  @Get(':id/archivos')
+  listarArchivos(@Param('id', ParseIntPipe) id: number) {
+    return this.tareasService.listarArchivos(id);
+  }
+
+  @Post(':id/archivos')
+  @UseInterceptors(FilesInterceptor('archivos', 10, {
+    storage: diskStorage({
+      destination: './uploads/tareas',
+      filename: (req, file, cb) => {
+        const unique = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+        cb(null, `tarea-${unique}${extname(file.originalname)}`);
+      },
+    }),
+    limits: { fileSize: 50 * 1024 * 1024 },
+  }))
+  async subirArchivos(
+    @Param('id', ParseIntPipe) id: number,
+    @UploadedFiles() files: Express.Multer.File[],
+    @Request() req,
+  ) {
+    const userId = req.user?.id;
+    return Promise.all(files.map(f => this.tareasService.guardarArchivo(id, f, userId)));
+  }
+
+  @Delete(':id/archivos/:archivoId')
+  eliminarArchivo(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('archivoId', ParseIntPipe) archivoId: number,
+  ) {
+    return this.tareasService.eliminarArchivo(archivoId);
   }
 }

@@ -4,6 +4,7 @@ import { TareaPrioridad } from './tarea-prioridad.entity';
 import { TareaColumna } from './tarea-columna.entity';
 import { TareaAsignacion } from './tarea-asignacion.entity';
 import { TareaComentario } from './tarea-comentario.entity';
+import { TareaArchivo } from './tarea-archivo.entity';
 
 @Entity('tareas')
 export class Tarea {
@@ -61,6 +62,9 @@ export class Tarea {
 
   @OneToMany(() => TareaComentario, c => c.tarea, { cascade: true })
   comentarios: TareaComentario[];
+
+  @OneToMany(() => TareaArchivo, a => a.tarea, { cascade: true, eager: true })
+  archivos: TareaArchivo[];
 
   @CreateDateColumn()
   created_at: Date;

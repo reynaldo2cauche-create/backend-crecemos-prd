@@ -1,6 +1,7 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, CreateDateColumn, UpdateDateColumn } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, OneToMany, JoinColumn, CreateDateColumn, UpdateDateColumn } from 'typeorm';
 import { Tarea } from './tarea.entity';
 import { TrabajadorCentro } from '../../usuarios/trabajador-centro.entity';
+import { TareaComentarioArchivo } from './tarea-comentario-archivo.entity';
 
 @Entity('tarea_comentarios')
 export class TareaComentario {
@@ -30,6 +31,9 @@ export class TareaComentario {
   @ManyToOne(() => TrabajadorCentro, { nullable: true, eager: false, onDelete: 'SET NULL' })
   @JoinColumn({ name: 'user_actua_id' })
   user_actua: TrabajadorCentro;
+
+  @OneToMany(() => TareaComentarioArchivo, a => a.comentario, { cascade: true, eager: true })
+  archivos: TareaComentarioArchivo[];
 
   @CreateDateColumn()
   created_at: Date;

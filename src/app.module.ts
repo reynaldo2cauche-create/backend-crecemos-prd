@@ -203,6 +203,8 @@ import { TareaAsignacion } from './tareas/entities/tarea-asignacion.entity';
 import { TareaComentario } from './tareas/entities/tarea-comentario.entity';
 import { TareaPrioridad } from './tareas/entities/tarea-prioridad.entity';
 import { TareaColumna } from './tareas/entities/tarea-columna.entity';
+import { TareaArchivo } from './tareas/entities/tarea-archivo.entity';
+import { TareaComentarioArchivo } from './tareas/entities/tarea-comentario-archivo.entity';
 
 
 @Module({
@@ -423,6 +425,8 @@ import { TareaColumna } from './tareas/entities/tarea-columna.entity';
         TareaComentario,
         TareaPrioridad,
         TareaColumna,
+        TareaArchivo,
+        TareaComentarioArchivo,
         SolicitudInforme,
         ModalidadPago,
         EstadoPago,

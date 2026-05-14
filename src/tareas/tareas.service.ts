@@ -1,11 +1,15 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
+import * as fs from 'fs';
+import * as path from 'path';
 import { Tarea } from './entities/tarea.entity';
 import { TareaAsignacion } from './entities/tarea-asignacion.entity';
 import { TareaComentario } from './entities/tarea-comentario.entity';
 import { TareaPrioridad } from './entities/tarea-prioridad.entity';
 import { TareaColumna } from './entities/tarea-columna.entity';
+import { TareaArchivo } from './entities/tarea-archivo.entity';
+import { TareaComentarioArchivo } from './entities/tarea-comentario-archivo.entity';
 import { CreateTareaDto } from './dto/create-tarea.dto';
 import { UpdateTareaDto } from './dto/update-tarea.dto';
 import { CreateComentarioDto } from './dto/create-comentario.dto';
@@ -25,6 +29,10 @@ export class TareasService {
     private prioridadRepo: Repository<TareaPrioridad>,
     @InjectRepository(TareaColumna)
     private columnaRepo: Repository<TareaColumna>,
+    @InjectRepository(TareaArchivo)
+    private archivoRepo: Repository<TareaArchivo>,
+    @InjectRepository(TareaComentarioArchivo)
+    private comentarioArchivoRepo: Repository<TareaComentarioArchivo>,
   ) {}
 
   // ─── Catálogos ──────────────────────────────────────────────────────────────
@@ -202,15 +210,61 @@ export class TareasService {
     });
   }
 
-  async agregarComentario(tareaId: number, dto: CreateComentarioDto, userId: number) {
+  async agregarComentario(tareaId: number, dto: CreateComentarioDto, userId: number, files?: Express.Multer.File[]) {
     await this.obtenerPorId(tareaId);
-    const comentario = this.comentarioRepo.create({
-      tarea_id: tareaId,
-      contenido: dto.contenido,
-      user_crea_id: userId,
-      user_actua_id: userId,
+    const comentario = await this.comentarioRepo.save(
+      this.comentarioRepo.create({
+        tarea_id: tareaId,
+        contenido: dto.contenido?.trim() || '',
+        user_crea_id: userId,
+        user_actua_id: userId,
+      })
+    );
+    if (files?.length) {
+      const archivos = files.map(f => this.comentarioArchivoRepo.create({
+        comentario_id: comentario.id,
+        nombre_original: f.originalname,
+        nombre_guardado: f.filename,
+        url: `/uploads/tareas/${f.filename}`,
+        tipo_mime: f.mimetype,
+        tamanio: f.size,
+        user_crea_id: userId,
+      }));
+      await this.comentarioArchivoRepo.save(archivos);
+    }
+    return this.comentarioRepo.findOne({ where: { id: comentario.id } });
+  }
+
+  // ─── Archivos ───────────────────────────────────────────────────────────────
+
+  async listarArchivos(tareaId: number): Promise<TareaArchivo[]> {
+    return this.archivoRepo.find({
+      where: { tarea_id: tareaId },
+      order: { created_at: 'ASC' },
     });
-    return this.comentarioRepo.save(comentario);
+  }
+
+  async guardarArchivo(tareaId: number, file: Express.Multer.File, userId: number): Promise<TareaArchivo> {
+    await this.obtenerPorId(tareaId);
+    const archivo = this.archivoRepo.create({
+      tarea_id: tareaId,
+      nombre_original: file.originalname,
+      nombre_guardado: file.filename,
+      url: `/uploads/tareas/${file.filename}`,
+      tipo_mime: file.mimetype,
+      tamanio: file.size,
+      user_crea_id: userId,
+    });
+    return this.archivoRepo.save(archivo);
+  }
+
+  async eliminarArchivo(archivoId: number): Promise<{ message: string }> {
+    const archivo = await this.archivoRepo.findOne({ where: { id: archivoId } });
+    if (!archivo) throw new NotFoundException('Archivo no encontrado');
+    const filePath = path.join('./uploads/tareas', archivo.nombre_guardado);
+    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+    await this.archivoRepo.delete(archivoId);
+    return { message: 'Archivo eliminado' };
   }
 
   // ─── Reporte mensual ────────────────────────────────────────────────────────
