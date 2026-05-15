@@ -35,6 +35,9 @@ export class Tarea {
   fecha_limite: Date;
 
   @Column({ type: 'int', default: 0 })
+  orden: number;
+
+  @Column({ type: 'int', default: 0 })
   tiempo_acumulado: number;
 
   @Column({ default: false })

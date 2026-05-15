@@ -10,6 +10,7 @@ import { TareaPrioridad } from './entities/tarea-prioridad.entity';
 import { TareaColumna } from './entities/tarea-columna.entity';
 import { TareaArchivo } from './entities/tarea-archivo.entity';
 import { TareaComentarioArchivo } from './entities/tarea-comentario-archivo.entity';
+import { TareaTimer } from './entities/tarea-timer.entity';
 import { CreateTareaDto } from './dto/create-tarea.dto';
 import { UpdateTareaDto } from './dto/update-tarea.dto';
 import { CreateComentarioDto } from './dto/create-comentario.dto';
@@ -33,6 +34,8 @@ export class TareasService {
     private archivoRepo: Repository<TareaArchivo>,
     @InjectRepository(TareaComentarioArchivo)
     private comentarioArchivoRepo: Repository<TareaComentarioArchivo>,
+    @InjectRepository(TareaTimer)
+    private timerRepo: Repository<TareaTimer>,
   ) {}
 
   // ─── Catálogos ──────────────────────────────────────────────────────────────
@@ -76,16 +79,32 @@ export class TareasService {
 
   // ─── Tareas ─────────────────────────────────────────────────────────────────
 
+  async reordenarTareas(ids: number[], userId: number) {
+    await Promise.all(ids.map((id, i) =>
+      this.tareaRepo.update(id, { orden: i, user_actua_id: userId })
+    ));
+    return { ok: true };
+  }
+
   async listar(userId: number, rolId: number) {
     const todas = await this.tareaRepo.find({
-      order: { fecha_limite: 'ASC', created_at: 'DESC' },
+      order: { orden: 'ASC', created_at: 'DESC' },
     });
 
+    // Cargar timers del usuario actual para todas las tareas
+    const misTimers = await this.timerRepo.find({ where: { usuario_id: userId } });
+    const timerMap = new Map(misTimers.map(t => [t.tarea_id, t]));
+
+    const conTimer = todas.map(t => ({
+      ...t,
+      mi_timer: timerMap.get(t.id) ?? null,
+    }));
+
     // Administrador ve todo
-    if (rolId === ROL_ADMIN) return todas;
+    if (rolId === ROL_ADMIN) return conTimer;
 
     // Otros: solo tareas asignadas a su usuario o su rol
-    return todas.filter(t =>
+    return conTimer.filter(t =>
       t.asignaciones?.some(a =>
         (a.usuario_id && a.usuario_id === userId) ||
         (a.rol_id && a.rol_id === rolId)
@@ -179,29 +198,55 @@ export class TareasService {
     return { message: 'Tarea eliminada correctamente' };
   }
 
-  // ─── Timer ──────────────────────────────────────────────────────────────────
+  // ─── Timer por usuario ───────────────────────────────────────────────────────
 
-  async iniciarTimer(id: number) {
-    const tarea = await this.obtenerPorId(id);
-    if (tarea.timer_activo) throw new BadRequestException('El timer ya está activo');
-
-    await this.tareaRepo.update(id, { timer_activo: true, timer_inicio: new Date() });
-    return this.obtenerPorId(id);
+  private async validarAsignacion(tareaId: number, userId: number, rolId: number) {
+    const asignacion = await this.asignacionRepo.findOne({
+      where: [
+        { tarea_id: tareaId, usuario_id: userId },
+        { tarea_id: tareaId, rol_id: rolId },
+      ],
+    });
+    if (!asignacion) throw new BadRequestException('No tienes asignada esta tarea');
   }
 
-  async pausarTimer(id: number) {
-    const tarea = await this.obtenerPorId(id);
-    if (!tarea.timer_activo) throw new BadRequestException('El timer no está activo');
+  async iniciarTimer(tareaId: number, userId: number, rolId: number) {
+    await this.obtenerPorId(tareaId);
+    await this.validarAsignacion(tareaId, userId, rolId);
 
-    await this.tareaRepo.update(id, {
-      tiempo_acumulado: this.calcularTiempoAcumulado(tarea),
-      timer_activo: false,
-      timer_inicio: null,
-    });
-    return this.obtenerPorId(id);
+    let timer = await this.timerRepo.findOne({ where: { tarea_id: tareaId, usuario_id: userId } });
+    if (timer?.timer_activo) throw new BadRequestException('El timer ya está activo');
+
+    if (!timer) {
+      timer = this.timerRepo.create({ tarea_id: tareaId, usuario_id: userId, tiempo_acumulado: 0 });
+    }
+    timer.timer_activo = true;
+    timer.timer_inicio = new Date();
+    return this.timerRepo.save(timer);
+  }
+
+  async pausarTimer(tareaId: number, userId: number, rolId: number) {
+    await this.validarAsignacion(tareaId, userId, rolId);
+
+    const timer = await this.timerRepo.findOne({ where: { tarea_id: tareaId, usuario_id: userId } });
+    if (!timer?.timer_activo) throw new BadRequestException('El timer no está activo');
+
+    timer.tiempo_acumulado = this.calcularTiempoAcumuladoTimer(timer);
+    timer.timer_activo = false;
+    timer.timer_inicio = null;
+    return this.timerRepo.save(timer);
   }
 
   // ─── Comentarios ────────────────────────────────────────────────────────────
+
+  async eliminarComentario(comentarioId: number, userId: number, esAdmin: boolean) {
+    const comentario = await this.comentarioRepo.findOne({ where: { id: comentarioId } });
+    if (!comentario) throw new NotFoundException('Comentario no encontrado');
+    if (!esAdmin && comentario.user_crea_id !== userId)
+      throw new BadRequestException('No tienes permiso para eliminar este comentario');
+    await this.comentarioRepo.remove(comentario);
+    return { message: 'Comentario eliminado' };
+  }
 
   async listarComentarios(tareaId: number) {
     return this.comentarioRepo.find({
@@ -303,6 +348,12 @@ export class TareasService {
     if (!tarea.timer_inicio) return tarea.tiempo_acumulado;
     const segundosTranscurridos = Math.floor((Date.now() - new Date(tarea.timer_inicio).getTime()) / 1000);
     return tarea.tiempo_acumulado + segundosTranscurridos;
+  }
+
+  private calcularTiempoAcumuladoTimer(timer: TareaTimer): number {
+    if (!timer.timer_inicio) return timer.tiempo_acumulado;
+    const seg = Math.floor((Date.now() - new Date(timer.timer_inicio).getTime()) / 1000);
+    return timer.tiempo_acumulado + seg;
   }
 
   private async guardarAsignaciones(tareaId: number, asignaciones: { usuario_id?: number; rol_id?: number }[], userId: number) {

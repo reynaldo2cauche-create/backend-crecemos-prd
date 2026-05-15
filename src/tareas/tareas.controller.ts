@@ -86,6 +86,13 @@ export class TareasController {
     return this.tareasService.eliminar(id);
   }
 
+  // ─── Reordenar tareas ───────────────────────────────────────────────────────
+
+  @Patch('reordenar')
+  reordenarTareas(@Body() body: { ids: number[] }, @Request() req) {
+    return this.tareasService.reordenarTareas(body.ids, req.user?.id);
+  }
+
   // ─── Mover columna ──────────────────────────────────────────────────────────
 
   @Patch(':id/columna')
@@ -101,13 +108,13 @@ export class TareasController {
   // ─── Timer ──────────────────────────────────────────────────────────────────
 
   @Patch(':id/timer/iniciar')
-  iniciarTimer(@Param('id', ParseIntPipe) id: number) {
-    return this.tareasService.iniciarTimer(id);
+  iniciarTimer(@Param('id', ParseIntPipe) id: number, @Request() req) {
+    return this.tareasService.iniciarTimer(id, req.user?.id, req.user?.rol_id);
   }
 
   @Patch(':id/timer/pausar')
-  pausarTimer(@Param('id', ParseIntPipe) id: number) {
-    return this.tareasService.pausarTimer(id);
+  pausarTimer(@Param('id', ParseIntPipe) id: number, @Request() req) {
+    return this.tareasService.pausarTimer(id, req.user?.id, req.user?.rol_id);
   }
 
   // ─── Comentarios ────────────────────────────────────────────────────────────
@@ -115,6 +122,16 @@ export class TareasController {
   @Get(':id/comentarios')
   listarComentarios(@Param('id', ParseIntPipe) id: number) {
     return this.tareasService.listarComentarios(id);
+  }
+
+  @Delete('comentarios/:comentarioId')
+  eliminarComentario(
+    @Param('comentarioId', ParseIntPipe) comentarioId: number,
+    @Request() req,
+  ) {
+    const userId = req.user?.id;
+    const esAdmin = req.user?.rol?.id === 1 || req.user?.rol_id === 1;
+    return this.tareasService.eliminarComentario(comentarioId, userId, esAdmin);
   }
 
   @Post(':id/comentarios')

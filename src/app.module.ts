@@ -205,6 +205,7 @@ import { TareaPrioridad } from './tareas/entities/tarea-prioridad.entity';
 import { TareaColumna } from './tareas/entities/tarea-columna.entity';
 import { TareaArchivo } from './tareas/entities/tarea-archivo.entity';
 import { TareaComentarioArchivo } from './tareas/entities/tarea-comentario-archivo.entity';
+import { TareaTimer } from './tareas/entities/tarea-timer.entity';
 
 
 @Module({
@@ -427,6 +428,7 @@ import { TareaComentarioArchivo } from './tareas/entities/tarea-comentario-archi
         TareaColumna,
         TareaArchivo,
         TareaComentarioArchivo,
+        TareaTimer,
         SolicitudInforme,
         ModalidadPago,
         EstadoPago,

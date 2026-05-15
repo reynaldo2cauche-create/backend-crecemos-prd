@@ -9,6 +9,7 @@ import { TareaPrioridad } from './entities/tarea-prioridad.entity';
 import { TareaColumna } from './entities/tarea-columna.entity';
 import { TareaArchivo } from './entities/tarea-archivo.entity';
 import { TareaComentarioArchivo } from './entities/tarea-comentario-archivo.entity';
+import { TareaTimer } from './entities/tarea-timer.entity';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { TareaComentarioArchivo } from './entities/tarea-comentario-archivo.enti
       TareaColumna,
       TareaArchivo,
       TareaComentarioArchivo,
+      TareaTimer,
     ]),
   ],
   providers: [TareasService],
