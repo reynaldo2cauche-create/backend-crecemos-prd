@@ -88,8 +88,9 @@ export class NotificacionesController {
     @Request() req,
     @Query('limite') limite?: number,
     @Query('offset') offset?: number,
-    @Query('fecha') fecha?: string,       // YYYY-MM-DD — filtra por día exacto en Lima
-    @Query('tipo') tipo?: string,         // ej: CUMPLEANOS_PACIENTE
+    @Query('fecha') fecha?: string,
+    @Query('tipo') tipo?: string,
+    @Query('leida') leida?: string,       // 'true' = solo leídas, 'false' = solo no leídas
   ) {
     const rolId = req.user?.rol?.id;
     const usuarioId = req.user?.id;
@@ -111,6 +112,7 @@ export class NotificacionesController {
           offsetNum,
           fecha || null,
           tipo  || null,
+          leida,
         ),
         // ✅ El contador SIEMPRE es el total real — sin filtros de fecha ni tipo
         //    No importa qué esté viendo el usuario en pantalla

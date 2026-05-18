@@ -75,15 +75,8 @@ export class NotificacionesService {
     try {
       const query = `
         SELECT
-          n.id,
-          n.tipo_notificacion,
-          n.titulo,
-          n.mensaje,
-          n.fecha_creacion,
-          e.tipo_evento,
-          e.descripcion as evento_descripcion,
-          e.datos_adicionales,
-          e.fecha_evento,
+          n.id, n.tipo_notificacion, n.titulo, n.mensaje, n.fecha_creacion,
+          e.tipo_evento, e.descripcion as evento_descripcion, e.datos_adicionales, e.fecha_evento,
           CASE WHEN nl.id IS NOT NULL THEN 1 ELSE 0 END as leida
         FROM notificaciones n
         INNER JOIN notificaciones_destino nd ON nd.notificacion_id = n.id
@@ -91,82 +84,12 @@ export class NotificacionesService {
         LEFT JOIN notificaciones_leidas nl ON nl.notificacion_id = n.id AND nl.usuario_id = ?
         WHERE nd.rol_id = ?
           AND n.fecha_creacion >= DATE_SUB(NOW(), INTERVAL 30 DAY)
+          ${this.filtrosSql()}
         ORDER BY n.fecha_creacion DESC
         LIMIT ?
       `;
-      const notificaciones = await this.notificacionesRepo.query(query, [usuarioId, rolId, limite]);
-
-      // Filtrar notificaciones específicas para terapeutas
-      const notificacionesFiltradas = notificaciones.filter(notif => {
-        if (rolId === ROL_TERAPEUTA) {
-          // Para SOLICITUD_INFORME y DOCUMENTO_SUBIDO, solo mostrar si la terapeuta está en la lista
-          if (
-            (notif.tipo_notificacion === 'DOCUMENTO_SUBIDO' || notif.tipo_notificacion === 'SOLICITUD_INFORME') &&
-            notif.datos_adicionales
-          ) {
-            try {
-              const datos = JSON.parse(notif.datos_adicionales);
-
-              // Si es una notificación de revisión (para jefas), solo mostrarla si es la jefa asignada
-              if (datos.es_revision === true) {
-                // Si tiene jefe_destinatario_id, solo mostrar si coincide con el usuario actual
-                if (datos.jefe_destinatario_id) {
-                  return datos.jefe_destinatario_id === usuarioId;
-                }
-                // Si no tiene jefe_destinatario_id, mostrarla (compatibilidad con notificaciones antiguas)
-                return true;
-              }
-
-              // Solo mostrar si existe terapeutas_destinatarios Y contiene a este usuario
-              if (datos.terapeutas_destinatarios && Array.isArray(datos.terapeutas_destinatarios)) {
-                return datos.terapeutas_destinatarios.includes(usuarioId);
-              }
-              // Si no existe terapeutas_destinatarios para SOLICITUD_INFORME, NO mostrar
-              if (notif.tipo_notificacion === 'SOLICITUD_INFORME') {
-                return false;
-              }
-              // Para DOCUMENTO_SUBIDO sin terapeutas_destinatarios, mostrar (compatibilidad)
-              return notif.tipo_notificacion === 'DOCUMENTO_SUBIDO';
-            } catch {
-              return false;
-            }
-          }
-        }
-        // Para ROL_ADMIN, filtrar notificaciones de revisión
-        if (rolId === ROL_ADMIN) {
-          if (notif.tipo_notificacion === 'SOLICITUD_INFORME' && notif.datos_adicionales) {
-            try {
-              const datos = JSON.parse(notif.datos_adicionales);
-              if (datos.es_revision === true && datos.jefe_destinatario_id) {
-                return datos.jefe_destinatario_id === usuarioId;
-              }
-            } catch {
-              return false;
-            }
-          }
-        }
-        // Notificaciones de tareas del Centro Operativo
-        if (notif.tipo_notificacion?.startsWith('TAREA_')) {
-          try {
-            const datos = notif.datos_adicionales ? JSON.parse(notif.datos_adicionales) : null;
-            if (!datos) return false;
-            const uid = Number(usuarioId);
-            const rid = Number(rolId);
-            const enUsuarios = Array.isArray(datos.usuarios_destinatarios) && datos.usuarios_destinatarios.map(Number).includes(uid);
-            const enRoles = Array.isArray(datos.roles_destinatarios) && datos.roles_destinatarios.map(Number).includes(rid);
-            return enUsuarios || enRoles;
-          } catch {
-            return false;
-          }
-        }
-        return true;
-      });
-
-      return notificacionesFiltradas.map(notif => ({
-        ...notif,
-        datos_adicionales: notif.datos_adicionales ? JSON.parse(notif.datos_adicionales) : null,
-        leida: notif.leida === 1,
-      }));
+      const rows = await this.notificacionesRepo.query(query, [usuarioId, rolId, ...this.filtrosParams(usuarioId, rolId), limite]);
+      return rows.map(n => ({ ...n, datos_adicionales: n.datos_adicionales ? JSON.parse(n.datos_adicionales) : null, leida: n.leida === 1 }));
     } catch (error) {
       this.logger.error(`Error al obtener notificaciones: ${error.message}`);
       throw error;
@@ -180,22 +103,19 @@ export class NotificacionesService {
     offset: number = 0,
     fecha: string | null = null,
     tipo: string | null = null,
+    leida?: string,
   ): Promise<any[]> {
     try {
       const condFecha = fecha
         ? `AND DATE(CONVERT_TZ(n.fecha_creacion, '+00:00', '-05:00')) = '${fecha}'`
         : `AND n.fecha_creacion >= DATE_SUB(NOW(), INTERVAL 30 DAY)`;
       const condTipo = tipo ? `AND n.tipo_notificacion = '${tipo}'` : '';
+      const condLeida = leida === 'true' ? 'AND nl.id IS NOT NULL' : leida === 'false' ? 'AND nl.id IS NULL' : '';
 
       const query = `
         SELECT
-          n.id,
-          n.tipo_notificacion,
-          n.titulo,
-          n.mensaje,
-          n.fecha_creacion,
-          e.tipo_evento,
-          e.datos_adicionales,
+          n.id, n.tipo_notificacion, n.titulo, n.mensaje, n.fecha_creacion,
+          e.tipo_evento, e.datos_adicionales,
           TIMESTAMPDIFF(MINUTE, n.fecha_creacion, NOW()) as minutos_transcurridos,
           nl.id as notif_leida_id,
           CASE WHEN nl.id IS NOT NULL THEN TRUE ELSE FALSE END as leida
@@ -206,110 +126,25 @@ export class NotificacionesService {
         WHERE nd.rol_id = ?
           ${condFecha}
           ${condTipo}
+          ${condLeida}
+          ${this.filtrosSql()}
         ORDER BY n.fecha_creacion DESC
         LIMIT ? OFFSET ?
       `;
-      const notificaciones = await this.notificacionesRepo.query(query, [usuarioId, rolId, limite, offset]);
+      const rows = await this.notificacionesRepo.query(query, [usuarioId, rolId, ...this.filtrosParams(usuarioId, rolId), limite, offset]);
 
-      // Solo los terapeutas tienen filtro adicional en DOCUMENTO_SUBIDO y SOLICITUD_INFORME.
-      // Admin y admisión ven todas las notificaciones de su rol sin restricción extra.
-      const notificacionesFiltradas = notificaciones.filter(notif => {
-        if (rolId === ROL_TERAPEUTA) {
-          // Para SOLICITUD_INFORME y DOCUMENTO_SUBIDO, solo mostrar si la terapeuta está en la lista
-          if (
-            (notif.tipo_notificacion === 'DOCUMENTO_SUBIDO' || notif.tipo_notificacion === 'SOLICITUD_INFORME') &&
-            notif.datos_adicionales
-          ) {
-            try {
-              const datos = JSON.parse(notif.datos_adicionales);
-
-              // Si es una notificación de revisión (para jefas), solo mostrarla si es la jefa asignada
-              if (datos.es_revision === true) {
-                // Si tiene jefe_destinatario_id, solo mostrar si coincide con el usuario actual
-                if (datos.jefe_destinatario_id) {
-                  return datos.jefe_destinatario_id === usuarioId;
-                }
-                // Si no tiene jefe_destinatario_id, mostrarla (compatibilidad con notificaciones antiguas)
-                return true;
-              }
-
-              // Solo mostrar si existe terapeutas_destinatarios Y contiene a este usuario
-              if (datos.terapeutas_destinatarios && Array.isArray(datos.terapeutas_destinatarios)) {
-                return datos.terapeutas_destinatarios.includes(usuarioId);
-              }
-              // Si no existe terapeutas_destinatarios para SOLICITUD_INFORME, NO mostrar
-              if (notif.tipo_notificacion === 'SOLICITUD_INFORME') {
-                return false;
-              }
-              // Para DOCUMENTO_SUBIDO sin terapeutas_destinatarios, mostrar (compatibilidad)
-              return notif.tipo_notificacion === 'DOCUMENTO_SUBIDO';
-            } catch {
-              return false;
-            }
-          }
-        }
-        // Para ROL_ADMIN, filtrar notificaciones de revisión
-        if (rolId === ROL_ADMIN) {
-          if (notif.tipo_notificacion === 'SOLICITUD_INFORME' && notif.datos_adicionales) {
-            try {
-              const datos = JSON.parse(notif.datos_adicionales);
-              if (datos.es_revision === true && datos.jefe_destinatario_id) {
-                return datos.jefe_destinatario_id === usuarioId;
-              }
-            } catch {
-              return false;
-            }
-          }
-        }
-        // Notificaciones de tareas del Centro Operativo
-        if (notif.tipo_notificacion?.startsWith('TAREA_')) {
-          try {
-            const datos = notif.datos_adicionales ? JSON.parse(notif.datos_adicionales) : null;
-            if (!datos) return false;
-            const uid = Number(usuarioId);
-            const rid = Number(rolId);
-            const enUsuarios = Array.isArray(datos.usuarios_destinatarios) && datos.usuarios_destinatarios.map(Number).includes(uid);
-            const enRoles = Array.isArray(datos.roles_destinatarios) && datos.roles_destinatarios.map(Number).includes(rid);
-            return enUsuarios || enRoles;
-          } catch {
-            return false;
-          }
-        }
-        return true;
-      });
-
-      return notificacionesFiltradas.map(notif => {
-        const leidaBoolean =
-          notif.leida === 1 ||
-          notif.leida === true ||
-          notif.leida === '1' ||
-          notif.leida === 'true' ||
-          !!notif.notif_leida_id;
-
+      return rows.map(notif => {
+        const leidaBoolean = !!notif.notif_leida_id || notif.leida === 1 || notif.leida === true || notif.leida === '1';
         const datosAdicionales = notif.datos_adicionales ? JSON.parse(notif.datos_adicionales) : null;
-
         let terapeutaNombre: string | null = null;
         if (datosAdicionales) {
           if (notif.tipo_notificacion === 'CITA_MODIFICADA') {
-            terapeutaNombre =
-              datosAdicionales.terapeuta_nombre ||
-              datosAdicionales.terapeuta_nuevo ||
-              datosAdicionales.terapeuta_anterior ||
-              null;
-          } else if (
-            notif.tipo_notificacion === 'CITA_ELIMINADA' ||
-            notif.tipo_notificacion === 'NOTA_EVOLUCION'
-          ) {
+            terapeutaNombre = datosAdicionales.terapeuta_nombre || datosAdicionales.terapeuta_nuevo || datosAdicionales.terapeuta_anterior || null;
+          } else if (notif.tipo_notificacion === 'CITA_ELIMINADA' || notif.tipo_notificacion === 'NOTA_EVOLUCION') {
             terapeutaNombre = datosAdicionales.terapeuta_nombre || null;
           }
         }
-
-        return {
-          ...notif,
-          datos_adicionales: datosAdicionales,
-          leida: leidaBoolean,
-          terapeuta_nombre: terapeutaNombre,
-        };
+        return { ...notif, datos_adicionales: datosAdicionales, leida: leidaBoolean, terapeuta_nombre: terapeutaNombre };
       });
     } catch (error) {
       this.logger.error(`Error al obtener notificaciones recientes: ${error.message}`);
@@ -320,7 +155,7 @@ export class NotificacionesService {
   async contarNotificacionesPorRol(rolId: number, usuarioId: number): Promise<number> {
     try {
       const query = `
-        SELECT n.id, n.tipo_notificacion, e.datos_adicionales
+        SELECT COUNT(DISTINCT n.id) as total
         FROM notificaciones n
         INNER JOIN notificaciones_destino nd ON nd.notificacion_id = n.id
         INNER JOIN eventos_sistema e ON e.id = n.evento_id
@@ -328,76 +163,10 @@ export class NotificacionesService {
         WHERE nd.rol_id = ?
           AND n.fecha_creacion >= DATE_SUB(NOW(), INTERVAL 30 DAY)
           AND nl.id IS NULL
+          ${this.filtrosSql()}
       `;
-      const notificaciones = await this.notificacionesRepo.query(query, [usuarioId, rolId]);
-
-      // Aplicar los mismos filtros que en obtenerNotificacionesRecientes()
-      const notificacionesFiltradas = notificaciones.filter(notif => {
-        if (rolId === ROL_TERAPEUTA) {
-          // Para SOLICITUD_INFORME y DOCUMENTO_SUBIDO, solo contar si la terapeuta está en la lista
-          if (
-            (notif.tipo_notificacion === 'DOCUMENTO_SUBIDO' || notif.tipo_notificacion === 'SOLICITUD_INFORME') &&
-            notif.datos_adicionales
-          ) {
-            try {
-              const datos = JSON.parse(notif.datos_adicionales);
-
-              // Si es una notificación de revisión (para jefas), solo contarla si es la jefa asignada
-              if (datos.es_revision === true) {
-                // Si tiene jefe_destinatario_id, solo contar si coincide con el usuario actual
-                if (datos.jefe_destinatario_id) {
-                  return datos.jefe_destinatario_id === usuarioId;
-                }
-                // Si no tiene jefe_destinatario_id, contarla (compatibilidad con notificaciones antiguas)
-                return true;
-              }
-
-              // Solo contar si existe terapeutas_destinatarios Y contiene a este usuario
-              if (datos.terapeutas_destinatarios && Array.isArray(datos.terapeutas_destinatarios)) {
-                return datos.terapeutas_destinatarios.includes(usuarioId);
-              }
-              // Si no existe terapeutas_destinatarios para SOLICITUD_INFORME, NO contar
-              if (notif.tipo_notificacion === 'SOLICITUD_INFORME') {
-                return false;
-              }
-              // Para DOCUMENTO_SUBIDO sin terapeutas_destinatarios, contar (compatibilidad)
-              return notif.tipo_notificacion === 'DOCUMENTO_SUBIDO';
-            } catch {
-              return false;
-            }
-          }
-        }
-        // Para ROL_ADMIN, filtrar notificaciones de revisión
-        if (rolId === ROL_ADMIN) {
-          if (notif.tipo_notificacion === 'SOLICITUD_INFORME' && notif.datos_adicionales) {
-            try {
-              const datos = JSON.parse(notif.datos_adicionales);
-              if (datos.es_revision === true && datos.jefe_destinatario_id) {
-                return datos.jefe_destinatario_id === usuarioId;
-              }
-            } catch {
-              return false;
-            }
-          }
-        }
-        // Notificaciones de tareas del Centro Operativo
-        if (notif.tipo_notificacion?.startsWith('TAREA_')) {
-          try {
-            const datos = notif.datos_adicionales ? JSON.parse(notif.datos_adicionales) : null;
-            if (!datos) return false;
-            const uid = Number(usuarioId);
-            const rid = Number(rolId);
-            const enUsuarios = Array.isArray(datos.usuarios_destinatarios) && datos.usuarios_destinatarios.map(Number).includes(uid);
-            const enRoles = Array.isArray(datos.roles_destinatarios) && datos.roles_destinatarios.map(Number).includes(rid);
-            return enUsuarios || enRoles;
-          } catch {
-            return false;
-          }
-        }
-        return true;
-      });
-
-      return notificacionesFiltradas.length;
+      const result = await this.notificacionesRepo.query(query, [usuarioId, rolId, ...this.filtrosParams(usuarioId, rolId)]);
+      return parseInt(result[0]?.total ?? '0');
     } catch (error) {
       this.logger.error(`Error al contar notificaciones: ${error.message}`);
       throw error;
@@ -985,6 +754,55 @@ export class NotificacionesService {
       this.logger.error(`Error al limpiar duplicados: ${error.message}`);
       throw error;
     }
+  }
+
+  // ────────────────────────────────────────────────────────────────
+  // FILTROS COMPARTIDOS
+  // Genera el bloque AND ... que va en el WHERE de las 3 queries de
+  // notificaciones. Todos los filtros aquí → LIMIT/OFFSET exactos.
+  // Parámetros extra necesarios (en orden): usuarioId, rolId, usuarioId x3
+  // ────────────────────────────────────────────────────────────────
+  private filtrosSql(): string {
+    return `
+      AND (
+        n.tipo_notificacion NOT LIKE 'TAREA_%'
+        OR (
+          e.datos_adicionales IS NOT NULL
+          AND (
+            JSON_CONTAINS(JSON_EXTRACT(e.datos_adicionales, '$.usuarios_destinatarios'), CAST(? AS JSON))
+            OR JSON_CONTAINS(JSON_EXTRACT(e.datos_adicionales, '$.roles_destinatarios'), CAST(? AS JSON))
+          )
+        )
+      )
+      AND NOT (
+        n.tipo_notificacion IN ('SOLICITUD_INFORME', 'DOCUMENTO_SUBIDO')
+        AND JSON_EXTRACT(e.datos_adicionales, '$.es_revision') = TRUE
+        AND JSON_EXTRACT(e.datos_adicionales, '$.jefe_destinatario_id') IS NOT NULL
+        AND CAST(JSON_EXTRACT(e.datos_adicionales, '$.jefe_destinatario_id') AS UNSIGNED) != ?
+      )
+      AND NOT (
+        n.tipo_notificacion = 'DOCUMENTO_SUBIDO'
+        AND nd.rol_id = 4
+        AND (JSON_EXTRACT(e.datos_adicionales, '$.es_revision') IS NULL
+             OR JSON_EXTRACT(e.datos_adicionales, '$.es_revision') = FALSE)
+        AND JSON_EXTRACT(e.datos_adicionales, '$.terapeutas_destinatarios') IS NOT NULL
+        AND NOT JSON_CONTAINS(JSON_EXTRACT(e.datos_adicionales, '$.terapeutas_destinatarios'), CAST(? AS JSON))
+      )
+      AND NOT (
+        n.tipo_notificacion = 'SOLICITUD_INFORME'
+        AND nd.rol_id = 4
+        AND (JSON_EXTRACT(e.datos_adicionales, '$.es_revision') IS NULL
+             OR JSON_EXTRACT(e.datos_adicionales, '$.es_revision') = FALSE)
+        AND (
+          JSON_EXTRACT(e.datos_adicionales, '$.terapeutas_destinatarios') IS NULL
+          OR NOT JSON_CONTAINS(JSON_EXTRACT(e.datos_adicionales, '$.terapeutas_destinatarios'), CAST(? AS JSON))
+        )
+      )
+    `;
+  }
+  /** Parámetros que acompañan a filtrosSql() — siempre 5 valores */
+  private filtrosParams(usuarioId: number, rolId: number): any[] {
+    return [usuarioId, rolId, usuarioId, usuarioId, usuarioId];
   }
 
   // ────────────────────────────────────────────────────────────────
