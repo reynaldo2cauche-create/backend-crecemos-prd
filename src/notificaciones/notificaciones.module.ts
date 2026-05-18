@@ -10,6 +10,8 @@ import { NotificacionLeida } from './entities/notificacion-leida.entity';
 import { TrabajadorCentro } from '../usuarios/trabajador-centro.entity';
 import { Paciente } from '../pacientes/paciente.entity';
 import { SeguimientoAsistencia } from 'src/citas/entities/seguimiento-asistencia.entity';
+import { Tarea } from '../tareas/entities/tarea.entity';
+import { TareaAsignacion } from '../tareas/entities/tarea-asignacion.entity';
 
 @Module({
   imports: [
@@ -21,6 +23,8 @@ import { SeguimientoAsistencia } from 'src/citas/entities/seguimiento-asistencia
       TrabajadorCentro,
       Paciente,
       SeguimientoAsistencia,
+      Tarea,
+      TareaAsignacion,
     ]),
   ],
   controllers: [NotificacionesController],

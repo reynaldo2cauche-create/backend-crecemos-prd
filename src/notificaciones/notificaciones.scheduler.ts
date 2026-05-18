@@ -5,12 +5,15 @@ import { NotificacionesService } from './notificaciones.service';
 import { TrabajadorCentro } from '../usuarios/trabajador-centro.entity';
 import { Paciente } from '../pacientes/paciente.entity';
 import { SeguimientoAsistencia } from '../citas/entities/seguimiento-asistencia.entity';
+import { Tarea } from '../tareas/entities/tarea.entity';
+import { TareaAsignacion } from '../tareas/entities/tarea-asignacion.entity';
 
 
 @Injectable()
 export class NotificacionesScheduler {
   private readonly logger = new Logger(NotificacionesScheduler.name);
   private intervalId: NodeJS.Timeout;
+  private intervalTareasId: NodeJS.Timeout;
   private sincronizacionInicialCompletada = false;
 
 
@@ -23,6 +26,10 @@ export class NotificacionesScheduler {
     private notificacionesService: NotificacionesService,
     @InjectRepository(SeguimientoAsistencia)
     private seguimientoRepo: Repository<SeguimientoAsistencia>,
+    @InjectRepository(Tarea)
+    private tareaRepo: Repository<Tarea>,
+    @InjectRepository(TareaAsignacion)
+    private tareaAsignacionRepo: Repository<TareaAsignacion>,
   ) {}
 
   async iniciar() {
@@ -31,19 +38,28 @@ export class NotificacionesScheduler {
     // Ejecutar sincronización inicial solo la primera vez
     await this.ejecutarSincronizacionInicial();
 
-    // ✅ Ejecutar verificaciones de notificaciones normales cada hora
+    // Verificaciones generales cada hora (cumpleaños, aniversarios, inconsistencias)
     this.verificarNotificaciones();
     this.intervalId = setInterval(() => {
       this.verificarNotificaciones();
-      this.verificarInconsistenciasAsistenciaA9PM(); // Verificar si es hora de revisar inconsistencias
-    }, 3600000); // Cada 1 hora
+      this.verificarInconsistenciasAsistenciaA9PM();
+    }, 3600000);
+
+    // Tareas vencidas: chequeo cada 5 minutos para notificar rápido
+    this.verificarTareasVencidas();
+    this.intervalTareasId = setInterval(() => {
+      this.verificarTareasVencidas();
+    }, 300000); // 5 minutos
   }
 
   detener() {
     if (this.intervalId) {
       clearInterval(this.intervalId);
-      this.logger.log('🔕 Scheduler de notificaciones detenido');
     }
+    if (this.intervalTareasId) {
+      clearInterval(this.intervalTareasId);
+    }
+    this.logger.log('🔕 Scheduler de notificaciones detenido');
   }
 
   /**
@@ -769,8 +785,40 @@ export class NotificacionesScheduler {
       return existe;
     } catch (error) {
       this.logger.error(`Error al verificar notificación diaria: ${error.message}`);
-      // Retornamos true (seguro) para evitar crear duplicados si falla la consulta
       return true;
+    }
+  }
+
+  private async verificarTareasVencidas() {
+    try {
+      const query = `
+        SELECT t.id, t.titulo, t.user_crea_id
+        FROM tareas t
+        INNER JOIN tarea_columnas tc ON tc.id = t.columna_id
+        WHERE t.fecha_limite < NOW()
+          AND tc.es_final = 0
+          AND NOT EXISTS (
+            SELECT 1 FROM eventos_sistema e
+            WHERE e.tipo_evento = 'TAREA_VENCIDA'
+              AND JSON_EXTRACT(e.datos_adicionales, '$.tarea_id') = t.id
+              AND DATE(e.fecha_evento) = CURDATE()
+          )
+      `;
+
+      const tareasVencidas = await this.tareaRepo.query(query);
+
+      for (const tarea of tareasVencidas) {
+        const asignaciones = await this.tareaAsignacionRepo.find({ where: { tarea_id: tarea.id } });
+        await this.notificacionesService.notificarTareaVencida(
+          tarea.id,
+          tarea.titulo,
+          asignaciones.map(a => ({ usuario_id: a.usuario_id ?? undefined, rol_id: a.rol_id ?? undefined })),
+          tarea.user_crea_id,
+        );
+        this.logger.log(`Tarea vencida notificada: #${tarea.id} "${tarea.titulo}"`);
+      }
+    } catch (error) {
+      this.logger.error(`Error al verificar tareas vencidas: ${error.message}`);
     }
   }
 }

@@ -272,6 +272,18 @@ async marcarComoLeida(
    * POST /backend_api/notificaciones/forzar-verificacion-inconsistencias
    * ⚠️ Solo accesible para administradores
    */
+  @Post('forzar-verificacion-tareas-vencidas')
+  async forzarVerificacionTareasVencidas(@Request() req) {
+    const rolId = req.user?.rol?.id;
+    if (rolId !== 1) return { success: false, message: 'Solo administradores.' };
+    try {
+      await (this.notificacionesScheduler as any).verificarTareasVencidas();
+      return { success: true, mensaje: 'Verificación de tareas vencidas ejecutada', fecha: new Date().toISOString() };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  }
+
   @Post('forzar-verificacion-inconsistencias')
   async forzarVerificacionInconsistencias(@Request() req, @Query('fecha') fecha?: string) {
     const rolId = req.user?.rol?.id;

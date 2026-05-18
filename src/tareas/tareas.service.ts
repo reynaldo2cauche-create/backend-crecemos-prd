@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
 import * as fs from 'fs';
@@ -14,11 +14,14 @@ import { TareaTimer } from './entities/tarea-timer.entity';
 import { CreateTareaDto } from './dto/create-tarea.dto';
 import { UpdateTareaDto } from './dto/update-tarea.dto';
 import { CreateComentarioDto } from './dto/create-comentario.dto';
+import { NotificacionesService } from '../notificaciones/notificaciones.service';
 
 const ROL_ADMIN = 1;
 
 @Injectable()
-export class TareasService {
+export class TareasService implements OnModuleInit {
+  private timeoutsVencidas = new Map<number, NodeJS.Timeout>();
+
   constructor(
     @InjectRepository(Tarea)
     private tareaRepo: Repository<Tarea>,
@@ -36,7 +39,54 @@ export class TareasService {
     private comentarioArchivoRepo: Repository<TareaComentarioArchivo>,
     @InjectRepository(TareaTimer)
     private timerRepo: Repository<TareaTimer>,
+    private notificacionesService: NotificacionesService,
   ) {}
+
+  // ─── Init: programa timeouts para tareas pendientes al arrancar el servidor ──
+
+  async onModuleInit() {
+    const tareas = await this.tareaRepo.find();
+    for (const tarea of tareas) {
+      if (tarea.fecha_limite && !tarea.columna?.es_final) {
+        this.programarNotificacionVencida(tarea);
+      }
+    }
+  }
+
+  // ─── Timeout exacto al vencer ────────────────────────────────────────────────
+
+  private programarNotificacionVencida(tarea: Tarea) {
+    if (this.timeoutsVencidas.has(tarea.id)) {
+      clearTimeout(this.timeoutsVencidas.get(tarea.id));
+      this.timeoutsVencidas.delete(tarea.id);
+    }
+    if (!tarea.fecha_limite) return;
+
+    const ms = new Date(tarea.fecha_limite).getTime() - Date.now();
+    if (ms <= 0) return; // ya venció — el scheduler de 5 min lo cubre
+
+    const timeout = setTimeout(async () => {
+      this.timeoutsVencidas.delete(tarea.id);
+      const tareaActual = await this.tareaRepo.findOne({ where: { id: tarea.id } });
+      if (!tareaActual || tareaActual.columna?.es_final) return;
+      const asignaciones = await this.asignacionRepo.find({ where: { tarea_id: tarea.id } });
+      await this.notificacionesService.notificarTareaVencida(
+        tarea.id,
+        tarea.titulo,
+        asignaciones.map(a => ({ usuario_id: a.usuario_id ?? undefined, rol_id: a.rol_id ?? undefined })),
+        tarea.user_crea_id,
+      );
+    }, ms);
+
+    this.timeoutsVencidas.set(tarea.id, timeout);
+  }
+
+  private cancelarTimeoutVencida(tareaId: number) {
+    if (this.timeoutsVencidas.has(tareaId)) {
+      clearTimeout(this.timeoutsVencidas.get(tareaId));
+      this.timeoutsVencidas.delete(tareaId);
+    }
+  }
 
   // ─── Catálogos ──────────────────────────────────────────────────────────────
 
@@ -133,9 +183,12 @@ export class TareasService {
 
     if (dto.asignaciones?.length) {
       await this.guardarAsignaciones(tareaGuardada.id, dto.asignaciones, userId);
+      this.notificacionesService.notificarTareaAsignada(tareaGuardada.id, dto.titulo, userId, dto.asignaciones).catch(() => {});
     }
 
-    return this.obtenerPorId(tareaGuardada.id);
+    const tareaFinal = await this.obtenerPorId(tareaGuardada.id);
+    this.programarNotificacionVencida(tareaFinal);
+    return tareaFinal;
   }
 
   async actualizar(id: number, dto: UpdateTareaDto, userId: number) {
@@ -166,10 +219,28 @@ export class TareasService {
       await this.asignacionRepo.delete({ tarea_id: id });
       if (dto.asignaciones.length) {
         await this.guardarAsignaciones(id, dto.asignaciones, userId);
+        const tareaActual = await this.tareaRepo.findOne({ where: { id } });
+        if (tareaActual) {
+          this.notificacionesService.notificarTareaAsignada(id, tareaActual.titulo, userId, dto.asignaciones).catch(() => {});
+        }
       }
     }
 
-    return this.obtenerPorId(id);
+    // Notificar al creador si la tarea se movió a columna final
+    if (dto.columna_id) {
+      const col = await this.columnaRepo.findOne({ where: { id: dto.columna_id } });
+      if (col?.es_final) {
+        const t = await this.tareaRepo.findOne({ where: { id } });
+        if (t?.user_crea_id) {
+          this.notificacionesService.notificarTareaCompletada(id, t.titulo, userId, t.user_crea_id).catch(() => {});
+        }
+        this.cancelarTimeoutVencida(id);
+      }
+    }
+
+    const tareaActualizada = await this.obtenerPorId(id);
+    this.programarNotificacionVencida(tareaActualizada);
+    return tareaActualizada;
   }
 
   async moverColumna(id: number, columnaId: number, userId: number) {
@@ -186,6 +257,10 @@ export class TareasService {
         updateData.timer_activo = false;
         updateData.timer_inicio = null;
       }
+      if (tarea.user_crea_id) {
+        this.notificacionesService.notificarTareaCompletada(id, tarea.titulo, userId, tarea.user_crea_id).catch(() => {});
+      }
+      this.cancelarTimeoutVencida(id);
     }
 
     await this.tareaRepo.update(id, updateData);
@@ -194,6 +269,7 @@ export class TareasService {
 
   async eliminar(id: number) {
     const tarea = await this.obtenerPorId(id);
+    this.cancelarTimeoutVencida(tarea.id);
     await this.tareaRepo.remove(tarea);
     return { message: 'Tarea eliminada correctamente' };
   }
@@ -256,7 +332,7 @@ export class TareasService {
   }
 
   async agregarComentario(tareaId: number, dto: CreateComentarioDto, userId: number, files?: Express.Multer.File[]) {
-    await this.obtenerPorId(tareaId);
+    const tarea = await this.obtenerPorId(tareaId);
     const comentario = await this.comentarioRepo.save(
       this.comentarioRepo.create({
         tarea_id: tareaId,
@@ -277,6 +353,11 @@ export class TareasService {
       }));
       await this.comentarioArchivoRepo.save(archivos);
     }
+    this.notificacionesService.notificarTareaComentada(
+      tareaId, tarea.titulo, userId,
+      (tarea.asignaciones ?? []).map(a => ({ usuario_id: a.usuario_id ?? undefined, rol_id: a.rol_id ?? undefined })),
+      tarea.user_crea_id ?? undefined,
+    ).catch(() => {});
     return this.comentarioRepo.findOne({ where: { id: comentario.id } });
   }
 

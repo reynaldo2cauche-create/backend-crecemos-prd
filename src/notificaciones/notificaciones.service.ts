@@ -1,16 +1,18 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, In } from 'typeorm';
 import { EventoSistema } from './entities/evento-sistema.entity';
 import { Notificacion } from './entities/notificacion.entity';
 import { NotificacionDestino } from './entities/notificacion-destino.entity';
 import { CrearEventoDto } from './dto/crear-evento.dto';
 import { CrearNotificacionDto } from './dto/crear-notificacion.dto';
 import { NotificacionLeida } from './entities/notificacion-leida.entity';
+import { TrabajadorCentro } from '../usuarios/trabajador-centro.entity';
 
 const ROL_ADMIN     = 1;
 const ROL_ADMISION  = 2;
 const ROL_TERAPEUTA = 4;
+const TODOS_LOS_ROLES = [ROL_ADMIN, ROL_ADMISION, ROL_TERAPEUTA];
 
 @Injectable()
 export class NotificacionesService {
@@ -25,6 +27,8 @@ export class NotificacionesService {
     private destinosRepo: Repository<NotificacionDestino>,
     @InjectRepository(NotificacionLeida)
     private leidasRepo: Repository<NotificacionLeida>,
+    @InjectRepository(TrabajadorCentro)
+    private trabajadoresRepo: Repository<TrabajadorCentro>,
   ) {}
 
   async crearEvento(dto: CrearEventoDto): Promise<EventoSistema> {
@@ -133,13 +137,26 @@ export class NotificacionesService {
           if (notif.tipo_notificacion === 'SOLICITUD_INFORME' && notif.datos_adicionales) {
             try {
               const datos = JSON.parse(notif.datos_adicionales);
-              // Si es notificación de revisión con jefe asignado, solo mostrar si es el jefe
               if (datos.es_revision === true && datos.jefe_destinatario_id) {
                 return datos.jefe_destinatario_id === usuarioId;
               }
             } catch {
               return false;
             }
+          }
+        }
+        // Notificaciones de tareas del Centro Operativo
+        if (notif.tipo_notificacion?.startsWith('TAREA_')) {
+          try {
+            const datos = notif.datos_adicionales ? JSON.parse(notif.datos_adicionales) : null;
+            if (!datos) return false;
+            const uid = Number(usuarioId);
+            const rid = Number(rolId);
+            const enUsuarios = Array.isArray(datos.usuarios_destinatarios) && datos.usuarios_destinatarios.map(Number).includes(uid);
+            const enRoles = Array.isArray(datos.roles_destinatarios) && datos.roles_destinatarios.map(Number).includes(rid);
+            return enUsuarios || enRoles;
+          } catch {
+            return false;
           }
         }
         return true;
@@ -236,13 +253,26 @@ export class NotificacionesService {
           if (notif.tipo_notificacion === 'SOLICITUD_INFORME' && notif.datos_adicionales) {
             try {
               const datos = JSON.parse(notif.datos_adicionales);
-              // Si es notificación de revisión con jefe asignado, solo mostrar si es el jefe
               if (datos.es_revision === true && datos.jefe_destinatario_id) {
                 return datos.jefe_destinatario_id === usuarioId;
               }
             } catch {
               return false;
             }
+          }
+        }
+        // Notificaciones de tareas del Centro Operativo
+        if (notif.tipo_notificacion?.startsWith('TAREA_')) {
+          try {
+            const datos = notif.datos_adicionales ? JSON.parse(notif.datos_adicionales) : null;
+            if (!datos) return false;
+            const uid = Number(usuarioId);
+            const rid = Number(rolId);
+            const enUsuarios = Array.isArray(datos.usuarios_destinatarios) && datos.usuarios_destinatarios.map(Number).includes(uid);
+            const enRoles = Array.isArray(datos.roles_destinatarios) && datos.roles_destinatarios.map(Number).includes(rid);
+            return enUsuarios || enRoles;
+          } catch {
+            return false;
           }
         }
         return true;
@@ -342,13 +372,26 @@ export class NotificacionesService {
           if (notif.tipo_notificacion === 'SOLICITUD_INFORME' && notif.datos_adicionales) {
             try {
               const datos = JSON.parse(notif.datos_adicionales);
-              // Si es notificación de revisión con jefe asignado, solo contar si es el jefe
               if (datos.es_revision === true && datos.jefe_destinatario_id) {
                 return datos.jefe_destinatario_id === usuarioId;
               }
             } catch {
               return false;
             }
+          }
+        }
+        // Notificaciones de tareas del Centro Operativo
+        if (notif.tipo_notificacion?.startsWith('TAREA_')) {
+          try {
+            const datos = notif.datos_adicionales ? JSON.parse(notif.datos_adicionales) : null;
+            if (!datos) return false;
+            const uid = Number(usuarioId);
+            const rid = Number(rolId);
+            const enUsuarios = Array.isArray(datos.usuarios_destinatarios) && datos.usuarios_destinatarios.map(Number).includes(uid);
+            const enRoles = Array.isArray(datos.roles_destinatarios) && datos.roles_destinatarios.map(Number).includes(rid);
+            return enUsuarios || enRoles;
+          } catch {
+            return false;
           }
         }
         return true;
@@ -941,6 +984,183 @@ export class NotificacionesService {
     } catch (error) {
       this.logger.error(`Error al limpiar duplicados: ${error.message}`);
       throw error;
+    }
+  }
+
+  // ────────────────────────────────────────────────────────────────
+  // CENTRO OPERATIVO — TAREAS
+  // ────────────────────────────────────────────────────────────────
+
+  private async obtenerNombreUsuario(userId: number): Promise<string> {
+    const u = await this.trabajadoresRepo.findOne({ where: { id: userId } });
+    return u ? `${u.nombres} ${u.apellidos}` : 'Un usuario';
+  }
+
+  private async resolverDestinatarios(asignaciones: Array<{ usuario_id?: number; rol_id?: number }>) {
+    const usuarioIds: number[] = [];
+    const rolIds: number[] = [];
+    for (const a of asignaciones) {
+      if (a.usuario_id) usuarioIds.push(a.usuario_id);
+      else if (a.rol_id) rolIds.push(a.rol_id);
+    }
+    return { usuarioIds, rolIds };
+  }
+
+  async notificarTareaAsignada(
+    tareaId: number,
+    tituloTarea: string,
+    asignadorId: number,
+    asignaciones: Array<{ usuario_id?: number; rol_id?: number }>,
+  ) {
+    try {
+      const { usuarioIds, rolIds } = await this.resolverDestinatarios(asignaciones);
+      const destinatarios = usuarioIds.filter(id => id !== asignadorId);
+      if (destinatarios.length === 0 && rolIds.length === 0) return;
+
+      const asignadorNombre = await this.obtenerNombreUsuario(asignadorId);
+      const rolesDestino = rolIds.length > 0 ? rolIds : TODOS_LOS_ROLES;
+
+      const evento = await this.crearEvento({
+        tipo_evento: 'TAREA_ASIGNADA',
+        descripcion: `${asignadorNombre} asignó la tarea "${tituloTarea}"`,
+        usuario_id: asignadorId,
+        datos_adicionales: { tarea_id: tareaId, titulo_tarea: tituloTarea, asignador_nombre: asignadorNombre, usuarios_destinatarios: destinatarios, roles_destinatarios: rolIds },
+      });
+      await this.crearNotificacion({
+        tipo_notificacion: 'TAREA_ASIGNADA',
+        titulo: 'Nueva tarea asignada',
+        mensaje: `${asignadorNombre} te asignó la tarea "${tituloTarea}"`,
+        evento_id: evento.id,
+        roles_destino: [...new Set(rolesDestino)],
+      });
+    } catch (error) {
+      this.logger.error(`Error al notificar tarea asignada: ${error.message}`);
+    }
+  }
+
+  async notificarTareaComentada(
+    tareaId: number,
+    tituloTarea: string,
+    comentadorId: number,
+    asignaciones: Array<{ usuario_id?: number; rol_id?: number }>,
+    creadorId?: number,
+  ) {
+    try {
+      const { usuarioIds, rolIds } = await this.resolverDestinatarios(asignaciones);
+
+      // Asignados + creador, sin el que comentó
+      const todosIds = [...usuarioIds];
+      if (creadorId && creadorId !== comentadorId) todosIds.push(creadorId);
+      const destinatarios = [...new Set(todosIds.filter(id => id !== comentadorId))];
+
+      if (destinatarios.length === 0 && rolIds.length === 0) return;
+
+      const comentadorNombre = await this.obtenerNombreUsuario(comentadorId);
+      const rolesDestino = rolIds.length > 0 ? rolIds : TODOS_LOS_ROLES;
+
+      const evento = await this.crearEvento({
+        tipo_evento: 'TAREA_COMENTADA',
+        descripcion: `${comentadorNombre} comentó en la tarea "${tituloTarea}"`,
+        usuario_id: comentadorId,
+        datos_adicionales: { tarea_id: tareaId, titulo_tarea: tituloTarea, comentador_nombre: comentadorNombre, usuarios_destinatarios: destinatarios, roles_destinatarios: rolIds },
+      });
+      await this.crearNotificacion({
+        tipo_notificacion: 'TAREA_COMENTADA',
+        titulo: 'Nuevo comentario en tarea',
+        mensaje: `${comentadorNombre} comentó en la tarea "${tituloTarea}"`,
+        evento_id: evento.id,
+        roles_destino: [...new Set(rolesDestino)],
+      });
+    } catch (error) {
+      this.logger.error(`Error al notificar tarea comentada: ${error.message}`);
+    }
+  }
+
+  async notificarTareaCompletada(
+    tareaId: number,
+    tituloTarea: string,
+    completadoPorId: number,
+    creadorId: number,
+  ) {
+    try {
+      if (creadorId === completadoPorId) return;
+      const completadoPorNombre = await this.obtenerNombreUsuario(completadoPorId);
+      const creador = await this.trabajadoresRepo.findOne({ where: { id: creadorId } });
+      if (!creador) return;
+
+      const evento = await this.crearEvento({
+        tipo_evento: 'TAREA_COMPLETADA',
+        descripcion: `${completadoPorNombre} completó la tarea "${tituloTarea}"`,
+        usuario_id: completadoPorId,
+        datos_adicionales: { tarea_id: tareaId, titulo_tarea: tituloTarea, completado_por_nombre: completadoPorNombre, usuarios_destinatarios: [creadorId], roles_destinatarios: [] },
+      });
+      await this.crearNotificacion({
+        tipo_notificacion: 'TAREA_COMPLETADA',
+        titulo: 'Tarea completada',
+        mensaje: `${completadoPorNombre} completó la tarea "${tituloTarea}"`,
+        evento_id: evento.id,
+        roles_destino: [creador.rol?.id ?? ROL_ADMIN],
+      });
+    } catch (error) {
+      this.logger.error(`Error al notificar tarea completada: ${error.message}`);
+    }
+  }
+
+  async notificarTareaVencida(
+    tareaId: number,
+    tituloTarea: string,
+    asignaciones: Array<{ usuario_id?: number; rol_id?: number }>,
+    creadorId: number,
+  ) {
+    try {
+      const { usuarioIds, rolIds } = await this.resolverDestinatarios(asignaciones);
+
+      // ── 1. Notificación para el CREADOR con mensaje descriptivo ──
+      if (creadorId) {
+        const creador = await this.trabajadoresRepo.findOne({ where: { id: creadorId } });
+        let textoAsignados = '';
+        if (usuarioIds.length > 0) {
+          const usuarios = await this.trabajadoresRepo.findBy({ id: In(usuarioIds) });
+          const nombres = usuarios.map(u => `${u.nombres} ${u.apellidos}`);
+          textoAsignados = nombres.length === 1
+            ? ` que asignaste a ${nombres[0]}`
+            : ` que asignaste a ${nombres.slice(0, -1).join(', ')} y ${nombres[nombres.length - 1]}`;
+        }
+        const eventoCreador = await this.crearEvento({
+          tipo_evento: 'TAREA_VENCIDA',
+          descripcion: `La tarea "${tituloTarea}" venció sin completarse`,
+          usuario_id: creadorId,
+          datos_adicionales: { tarea_id: tareaId, titulo_tarea: tituloTarea, usuarios_destinatarios: [creadorId], roles_destinatarios: [] },
+        });
+        await this.crearNotificacion({
+          tipo_notificacion: 'TAREA_VENCIDA',
+          titulo: 'Tarea vencida',
+          mensaje: `La tarea "${tituloTarea}"${textoAsignados} venció sin completarse`,
+          evento_id: eventoCreador.id,
+          roles_destino: [creador?.rol?.id ?? ROL_ADMIN],
+        });
+      }
+
+      // ── 2. Notificación para los ASIGNADOS (excluye al creador) ──
+      const asignadosSinCreador = usuarioIds.filter(id => id !== creadorId);
+      if (asignadosSinCreador.length > 0 || rolIds.length > 0) {
+        const rolesDestino = rolIds.length > 0 ? rolIds : TODOS_LOS_ROLES;
+        const eventoAsignados = await this.crearEvento({
+          tipo_evento: 'TAREA_VENCIDA',
+          descripcion: `La tarea "${tituloTarea}" venció sin completarse`,
+          usuario_id: creadorId ?? 1,
+          datos_adicionales: { tarea_id: tareaId, titulo_tarea: tituloTarea, usuarios_destinatarios: asignadosSinCreador, roles_destinatarios: rolIds },
+        });
+        await this.crearNotificacion({
+          tipo_notificacion: 'TAREA_VENCIDA',
+          titulo: 'Tarea vencida',
+          mensaje: `La tarea "${tituloTarea}" que tienes asignada venció sin completarse`,
+          evento_id: eventoAsignados.id,
+          roles_destino: [...new Set(rolesDestino)],
+        });
+      }
+    } catch (error) {
+      this.logger.error(`Error al notificar tarea vencida: ${error.message}`);
     }
   }
 
