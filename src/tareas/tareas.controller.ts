@@ -9,6 +9,12 @@ import { CreateComentarioDto } from './dto/create-comentario.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 
+import { Res, StreamableFile } from '@nestjs/common';
+import { Response } from 'express';
+import * as fs from 'fs';
+import * as path from 'path';
+import { Public } from 'src/auth/decorators/public.decorator';
+
 @Controller('backend_api/tareas')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class TareasController {
@@ -59,6 +65,24 @@ export class TareasController {
     const rolId = req.user?.rol?.id ?? req.user?.rol_id;
     return this.tareasService.listar(userId, rolId);
   }
+
+
+    @Public()
+      @Get('archivos/file/:filename')
+      verArchivo(@Param('filename') filename: string, @Res() res: Response) {
+        const rutaArchivo = path.join(process.cwd(), 'uploads', 'tareas', filename);
+        if (!fs.existsSync(rutaArchivo)) {
+          return res.status(404).json({ message: 'Archivo no encontrado' });
+        }
+        const ext = path.extname(filename).toLowerCase();
+        const mimeTypes = {
+          '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png',
+          '.gif': 'image/gif', '.webp': 'image/webp', '.pdf': 'application/pdf',
+        };
+        res.setHeader('Content-Type', mimeTypes[ext] || 'application/octet-stream');
+        res.setHeader('Cache-Control', 'public, max-age=31536000');
+        fs.createReadStream(rutaArchivo).pipe(res);
+      }
 
   @Get(':id')
   obtenerPorId(@Param('id', ParseIntPipe) id: number) {
@@ -191,4 +215,6 @@ export class TareasController {
   ) {
     return this.tareasService.eliminarArchivo(archivoId);
   }
+
+
 }
