@@ -15,6 +15,7 @@ import { CreateTareaDto } from './dto/create-tarea.dto';
 import { UpdateTareaDto } from './dto/update-tarea.dto';
 import { CreateComentarioDto } from './dto/create-comentario.dto';
 import { NotificacionesService } from '../notificaciones/notificaciones.service';
+import { TrabajadorCentro } from '../usuarios/trabajador-centro.entity';
 
 const ROL_ADMIN = 1;
 
@@ -39,12 +40,25 @@ export class TareasService implements OnModuleInit {
     private comentarioArchivoRepo: Repository<TareaComentarioArchivo>,
     @InjectRepository(TareaTimer)
     private timerRepo: Repository<TareaTimer>,
+    @InjectRepository(TrabajadorCentro)
+    private trabajadorRepo: Repository<TrabajadorCentro>,
     private notificacionesService: NotificacionesService,
   ) {}
 
   // ─── Init: programa timeouts para tareas pendientes al arrancar el servidor ──
 
   async onModuleInit() {
+    // Self-healing: add columna_id to tarea_asignaciones if it doesn't exist
+    try {
+      await this.asignacionRepo.query(
+        'ALTER TABLE tarea_asignaciones ADD COLUMN columna_id INT NULL DEFAULT NULL',
+      );
+    } catch (e) {
+      if (!String(e?.message).includes('Duplicate column name')) {
+        console.warn('[TareasService] Migration warning:', e?.message);
+      }
+    }
+
     const tareas = await this.tareaRepo.find();
     for (const tarea of tareas) {
       if (tarea.fecha_limite && !tarea.columna?.es_final) {
@@ -68,12 +82,26 @@ export class TareasService implements OnModuleInit {
     const timeout = setTimeout(async () => {
       this.timeoutsVencidas.delete(tarea.id);
       const tareaActual = await this.tareaRepo.findOne({ where: { id: tarea.id } });
-      if (!tareaActual || tareaActual.columna?.es_final) return;
-      const asignaciones = await this.asignacionRepo.find({ where: { tarea_id: tarea.id } });
+      if (!tareaActual) return;
+
+      const [asignaciones, columnasFinales] = await Promise.all([
+        this.asignacionRepo.find({ where: { tarea_id: tarea.id } }),
+        this.columnaRepo.find({ where: { es_final: true } }),
+      ]);
+      const finalesIds = new Set(columnasFinales.map(c => c.id));
+
+      // Only notify users who haven't moved their task to a final column yet
+      const pendientes = asignaciones.filter(a => {
+        const colId = a.columna_id ?? tareaActual.columna_id;
+        return !finalesIds.has(colId);
+      });
+
+      if (!pendientes.length) return;
+
       await this.notificacionesService.notificarTareaVencida(
         tarea.id,
         tarea.titulo,
-        asignaciones.map(a => ({ usuario_id: a.usuario_id ?? undefined, rol_id: a.rol_id ?? undefined })),
+        pendientes.map(a => ({ usuario_id: a.usuario_id ?? undefined })),
         tarea.user_crea_id,
       );
     }, ms);
@@ -137,29 +165,45 @@ export class TareasService implements OnModuleInit {
   }
 
   async listar(userId: number, rolId: number) {
-    const todas = await this.tareaRepo.find({
-      order: { orden: 'ASC', created_at: 'DESC' },
-    });
-
-    // Cargar timers del usuario actual para todas las tareas
-    const misTimers = await this.timerRepo.find({ where: { usuario_id: userId } });
+    const [todas, misTimers] = await Promise.all([
+      this.tareaRepo.find({ order: { orden: 'ASC', created_at: 'DESC' } }),
+      this.timerRepo.find({ where: { usuario_id: userId } }),
+    ]);
     const timerMap = new Map(misTimers.map(t => [t.tarea_id, t]));
 
-    const conTimer = todas.map(t => ({
-      ...t,
-      mi_timer: timerMap.get(t.id) ?? null,
-    }));
+    // Administrador ve todo con estado global de la tarea
+    if (rolId === ROL_ADMIN) {
+      return todas.map(t => ({ ...t, mi_timer: timerMap.get(t.id) ?? null }));
+    }
 
-    // Administrador ve todo
-    if (rolId === ROL_ADMIN) return conTimer;
+    // Para otros usuarios: filtrar por asignación y aplicar estado de columna personal
+    const misAsignaciones = await this.asignacionRepo.find({ where: { usuario_id: userId } });
+    const asignacionMap = new Map(misAsignaciones.map(a => [a.tarea_id, a]));
 
-    // Otros: solo tareas asignadas a su usuario o su rol
-    return conTimer.filter(t =>
-      t.asignaciones?.some(a =>
-        (a.usuario_id && a.usuario_id === userId) ||
-        (a.rol_id && a.rol_id === rolId)
-      )
-    );
+    // Pre-cargar columnas personales del usuario (las que difieren de la tarea)
+    const columnaIdsPersonales = [
+      ...new Set(misAsignaciones.filter(a => a.columna_id != null).map(a => a.columna_id!)),
+    ];
+    const columnasPersonalesMap = new Map<number, TareaColumna>();
+    if (columnaIdsPersonales.length) {
+      const cols = await this.columnaRepo.findBy({ id: In(columnaIdsPersonales) });
+      for (const c of cols) columnasPersonalesMap.set(c.id, c);
+    }
+
+    return todas
+      .filter(t => asignacionMap.has(t.id))
+      .map(t => {
+        const asig = asignacionMap.get(t.id)!;
+        if (asig.columna_id != null) {
+          return {
+            ...t,
+            columna_id: asig.columna_id,
+            columna: columnasPersonalesMap.get(asig.columna_id) ?? t.columna,
+            mi_timer: timerMap.get(t.id) ?? null,
+          };
+        }
+        return { ...t, mi_timer: timerMap.get(t.id) ?? null };
+      });
   }
 
   async obtenerPorId(id: number) {
@@ -183,7 +227,11 @@ export class TareasService implements OnModuleInit {
 
     if (dto.asignaciones?.length) {
       await this.guardarAsignaciones(tareaGuardada.id, dto.asignaciones, userId);
-      this.notificacionesService.notificarTareaAsignada(tareaGuardada.id, dto.titulo, userId, dto.asignaciones).catch(() => {});
+      const asignacionesGuardadas = await this.asignacionRepo.find({ where: { tarea_id: tareaGuardada.id } });
+      this.notificacionesService.notificarTareaAsignada(
+        tareaGuardada.id, dto.titulo, userId,
+        asignacionesGuardadas.map(a => ({ usuario_id: a.usuario_id ?? undefined })),
+      ).catch(() => {});
     }
 
     const tareaFinal = await this.obtenerPorId(tareaGuardada.id);
@@ -219,9 +267,15 @@ export class TareasService implements OnModuleInit {
       await this.asignacionRepo.delete({ tarea_id: id });
       if (dto.asignaciones.length) {
         await this.guardarAsignaciones(id, dto.asignaciones, userId);
-        const tareaActual = await this.tareaRepo.findOne({ where: { id } });
+        const [tareaActual, nuevasAsig] = await Promise.all([
+          this.tareaRepo.findOne({ where: { id } }),
+          this.asignacionRepo.find({ where: { tarea_id: id } }),
+        ]);
         if (tareaActual) {
-          this.notificacionesService.notificarTareaAsignada(id, tareaActual.titulo, userId, dto.asignaciones).catch(() => {});
+          this.notificacionesService.notificarTareaAsignada(
+            id, tareaActual.titulo, userId,
+            nuevasAsig.map(a => ({ usuario_id: a.usuario_id ?? undefined })),
+          ).catch(() => {});
         }
       }
     }
@@ -243,28 +297,62 @@ export class TareasService implements OnModuleInit {
     return tareaActualizada;
   }
 
-  async moverColumna(id: number, columnaId: number, userId: number) {
+  async moverColumna(id: number, columnaId: number, userId: number, rolId?: number) {
     const columna = await this.columnaRepo.findOne({ where: { id: columnaId } });
     if (!columna) throw new NotFoundException(`Columna #${columnaId} no encontrada`);
 
-    const updateData: Record<string, any> = { columna_id: columnaId, user_actua_id: userId };
+    const asignacion = await this.asignacionRepo.findOne({
+      where: { tarea_id: id, usuario_id: userId },
+    });
 
-    // Si la columna destino es final, pausar timer
-    if (columna.es_final) {
-      const tarea = await this.obtenerPorId(id);
-      if (tarea.timer_activo) {
-        updateData.tiempo_acumulado = this.calcularTiempoAcumulado(tarea);
-        updateData.timer_activo = false;
-        updateData.timer_inicio = null;
+    if (asignacion) {
+      // Usuario asignado: actualiza su estado personal de columna
+      await this.asignacionRepo.update(asignacion.id, {
+        columna_id: columnaId,
+        user_actua_id: userId,
+      });
+    } else {
+      // Admin o tarea sin asignación: actualiza estado global de la tarea
+      const updateData: Record<string, any> = { columna_id: columnaId, user_actua_id: userId };
+      if (columna.es_final) {
+        const tarea = await this.obtenerPorId(id);
+        if (tarea.timer_activo) {
+          updateData.tiempo_acumulado = this.calcularTiempoAcumulado(tarea);
+          updateData.timer_activo = false;
+          updateData.timer_inicio = null;
+        }
       }
-      if (tarea.user_crea_id) {
-        this.notificacionesService.notificarTareaCompletada(id, tarea.titulo, userId, tarea.user_crea_id).catch(() => {});
-      }
-      this.cancelarTimeoutVencida(id);
+      await this.tareaRepo.update(id, updateData);
     }
 
-    await this.tareaRepo.update(id, updateData);
+    const tarea = await this.tareaRepo.findOne({ where: { id } });
+    if (columna.es_final) {
+      if (tarea?.user_crea_id) {
+        this.notificacionesService.notificarTareaCompletada(id, tarea.titulo, userId, tarea.user_crea_id).catch(() => {});
+      }
+      const todasCompletas = await this.verificarTodasEnFinal(id);
+      if (todasCompletas) this.cancelarTimeoutVencida(id);
+    } else if (tarea?.user_crea_id && asignacion) {
+      // Columna intermedia: notificar al creador del progreso
+      this.notificacionesService.notificarTareaMovida(id, tarea.titulo, userId, tarea.user_crea_id, columna.nombre).catch(() => {});
+    }
+
     return this.obtenerPorId(id);
+  }
+
+  private async verificarTodasEnFinal(tareaId: number): Promise<boolean> {
+    const [tarea, asignaciones, columnasFinales] = await Promise.all([
+      this.tareaRepo.findOne({ where: { id: tareaId } }),
+      this.asignacionRepo.find({ where: { tarea_id: tareaId } }),
+      this.columnaRepo.find({ where: { es_final: true } }),
+    ]);
+    if (!tarea) return true;
+    if (!asignaciones.length) {
+      const finalesIds = new Set(columnasFinales.map(c => c.id));
+      return finalesIds.has(tarea.columna_id);
+    }
+    const finalesIds = new Set(columnasFinales.map(c => c.id));
+    return asignaciones.every(a => finalesIds.has(a.columna_id ?? tarea.columna_id));
   }
 
   async eliminar(id: number) {
@@ -352,10 +440,15 @@ export class TareasService implements OnModuleInit {
         user_crea_id: userId,
       }));
       await this.comentarioArchivoRepo.save(archivos);
+      this.notificacionesService.notificarTareaArchivoSubido(
+        tareaId, tarea.titulo, userId,
+        (tarea.asignaciones ?? []).map(a => ({ usuario_id: a.usuario_id ?? undefined })),
+        tarea.user_crea_id ?? undefined,
+      ).catch(() => {});
     }
     this.notificacionesService.notificarTareaComentada(
       tareaId, tarea.titulo, userId,
-      (tarea.asignaciones ?? []).map(a => ({ usuario_id: a.usuario_id ?? undefined, rol_id: a.rol_id ?? undefined })),
+      (tarea.asignaciones ?? []).map(a => ({ usuario_id: a.usuario_id ?? undefined })),
       tarea.user_crea_id ?? undefined,
     ).catch(() => {});
     return this.comentarioRepo.findOne({ where: { id: comentario.id } });
@@ -371,7 +464,7 @@ export class TareasService implements OnModuleInit {
   }
 
   async guardarArchivo(tareaId: number, file: Express.Multer.File, userId: number): Promise<TareaArchivo> {
-    await this.obtenerPorId(tareaId);
+    const tarea = await this.obtenerPorId(tareaId);
     const archivo = this.archivoRepo.create({
       tarea_id: tareaId,
       nombre_original: file.originalname,
@@ -381,7 +474,14 @@ export class TareasService implements OnModuleInit {
       tamanio: file.size,
       user_crea_id: userId,
     });
-    return this.archivoRepo.save(archivo);
+    const guardado = await this.archivoRepo.save(archivo);
+    const asignaciones = await this.asignacionRepo.find({ where: { tarea_id: tareaId } });
+    this.notificacionesService.notificarTareaArchivoSubido(
+      tareaId, tarea.titulo, userId,
+      asignaciones.map(a => ({ usuario_id: a.usuario_id ?? undefined })),
+      tarea.user_crea_id ?? undefined,
+    ).catch(() => {});
+    return guardado;
   }
 
   async eliminarArchivo(archivoId: number): Promise<{ message: string }> {
@@ -438,15 +538,42 @@ export class TareasService implements OnModuleInit {
   }
 
   private async guardarAsignaciones(tareaId: number, asignaciones: { usuario_id?: number; rol_id?: number }[], userId: number) {
-    const entidades = asignaciones
-      .filter(a => a.usuario_id || a.rol_id)
-      .map(a => this.asignacionRepo.create({
-        tarea_id: tareaId,
-        usuario_id: a.usuario_id ?? null,
-        rol_id: a.rol_id ?? null,
-        user_crea_id: userId,
-        user_actua_id: userId,
-      }));
-    await this.asignacionRepo.save(entidades);
+    const entidades = [];
+    const yaAgregados = new Set<number>();
+
+    for (const a of asignaciones) {
+      if (a.usuario_id) {
+        if (!yaAgregados.has(a.usuario_id)) {
+          yaAgregados.add(a.usuario_id);
+          entidades.push(this.asignacionRepo.create({
+            tarea_id: tareaId,
+            usuario_id: a.usuario_id,
+            rol_id: null,
+            user_crea_id: userId,
+            user_actua_id: userId,
+          }));
+        }
+      } else if (a.rol_id) {
+        // Resolver rol → usuarios individuales activos
+        const usuarios = await this.trabajadorRepo.find({
+          where: { rol: { id: a.rol_id }, estado: true },
+          select: ['id'],
+        });
+        for (const u of usuarios) {
+          if (!yaAgregados.has(u.id)) {
+            yaAgregados.add(u.id);
+            entidades.push(this.asignacionRepo.create({
+              tarea_id: tareaId,
+              usuario_id: u.id,
+              rol_id: a.rol_id, // referencia al rol de origen
+              user_crea_id: userId,
+              user_actua_id: userId,
+            }));
+          }
+        }
+      }
+    }
+
+    if (entidades.length) await this.asignacionRepo.save(entidades);
   }
 }

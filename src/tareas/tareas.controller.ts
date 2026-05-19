@@ -126,7 +126,8 @@ export class TareasController {
     @Request() req,
   ) {
     const userId = req.user?.id;
-    return this.tareasService.moverColumna(id, Number(columnaId), userId);
+    const rolId = req.user?.rol?.id ?? req.user?.rol_id;
+    return this.tareasService.moverColumna(id, Number(columnaId), userId, rolId);
   }
 
   // ─── Timer ──────────────────────────────────────────────────────────────────

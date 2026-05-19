@@ -828,28 +828,32 @@ export class NotificacionesService {
     tareaId: number,
     tituloTarea: string,
     asignadorId: number,
-    asignaciones: Array<{ usuario_id?: number; rol_id?: number }>,
+    asignaciones: Array<{ usuario_id?: number }>,
   ) {
     try {
-      const { usuarioIds, rolIds } = await this.resolverDestinatarios(asignaciones);
-      const destinatarios = usuarioIds.filter(id => id !== asignadorId);
-      if (destinatarios.length === 0 && rolIds.length === 0) return;
+      const destinatarios = asignaciones
+        .map(a => a.usuario_id)
+        .filter((id): id is number => !!id && id !== asignadorId);
+      if (!destinatarios.length) return;
 
-      const asignadorNombre = await this.obtenerNombreUsuario(asignadorId);
-      const rolesDestino = rolIds.length > 0 ? rolIds : TODOS_LOS_ROLES;
+      const [asignadorNombre, usuarios] = await Promise.all([
+        this.obtenerNombreUsuario(asignadorId),
+        this.trabajadoresRepo.findBy({ id: In(destinatarios) }),
+      ]);
+      const roles = [...new Set(usuarios.map(u => u.rol?.id ?? ROL_ADMIN))];
 
       const evento = await this.crearEvento({
         tipo_evento: 'TAREA_ASIGNADA',
         descripcion: `${asignadorNombre} asignó la tarea "${tituloTarea}"`,
         usuario_id: asignadorId,
-        datos_adicionales: { tarea_id: tareaId, titulo_tarea: tituloTarea, asignador_nombre: asignadorNombre, usuarios_destinatarios: destinatarios, roles_destinatarios: rolIds },
+        datos_adicionales: { tarea_id: tareaId, titulo_tarea: tituloTarea, asignador_nombre: asignadorNombre, usuarios_destinatarios: destinatarios, roles_destinatarios: [] },
       });
       await this.crearNotificacion({
         tipo_notificacion: 'TAREA_ASIGNADA',
         titulo: 'Nueva tarea asignada',
         mensaje: `${asignadorNombre} te asignó la tarea "${tituloTarea}"`,
         evento_id: evento.id,
-        roles_destino: [...new Set(rolesDestino)],
+        roles_destino: roles,
       });
     } catch (error) {
       this.logger.error(`Error al notificar tarea asignada: ${error.message}`);
@@ -860,35 +864,54 @@ export class NotificacionesService {
     tareaId: number,
     tituloTarea: string,
     comentadorId: number,
-    asignaciones: Array<{ usuario_id?: number; rol_id?: number }>,
+    asignaciones: Array<{ usuario_id?: number }>,
     creadorId?: number,
   ) {
     try {
-      const { usuarioIds, rolIds } = await this.resolverDestinatarios(asignaciones);
-
-      // Asignados + creador, sin el que comentó
-      const todosIds = [...usuarioIds];
-      if (creadorId && creadorId !== comentadorId) todosIds.push(creadorId);
-      const destinatarios = [...new Set(todosIds.filter(id => id !== comentadorId))];
-
-      if (destinatarios.length === 0 && rolIds.length === 0) return;
-
       const comentadorNombre = await this.obtenerNombreUsuario(comentadorId);
-      const rolesDestino = rolIds.length > 0 ? rolIds : TODOS_LOS_ROLES;
+      const usuarioIds = asignaciones.map(a => a.usuario_id).filter((id): id is number => !!id);
 
-      const evento = await this.crearEvento({
-        tipo_evento: 'TAREA_COMENTADA',
-        descripcion: `${comentadorNombre} comentó en la tarea "${tituloTarea}"`,
-        usuario_id: comentadorId,
-        datos_adicionales: { tarea_id: tareaId, titulo_tarea: tituloTarea, comentador_nombre: comentadorNombre, usuarios_destinatarios: destinatarios, roles_destinatarios: rolIds },
-      });
-      await this.crearNotificacion({
-        tipo_notificacion: 'TAREA_COMENTADA',
-        titulo: 'Nuevo comentario en tarea',
-        mensaje: `${comentadorNombre} comentó en la tarea "${tituloTarea}"`,
-        evento_id: evento.id,
-        roles_destino: [...new Set(rolesDestino)],
-      });
+      // ── Asignados (excluye al comentador y al creador — el creador recibe mensaje distinto) ──
+      const destinatariosAsignados = [...new Set(
+        usuarioIds.filter(id => id !== comentadorId && id !== creadorId),
+      )];
+      if (destinatariosAsignados.length > 0) {
+        const usuarios = await this.trabajadoresRepo.findBy({ id: In(destinatariosAsignados) });
+        const roles = [...new Set(usuarios.map(u => u.rol?.id ?? ROL_ADMIN))];
+        const ev = await this.crearEvento({
+          tipo_evento: 'TAREA_COMENTADA',
+          descripcion: `${comentadorNombre} comentó en la tarea "${tituloTarea}"`,
+          usuario_id: comentadorId,
+          datos_adicionales: { tarea_id: tareaId, titulo_tarea: tituloTarea, comentador_nombre: comentadorNombre, usuarios_destinatarios: destinatariosAsignados, roles_destinatarios: [] },
+        });
+        await this.crearNotificacion({
+          tipo_notificacion: 'TAREA_COMENTADA',
+          titulo: 'Nuevo comentario en tu tarea',
+          mensaje: `${comentadorNombre} comentó en tu tarea "${tituloTarea}"`,
+          evento_id: ev.id,
+          roles_destino: roles,
+        });
+      }
+
+      // ── Creador (mensaje distinto) ──
+      if (creadorId && creadorId !== comentadorId) {
+        const creador = await this.trabajadoresRepo.findOne({ where: { id: creadorId } });
+        if (creador) {
+          const ev = await this.crearEvento({
+            tipo_evento: 'TAREA_COMENTADA',
+            descripcion: `${comentadorNombre} comentó en la tarea "${tituloTarea}"`,
+            usuario_id: comentadorId,
+            datos_adicionales: { tarea_id: tareaId, titulo_tarea: tituloTarea, comentador_nombre: comentadorNombre, usuarios_destinatarios: [creadorId], roles_destinatarios: [] },
+          });
+          await this.crearNotificacion({
+            tipo_notificacion: 'TAREA_COMENTADA',
+            titulo: 'Comentario en tarea asignada',
+            mensaje: `${comentadorNombre} comentó en la tarea que le asignaste "${tituloTarea}"`,
+            evento_id: ev.id,
+            roles_destino: [creador.rol?.id ?? ROL_ADMIN],
+          });
+        }
+      }
     } catch (error) {
       this.logger.error(`Error al notificar tarea comentada: ${error.message}`);
     }
@@ -902,8 +925,10 @@ export class NotificacionesService {
   ) {
     try {
       if (creadorId === completadoPorId) return;
-      const completadoPorNombre = await this.obtenerNombreUsuario(completadoPorId);
-      const creador = await this.trabajadoresRepo.findOne({ where: { id: creadorId } });
+      const [completadoPorNombre, creador] = await Promise.all([
+        this.obtenerNombreUsuario(completadoPorId),
+        this.trabajadoresRepo.findOne({ where: { id: creadorId } }),
+      ]);
       if (!creador) return;
 
       const evento = await this.crearEvento({
@@ -927,58 +952,206 @@ export class NotificacionesService {
   async notificarTareaVencida(
     tareaId: number,
     tituloTarea: string,
-    asignaciones: Array<{ usuario_id?: number; rol_id?: number }>,
+    asignaciones: Array<{ usuario_id?: number }>,
     creadorId: number,
   ) {
     try {
-      const { usuarioIds, rolIds } = await this.resolverDestinatarios(asignaciones);
+      const pendientesIds = asignaciones
+        .map(a => a.usuario_id)
+        .filter((id): id is number => !!id && id !== creadorId);
 
-      // ── 1. Notificación para el CREADOR con mensaje descriptivo ──
-      if (creadorId) {
-        const creador = await this.trabajadoresRepo.findOne({ where: { id: creadorId } });
-        let textoAsignados = '';
-        if (usuarioIds.length > 0) {
-          const usuarios = await this.trabajadoresRepo.findBy({ id: In(usuarioIds) });
-          const nombres = usuarios.map(u => `${u.nombres} ${u.apellidos}`);
-          textoAsignados = nombres.length === 1
-            ? ` que asignaste a ${nombres[0]}`
-            : ` que asignaste a ${nombres.slice(0, -1).join(', ')} y ${nombres[nombres.length - 1]}`;
-        }
-        const eventoCreador = await this.crearEvento({
+      const [pendientes, creador] = await Promise.all([
+        pendientesIds.length ? this.trabajadoresRepo.findBy({ id: In(pendientesIds) }) : Promise.resolve([]),
+        this.trabajadoresRepo.findOne({ where: { id: creadorId } }),
+      ]);
+
+      // ── Una notif por asignado pendiente ──
+      for (const u of pendientes) {
+        const ev = await this.crearEvento({
           tipo_evento: 'TAREA_VENCIDA',
-          descripcion: `La tarea "${tituloTarea}" venció sin completarse`,
+          descripcion: `La tarea "${tituloTarea}" de ${u.nombres} ${u.apellidos} venció`,
           usuario_id: creadorId,
-          datos_adicionales: { tarea_id: tareaId, titulo_tarea: tituloTarea, usuarios_destinatarios: [creadorId], roles_destinatarios: [] },
+          datos_adicionales: { tarea_id: tareaId, titulo_tarea: tituloTarea, usuarios_destinatarios: [u.id], roles_destinatarios: [] },
         });
         await this.crearNotificacion({
           tipo_notificacion: 'TAREA_VENCIDA',
           titulo: 'Tarea vencida',
-          mensaje: `La tarea "${tituloTarea}"${textoAsignados} venció sin completarse`,
-          evento_id: eventoCreador.id,
-          roles_destino: [creador?.rol?.id ?? ROL_ADMIN],
+          mensaje: `Tu tarea "${tituloTarea}" ha vencido`,
+          evento_id: ev.id,
+          roles_destino: [u.rol?.id ?? ROL_ADMIN],
         });
       }
 
-      // ── 2. Notificación para los ASIGNADOS (excluye al creador) ──
-      const asignadosSinCreador = usuarioIds.filter(id => id !== creadorId);
-      if (asignadosSinCreador.length > 0 || rolIds.length > 0) {
-        const rolesDestino = rolIds.length > 0 ? rolIds : TODOS_LOS_ROLES;
-        const eventoAsignados = await this.crearEvento({
-          tipo_evento: 'TAREA_VENCIDA',
-          descripcion: `La tarea "${tituloTarea}" venció sin completarse`,
-          usuario_id: creadorId ?? 1,
-          datos_adicionales: { tarea_id: tareaId, titulo_tarea: tituloTarea, usuarios_destinatarios: asignadosSinCreador, roles_destinatarios: rolIds },
-        });
-        await this.crearNotificacion({
-          tipo_notificacion: 'TAREA_VENCIDA',
-          titulo: 'Tarea vencida',
-          mensaje: `La tarea "${tituloTarea}" que tienes asignada venció sin completarse`,
-          evento_id: eventoAsignados.id,
-          roles_destino: [...new Set(rolesDestino)],
-        });
+      // ── Creador: una notif por cada asignado pendiente ──
+      if (creador && pendientes.length > 0) {
+        for (const u of pendientes) {
+          const ev = await this.crearEvento({
+            tipo_evento: 'TAREA_VENCIDA',
+            descripcion: `La tarea "${tituloTarea}" asignada a ${u.nombres} ${u.apellidos} venció`,
+            usuario_id: creadorId,
+            datos_adicionales: { tarea_id: tareaId, titulo_tarea: tituloTarea, usuarios_destinatarios: [creadorId], roles_destinatarios: [] },
+          });
+          await this.crearNotificacion({
+            tipo_notificacion: 'TAREA_VENCIDA',
+            titulo: 'Tarea vencida',
+            mensaje: `La tarea "${tituloTarea}" asignada a ${u.nombres} ${u.apellidos} ha vencido`,
+            evento_id: ev.id,
+            roles_destino: [creador.rol?.id ?? ROL_ADMIN],
+          });
+        }
       }
     } catch (error) {
       this.logger.error(`Error al notificar tarea vencida: ${error.message}`);
+    }
+  }
+
+  async notificarTareaMovida(
+    tareaId: number,
+    tituloTarea: string,
+    movioId: number,
+    creadorId: number,
+    nombreColumna: string,
+  ) {
+    try {
+      if (movioId === creadorId) return;
+      const [movioNombre, creador] = await Promise.all([
+        this.obtenerNombreUsuario(movioId),
+        this.trabajadoresRepo.findOne({ where: { id: creadorId } }),
+      ]);
+      if (!creador) return;
+
+      const ev = await this.crearEvento({
+        tipo_evento: 'TAREA_MOVIDA',
+        descripcion: `${movioNombre} movió la tarea "${tituloTarea}" a "${nombreColumna}"`,
+        usuario_id: movioId,
+        datos_adicionales: { tarea_id: tareaId, titulo_tarea: tituloTarea, movio_nombre: movioNombre, columna_destino: nombreColumna, usuarios_destinatarios: [creadorId], roles_destinatarios: [] },
+      });
+      await this.crearNotificacion({
+        tipo_notificacion: 'TAREA_MOVIDA',
+        titulo: 'Tarea actualizada',
+        mensaje: `${movioNombre} movió la tarea "${tituloTarea}" a "${nombreColumna}"`,
+        evento_id: ev.id,
+        roles_destino: [creador.rol?.id ?? ROL_ADMIN],
+      });
+    } catch (error) {
+      this.logger.error(`Error al notificar tarea movida: ${error.message}`);
+    }
+  }
+
+  async notificarTareaArchivoSubido(
+    tareaId: number,
+    tituloTarea: string,
+    subioPorId: number,
+    asignaciones: Array<{ usuario_id?: number }>,
+    creadorId?: number,
+  ) {
+    try {
+      const subioPorNombre = await this.obtenerNombreUsuario(subioPorId);
+      const esElCreador = subioPorId === creadorId;
+      const usuarioIds = asignaciones.map(a => a.usuario_id).filter((id): id is number => !!id);
+
+      if (esElCreador) {
+        // Emisor subió → notificar a los asignados
+        const destinatarios = [...new Set(usuarioIds.filter(id => id !== subioPorId))];
+        if (!destinatarios.length) return;
+        const usuarios = await this.trabajadoresRepo.findBy({ id: In(destinatarios) });
+        const roles = [...new Set(usuarios.map(u => u.rol?.id ?? ROL_ADMIN))];
+        const ev = await this.crearEvento({
+          tipo_evento: 'TAREA_ARCHIVO_SUBIDO',
+          descripcion: `${subioPorNombre} subió un archivo en la tarea "${tituloTarea}"`,
+          usuario_id: subioPorId,
+          datos_adicionales: { tarea_id: tareaId, titulo_tarea: tituloTarea, subio_nombre: subioPorNombre, usuarios_destinatarios: destinatarios, roles_destinatarios: [] },
+        });
+        await this.crearNotificacion({
+          tipo_notificacion: 'TAREA_ARCHIVO_SUBIDO',
+          titulo: 'Nuevo archivo en tu tarea',
+          mensaje: `${subioPorNombre} subió un archivo en tu tarea "${tituloTarea}"`,
+          evento_id: ev.id,
+          roles_destino: roles,
+        });
+      } else {
+        // Asignado subió → notificar al creador
+        if (!creadorId || creadorId === subioPorId) return;
+        const creador = await this.trabajadoresRepo.findOne({ where: { id: creadorId } });
+        if (!creador) return;
+        const ev = await this.crearEvento({
+          tipo_evento: 'TAREA_ARCHIVO_SUBIDO',
+          descripcion: `${subioPorNombre} subió un archivo en la tarea "${tituloTarea}"`,
+          usuario_id: subioPorId,
+          datos_adicionales: { tarea_id: tareaId, titulo_tarea: tituloTarea, subio_nombre: subioPorNombre, usuarios_destinatarios: [creadorId], roles_destinatarios: [] },
+        });
+        await this.crearNotificacion({
+          tipo_notificacion: 'TAREA_ARCHIVO_SUBIDO',
+          titulo: 'Nuevo archivo en tarea',
+          mensaje: `${subioPorNombre} subió un archivo en la tarea "${tituloTarea}"`,
+          evento_id: ev.id,
+          roles_destino: [creador.rol?.id ?? ROL_ADMIN],
+        });
+      }
+    } catch (error) {
+      this.logger.error(`Error al notificar archivo subido en tarea: ${error.message}`);
+    }
+  }
+
+  async notificarSesionesTerapia24(
+    pacienteId: number,
+    pacienteNombre: string,
+    terapeutaId: number,
+    terapeutaNombre: string,
+    servicioId: number,
+    servicioNombre: string,
+    sesionesCumplidas: number,
+  ) {
+    try {
+      const datosBase = {
+        paciente_id: pacienteId,
+        paciente_nombre: pacienteNombre,
+        terapeuta_id: terapeutaId,
+        terapeuta_nombre: terapeutaNombre,
+        servicio_id: servicioId,
+        servicio_nombre: servicioNombre,
+        sesiones_cumplidas: sesionesCumplidas,
+      };
+
+      const mensajeSesiones = `El paciente ${pacienteNombre} ha cumplido ${sesionesCumplidas} sesiones de terapia. Por favor, realizar el reporte de evolución correspondiente y replantear los objetivos terapéuticos según los avances observados.`;
+      const tituloSesiones = `Paciente cumple ${sesionesCumplidas} sesiones de terapia`;
+
+      // ── Notificación al TERAPEUTA ──
+      const terapeuta = await this.trabajadoresRepo.findOne({ where: { id: terapeutaId } });
+      if (terapeuta) {
+        const evTerapeuta = await this.crearEvento({
+          tipo_evento: 'SESIONES_TERAPIA_24',
+          descripcion: mensajeSesiones,
+          usuario_id: terapeutaId,
+          datos_adicionales: { ...datosBase, usuarios_destinatarios: [terapeutaId], roles_destinatarios: [] },
+        });
+        await this.crearNotificacion({
+          tipo_notificacion: 'SESIONES_TERAPIA_24',
+          titulo: tituloSesiones,
+          mensaje: mensajeSesiones,
+          evento_id: evTerapeuta.id,
+          roles_destino: [terapeuta.rol?.id ?? ROL_TERAPEUTA],
+        });
+      }
+
+      // ── Notificación al ADMINISTRADOR ──
+      const evAdmin = await this.crearEvento({
+        tipo_evento: 'SESIONES_TERAPIA_24',
+        descripcion: mensajeSesiones,
+        usuario_id: terapeutaId,
+        datos_adicionales: { ...datosBase, usuarios_destinatarios: [], roles_destinatarios: [ROL_ADMIN] },
+      });
+      await this.crearNotificacion({
+        tipo_notificacion: 'SESIONES_TERAPIA_24',
+        titulo: tituloSesiones,
+        mensaje: mensajeSesiones,
+        evento_id: evAdmin.id,
+        roles_destino: [ROL_ADMIN],
+      });
+
+      this.logger.log(`Notificación sesiones-24 generada: ${pacienteNombre} (${sesionesCumplidas} sesiones)`);
+    } catch (error) {
+      this.logger.error(`Error al notificar sesiones terapia 24: ${error.message}`);
     }
   }
 

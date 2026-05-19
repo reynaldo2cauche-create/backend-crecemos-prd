@@ -268,6 +268,11 @@ export class CitasService {
     const guardada = await this.citaRepo.save(cita);
     console.log(`✅ Cita normal creada: ID ${guardada.id}`);
 
+    // Notificar hito de 24 sesiones si aplica
+    if (guardada.paciente_id && guardada.servicio_id) {
+      this.verificarYNotificarSesiones24Agendada(guardada).catch(e => console.error('[sesiones24] Error:', e?.message, e));
+    }
+
     // 🛒 INCREMENTAR SESIONES USADAS EN LA VENTA
     await this.citaRepo.query(
       `UPDATE venta_servicio_detalle
@@ -2050,5 +2055,72 @@ async obtenerInfoVentaDeCita(citaId: number): Promise<any> {
   };
 }
 
+  // ─── 24 sesiones de terapia ─────────────────────────────────────────────────
+
+  private async verificarYNotificarSesiones24Agendada(cita: Cita): Promise<void> {
+    try {
+      const resultado = await this.citaRepo.query(`
+        SELECT COUNT(*) AS total
+        FROM citas c
+        WHERE c.paciente_id = ?
+          AND c.servicio_id = ?
+          AND c.motivo_id = 4
+          AND c.estado_id NOT IN (5, 8)
+          AND c.flg_activo = 1
+      `, [cita.paciente_id, cita.servicio_id]);
+
+      const total = parseInt(resultado[0]?.total ?? '0');
+      console.log(`[sesiones24] paciente=${cita.paciente_id} servicio=${cita.servicio_id} motivo=${cita.motivo_id} total=${total}`);
+      if (total === 0 || total % 5 !== 0) return; // TEMP TEST — cambiar a 24 en producción
+
+      const yaNotificado = await this.verificarSiYaSeNotificoSesiones24(cita.paciente_id, cita.servicio_id, total);
+      console.log(`[sesiones24] yaNotificado=${yaNotificado}`);
+      if (yaNotificado) return;
+
+      const info = await this.citaRepo.query(`
+        SELECT
+          TRIM(CONCAT(p.nombres, ' ', p.apellido_paterno, ' ', COALESCE(p.apellido_materno, ''))) AS paciente_nombre,
+          TRIM(CONCAT(tc.nombres, ' ', tc.apellidos)) AS terapeuta_nombre,
+          s.nombre AS servicio_nombre
+        FROM citas c
+        INNER JOIN paciente p ON p.id = c.paciente_id
+        INNER JOIN trabajador_centro tc ON tc.id = c.doctor_id
+        INNER JOIN servicios s ON s.id = c.servicio_id
+        WHERE c.id = ?
+      `, [cita.id]);
+
+      console.log(`[sesiones24] info encontrada=${info?.length}`);
+      if (!info?.length) return;
+
+      await this.notificacionesService.notificarSesionesTerapia24(
+        cita.paciente_id,
+        info[0].paciente_nombre,
+        cita.doctor_id,
+        info[0].terapeuta_nombre,
+        cita.servicio_id,
+        info[0].servicio_nombre,
+        total,
+      );
+    } catch (error) {
+      console.error('❌ Error al verificar sesiones 24:', error instanceof Error ? error.message : error);
+    }
+  }
+
+  private async verificarSiYaSeNotificoSesiones24(pacienteId: number, servicioId: number, sesiones: number): Promise<boolean> {
+    try {
+      const result = await this.citaRepo.query(`
+        SELECT COUNT(*) AS total
+        FROM eventos_sistema e
+        INNER JOIN notificaciones n ON n.evento_id = e.id
+        WHERE e.tipo_evento = 'SESIONES_TERAPIA_24'
+          AND JSON_EXTRACT(e.datos_adicionales, '$.paciente_id') = ?
+          AND JSON_EXTRACT(e.datos_adicionales, '$.servicio_id') = ?
+          AND JSON_EXTRACT(e.datos_adicionales, '$.sesiones_cumplidas') = ?
+      `, [pacienteId, servicioId, sesiones]);
+      return parseInt(result[0]?.total ?? '0') > 0;
+    } catch {
+      return false;
+    }
+  }
 
 }

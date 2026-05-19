@@ -11,6 +11,7 @@ import { TareaArchivo } from './entities/tarea-archivo.entity';
 import { TareaComentarioArchivo } from './entities/tarea-comentario-archivo.entity';
 import { TareaTimer } from './entities/tarea-timer.entity';
 import { NotificacionesModule } from '../notificaciones/notificaciones.module';
+import { TrabajadorCentro } from '../usuarios/trabajador-centro.entity';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { NotificacionesModule } from '../notificaciones/notificaciones.module';
       TareaArchivo,
       TareaComentarioArchivo,
       TareaTimer,
+      TrabajadorCentro,
     ]),
     forwardRef(() => NotificacionesModule),
   ],

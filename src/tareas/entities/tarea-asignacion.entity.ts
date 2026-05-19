@@ -29,6 +29,9 @@ export class TareaAsignacion {
   @JoinColumn({ name: 'rol_id' })
   rol: Rol;
 
+  @Column({ type: 'int', nullable: true })
+  columna_id: number | null;
+
   @Column({ nullable: true })
   user_crea_id: number;
 
