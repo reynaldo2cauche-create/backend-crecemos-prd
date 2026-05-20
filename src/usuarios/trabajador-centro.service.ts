@@ -58,18 +58,19 @@ export class TrabajadorCentroService {
     });
   }
 
-  async findAllForSelect(): Promise<{ id: number; nombre_completo: string; cargo: string }[]> {
+  async findAllForSelect(): Promise<{ id: number; nombre_completo: string; cargo: string; rol_id: number | null }[]> {
     const trabajadores = await this.trabajadorCentroRepository.find({
       select: ['id', 'nombres', 'apellidos'],
       where: { estado: true },
-      relations: ['cargo'],
+      relations: ['cargo', 'rol'],
       order: { apellidos: 'ASC', nombres: 'ASC' }
     });
 
     return trabajadores.map(trabajador => ({
       id: trabajador.id,
       nombre_completo: `${trabajador.nombres} ${trabajador.apellidos}`.trim(),
-      cargo: trabajador.cargo?.nombre || 'Sin cargo'
+      cargo: trabajador.cargo?.nombre || 'Sin cargo',
+      rol_id: trabajador.rol?.id ?? null,
     }));
   }
 

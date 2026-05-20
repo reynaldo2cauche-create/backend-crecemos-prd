@@ -110,6 +110,11 @@ export class TareasController {
     return this.tareasService.restaurar(id);
   }
 
+  @Patch(':id/archivar')
+  archivar(@Param('id', ParseIntPipe) id: number) {
+    return this.tareasService.archivar(id);
+  }
+
   @Get(':id')
   obtenerPorId(@Param('id', ParseIntPipe) id: number) {
     return this.tareasService.obtenerPorId(id);

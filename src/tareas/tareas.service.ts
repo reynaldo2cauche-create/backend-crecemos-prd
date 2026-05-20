@@ -171,12 +171,23 @@ export class TareasService implements OnModuleInit {
     ]);
     const timerMap = new Map(misTimers.map(t => [t.tarea_id, t]));
 
-    // Cargar asignaciones del usuario para aplicar columna personal
-    const misAsignaciones = await this.asignacionRepo.find({ where: { usuario_id: userId } });
-    const asignacionMap = new Map(misAsignaciones.map(a => [a.tarea_id, a]));
+    // Cargar asignaciones por usuario Y por rol para filtrado y columna personal
+    const [asignacionesUsuario, asignacionesRol] = await Promise.all([
+      this.asignacionRepo.find({ where: { usuario_id: userId } }),
+      rolId ? this.asignacionRepo.find({ where: { rol_id: rolId } }) : Promise.resolve([]),
+    ]);
+
+    // El mapa de columna personal solo aplica a asignaciones directas del usuario
+    const asignacionMap = new Map(asignacionesUsuario.map(a => [a.tarea_id, a]));
+
+    // Set de tarea_ids visibles: asignadas al usuario O a su rol
+    const tareaIdsVisibles = new Set([
+      ...asignacionesUsuario.map(a => a.tarea_id),
+      ...asignacionesRol.map(a => a.tarea_id),
+    ]);
 
     const columnaIdsPersonales = [
-      ...new Set(misAsignaciones.filter(a => a.columna_id != null).map(a => a.columna_id!)),
+      ...new Set(asignacionesUsuario.filter(a => a.columna_id != null).map(a => a.columna_id!)),
     ];
     const columnasPersonalesMap = new Map<number, TareaColumna>();
     if (columnaIdsPersonales.length) {
@@ -202,9 +213,9 @@ export class TareasService implements OnModuleInit {
       return todas.map(aplicarColumnaPersonal);
     }
 
-    // Otros usuarios: solo ven sus tareas asignadas con columna personal
+    // Otros usuarios: ven tareas asignadas a ellos directamente O a su rol
     return todas
-      .filter(t => asignacionMap.has(t.id))
+      .filter(t => tareaIdsVisibles.has(t.id))
       .map(aplicarColumnaPersonal);
   }
 
@@ -227,8 +238,13 @@ export class TareasService implements OnModuleInit {
 
     const tareaGuardada = await this.tareaRepo.save(tarea);
 
+    const asignacionesAGuardar = dto.asignaciones?.length
+      ? dto.asignaciones
+      : [{ usuario_id: userId }]; // sin asignación explícita → tarea para el creador
+
+    await this.guardarAsignaciones(tareaGuardada.id, asignacionesAGuardar, userId);
+
     if (dto.asignaciones?.length) {
-      await this.guardarAsignaciones(tareaGuardada.id, dto.asignaciones, userId);
       const asignacionesGuardadas = await this.asignacionRepo.find({ where: { tarea_id: tareaGuardada.id } });
       this.notificacionesService.notificarTareaAsignada(
         tareaGuardada.id, dto.titulo, userId,
@@ -611,10 +627,12 @@ export class TareasService implements OnModuleInit {
       this.tareaRepo.query(
         `SELECT t.id, t.titulo, t.descripcion, t.prioridad_id, t.fecha_completado, t.updated_at,
                 p.nombre AS prioridad_nombre, p.color AS prioridad_color,
-                tc.nombres AS crea_nombres, tc.apellidos AS crea_apellidos
+                tc.nombres AS crea_nombres, tc.apellidos AS crea_apellidos,
+                col.nombre AS columna_nombre, col.color AS columna_color
          FROM tareas t
          LEFT JOIN tarea_prioridades p ON p.id = t.prioridad_id
          LEFT JOIN trabajador_centro tc ON tc.id = t.user_crea_id
+         LEFT JOIN tarea_columnas col ON col.id = t.columna_id
          ${where}
          ORDER BY COALESCE(t.fecha_completado, t.updated_at) DESC
          LIMIT ? OFFSET ?`,
@@ -637,6 +655,13 @@ export class TareasService implements OnModuleInit {
       columna_id: primeraColumna?.id ?? tarea.columna_id,
     });
     return this.obtenerPorId(id);
+  }
+
+  async archivar(id: number) {
+    const tarea = await this.tareaRepo.findOne({ where: { id } });
+    if (!tarea) throw new NotFoundException(`Tarea #${id} no encontrada`);
+    await this.tareaRepo.update(id, { archivado: true, fecha_completado: new Date() });
+    return { ok: true };
   }
 
 }
