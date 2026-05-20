@@ -2040,9 +2040,27 @@ async obtenerInfoVentaDeCita(citaId: number): Promise<any> {
   // Última sesión: solo cuando YA se agendaron TODAS las sesiones del paquete y ésta es la última cronológicamente
   const esUltimaCita = todasAgendadas && ultimaCita?.id === citaId;
   // Penúltima: falta exactamente 1 sesión por agendar y ésta es la última agendada hasta ahora
-  const esPenultimaCita = 
+  const esPenultimaCita =
   (!todasAgendadas && sesionesRestantes === 1 && ultimaCita?.id === citaId) ||
   (todasAgendadas && sesionesTotales > 2 && penultimaCita?.id === citaId);
+
+  // Detectar si hay un Informe Verbal pendiente en el mismo venta_id
+  let informeVerbalPendiente = false;
+  if (paqueteInfo.venta_id) {
+    outer: for (const servicio of listado.servicios) {
+      const paquetesArr = servicio.paquetes as any[];
+      for (const paquete of paquetesArr) {
+        if (
+          Number(paquete.venta_id) === Number(paqueteInfo.venta_id) &&
+          Number(paquete.venta_servicio_detalle_id) !== Number(cita.venta_servicio_detalle_id) &&
+          (paquete.citas as any[]).some((c: any) => c.motivo_nombre?.toLowerCase().includes('informe verbal'))
+        ) {
+          informeVerbalPendiente = (paquete.citas as any[]).some((c: any) => !c.programada);
+          if (informeVerbalPendiente) break outer;
+        }
+      }
+    }
+  }
 
   return {
     sesiones_totales: sesionesTotales,
@@ -2052,6 +2070,7 @@ async obtenerInfoVentaDeCita(citaId: number): Promise<any> {
     es_ultima_cita: esUltimaCita,
     es_penultima_cita: esPenultimaCita,
     id_ultima_cita: ultimaCita?.id,
+    informe_verbal_pendiente: informeVerbalPendiente,
   };
 }
 
