@@ -274,7 +274,6 @@ export class VentaProductoService {
       // Actualizar campos de la venta
       const camposActualizables: Partial<VentaProducto> = {};
 
-      if (dto.fecha_venta !== undefined) camposActualizables.fecha_venta = dto.fecha_venta;
       if (dto.tipo_pagador_id !== undefined) camposActualizables.tipo_comprador_id = dto.tipo_pagador_id;
       if (dto.paciente_id !== undefined) camposActualizables.paciente_id = dto.paciente_id;
       if (dto.responsable_id !== undefined) camposActualizables.responsable_id = dto.responsable_id;

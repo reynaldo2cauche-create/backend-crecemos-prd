@@ -109,7 +109,7 @@ export class VentaServicioService {
     if (desde) { condS.push('vs.fecha_venta >= ?'); paramsS.push(desde); }
     if (hasta) { condS.push('vs.fecha_venta <= ?'); paramsS.push(hasta); }
     if (pacienteId) { condS.push('vs.paciente_id = ?'); paramsS.push(pacienteId); }
-    if (metodoPagoId) { condS.push('EXISTS (SELECT 1 FROM venta_servicio_pago vsp2 WHERE vsp2.venta_id = vs.id AND vsp2.modalidad_pago_id = ?)'); paramsS.push(metodoPagoId); }
+    if (metodoPagoId) { condS.push('(EXISTS (SELECT 1 FROM venta_servicio_pago vsp2 WHERE vsp2.venta_id = vs.id AND vsp2.modalidad_pago_id = ?) OR vs.modalidad_pago_id = ?)'); paramsS.push(metodoPagoId, metodoPagoId); }
     const whereS = condS.length ? 'AND ' + condS.join(' AND ') : '';
 
     // Condiciones para venta_producto
@@ -117,8 +117,22 @@ export class VentaServicioService {
     const paramsP: any[] = [];
     if (desde) { condP.push('vp.fecha_venta >= ?'); paramsP.push(desde); }
     if (hasta) { condP.push('vp.fecha_venta <= ?'); paramsP.push(hasta); }
-    if (metodoPagoId) { condP.push('EXISTS (SELECT 1 FROM venta_producto_pago vpp2 WHERE vpp2.venta_id = vp.id AND vpp2.modalidad_pago_id = ?)'); paramsP.push(metodoPagoId); }
+    if (metodoPagoId) { condP.push('(EXISTS (SELECT 1 FROM venta_producto_pago vpp2 WHERE vpp2.venta_id = vp.id AND vpp2.modalidad_pago_id = ?) OR vp.modalidad_pago_id = ?)'); paramsP.push(metodoPagoId, metodoPagoId); }
     const whereP = condP.length ? 'AND ' + condP.join(' AND ') : '';
+
+    // Condiciones base sin metodoPago — usadas para el monto por método
+    const condS_base: string[] = [];
+    const paramsS_base: any[] = [];
+    if (desde) { condS_base.push('vs.fecha_venta >= ?'); paramsS_base.push(desde); }
+    if (hasta) { condS_base.push('vs.fecha_venta <= ?'); paramsS_base.push(hasta); }
+    if (pacienteId) { condS_base.push('vs.paciente_id = ?'); paramsS_base.push(pacienteId); }
+    const whereS_base = condS_base.length ? 'AND ' + condS_base.join(' AND ') : '';
+
+    const condP_base: string[] = [];
+    const paramsP_base: any[] = [];
+    if (desde) { condP_base.push('vp.fecha_venta >= ?'); paramsP_base.push(desde); }
+    if (hasta) { condP_base.push('vp.fecha_venta <= ?'); paramsP_base.push(hasta); }
+    const whereP_base = condP_base.length ? 'AND ' + condP_base.join(' AND ') : '';
 
     let countSql: string;
     let countParams: any[];
@@ -130,15 +144,45 @@ export class VentaServicioService {
     if (tipo === 'servicios') {
       countSql = `SELECT COUNT(*) as total FROM venta_servicio vs WHERE 1=1 ${whereS}`;
       countParams = [...paramsS];
-      montoSql = `SELECT COALESCE(SUM(total), 0) as total_monto FROM venta_servicio vs WHERE 1=1 ${whereS}`;
-      montoParams = [...paramsS];
+      if (metodoPagoId) {
+        montoSql = `
+          SELECT COALESCE(SUM(COALESCE(pago_sum.sum_monto, vs.total)), 0) as total_monto
+          FROM venta_servicio vs
+          LEFT JOIN (
+            SELECT venta_id, SUM(monto) as sum_monto
+            FROM venta_servicio_pago
+            WHERE modalidad_pago_id = ?
+            GROUP BY venta_id
+          ) pago_sum ON pago_sum.venta_id = vs.id
+          WHERE 1=1 AND (pago_sum.venta_id IS NOT NULL OR vs.modalidad_pago_id = ?)
+          ${whereS_base}`;
+        montoParams = [metodoPagoId, metodoPagoId, ...paramsS_base];
+      } else {
+        montoSql = `SELECT COALESCE(SUM(total), 0) as total_monto FROM venta_servicio vs WHERE 1=1 ${whereS}`;
+        montoParams = [...paramsS];
+      }
       pageSql = `SELECT id, created_at, 'servicio' as tipo FROM venta_servicio vs WHERE 1=1 ${whereS} ORDER BY created_at DESC LIMIT ? OFFSET ?`;
       pageParams = [...paramsS, limit, offset];
     } else if (tipo === 'productos') {
       countSql = `SELECT COUNT(*) as total FROM venta_producto vp WHERE 1=1 ${whereP}`;
       countParams = [...paramsP];
-      montoSql = `SELECT COALESCE(SUM(total), 0) as total_monto FROM venta_producto vp WHERE 1=1 ${whereP}`;
-      montoParams = [...paramsP];
+      if (metodoPagoId) {
+        montoSql = `
+          SELECT COALESCE(SUM(COALESCE(pago_sum.sum_monto, vp.total)), 0) as total_monto
+          FROM venta_producto vp
+          LEFT JOIN (
+            SELECT venta_id, SUM(monto) as sum_monto
+            FROM venta_producto_pago
+            WHERE modalidad_pago_id = ?
+            GROUP BY venta_id
+          ) pago_sum ON pago_sum.venta_id = vp.id
+          WHERE 1=1 AND (pago_sum.venta_id IS NOT NULL OR vp.modalidad_pago_id = ?)
+          ${whereP_base}`;
+        montoParams = [metodoPagoId, metodoPagoId, ...paramsP_base];
+      } else {
+        montoSql = `SELECT COALESCE(SUM(total), 0) as total_monto FROM venta_producto vp WHERE 1=1 ${whereP}`;
+        montoParams = [...paramsP];
+      }
       pageSql = `SELECT id, created_at, 'producto' as tipo FROM venta_producto vp WHERE 1=1 ${whereP} ORDER BY created_at DESC LIMIT ? OFFSET ?`;
       pageParams = [...paramsP, limit, offset];
     } else {
@@ -149,13 +193,41 @@ export class VentaServicioService {
           SELECT id FROM venta_producto vp WHERE 1=1 ${whereP}
         ) combined`;
       countParams = [...paramsS, ...paramsP];
-      montoSql = `
-        SELECT COALESCE(SUM(total), 0) as total_monto FROM (
-          SELECT total FROM venta_servicio vs WHERE 1=1 ${whereS}
-          UNION ALL
-          SELECT total FROM venta_producto vp WHERE 1=1 ${whereP}
-        ) combined`;
-      montoParams = [...paramsS, ...paramsP];
+      if (metodoPagoId) {
+        montoSql = `
+          SELECT COALESCE(SUM(monto_metodo), 0) as total_monto FROM (
+            SELECT COALESCE(pago_sum_s.sum_monto, vs.total) as monto_metodo
+            FROM venta_servicio vs
+            LEFT JOIN (
+              SELECT venta_id, SUM(monto) as sum_monto
+              FROM venta_servicio_pago
+              WHERE modalidad_pago_id = ?
+              GROUP BY venta_id
+            ) pago_sum_s ON pago_sum_s.venta_id = vs.id
+            WHERE 1=1 AND (pago_sum_s.venta_id IS NOT NULL OR vs.modalidad_pago_id = ?)
+            ${whereS_base}
+            UNION ALL
+            SELECT COALESCE(pago_sum_p.sum_monto, vp.total) as monto_metodo
+            FROM venta_producto vp
+            LEFT JOIN (
+              SELECT venta_id, SUM(monto) as sum_monto
+              FROM venta_producto_pago
+              WHERE modalidad_pago_id = ?
+              GROUP BY venta_id
+            ) pago_sum_p ON pago_sum_p.venta_id = vp.id
+            WHERE 1=1 AND (pago_sum_p.venta_id IS NOT NULL OR vp.modalidad_pago_id = ?)
+            ${whereP_base}
+          ) combined`;
+        montoParams = [metodoPagoId, metodoPagoId, ...paramsS_base, metodoPagoId, metodoPagoId, ...paramsP_base];
+      } else {
+        montoSql = `
+          SELECT COALESCE(SUM(total), 0) as total_monto FROM (
+            SELECT total FROM venta_servicio vs WHERE 1=1 ${whereS}
+            UNION ALL
+            SELECT total FROM venta_producto vp WHERE 1=1 ${whereP}
+          ) combined`;
+        montoParams = [...paramsS, ...paramsP];
+      }
       pageSql = `
         SELECT id, created_at, 'servicio' as tipo FROM venta_servicio vs WHERE 1=1 ${whereS}
         UNION ALL
@@ -808,7 +880,6 @@ export class VentaServicioService {
     if (dto.comprador_externo_id !== undefined)  camposActualizables.comprador_externo_id  = dto.comprador_externo_id;
     if (dto.tipo_comprobante_id !== undefined)   camposActualizables.tipo_comprobante_id   = dto.tipo_comprobante_id;
 
-      if (dto.fecha_venta !== undefined) camposActualizables.fecha_venta = dto.fecha_venta;
       if (dto.nota !== undefined) camposActualizables.nota = dto.nota;
       if (dto.observaciones !== undefined) camposActualizables.observaciones = dto.observaciones;
       if (dto.modalidad_pago_id !== undefined) camposActualizables.modalidad_pago_id = dto.modalidad_pago_id;
