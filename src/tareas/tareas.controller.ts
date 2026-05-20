@@ -84,6 +84,32 @@ export class TareasController {
         fs.createReadStream(rutaArchivo).pipe(res);
       }
 
+  // ─── Archivadas ─────────────────────────────────────────────────────────────
+
+  @Get('archivadas')
+  listarArchivadas(
+    @Query('busqueda') busqueda?: string,
+    @Query('desde') desde?: string,
+    @Query('hasta') hasta?: string,
+    @Query('prioridad_id') prioridad_id?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.tareasService.listarArchivadas({
+      busqueda,
+      desde,
+      hasta,
+      prioridad_id: prioridad_id ? parseInt(prioridad_id) : undefined,
+      page: page ? parseInt(page) : 1,
+      limit: limit ? parseInt(limit) : 20,
+    });
+  }
+
+  @Patch(':id/restaurar')
+  restaurar(@Param('id', ParseIntPipe) id: number) {
+    return this.tareasService.restaurar(id);
+  }
+
   @Get(':id')
   obtenerPorId(@Param('id', ParseIntPipe) id: number) {
     return this.tareasService.obtenerPorId(id);

@@ -2071,7 +2071,7 @@ async obtenerInfoVentaDeCita(citaId: number): Promise<any> {
 
       const total = parseInt(resultado[0]?.total ?? '0');
       console.log(`[sesiones24] paciente=${cita.paciente_id} servicio=${cita.servicio_id} motivo=${cita.motivo_id} total=${total}`);
-      if (total === 0 || total % 5 !== 0) return; // TEMP TEST — cambiar a 24 en producción
+      if (total === 0 || total % 24 !== 0) return;
 
       const yaNotificado = await this.verificarSiYaSeNotificoSesiones24(cita.paciente_id, cita.servicio_id, total);
       console.log(`[sesiones24] yaNotificado=${yaNotificado}`);

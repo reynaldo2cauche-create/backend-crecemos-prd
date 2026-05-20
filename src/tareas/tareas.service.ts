@@ -166,21 +166,15 @@ export class TareasService implements OnModuleInit {
 
   async listar(userId: number, rolId: number) {
     const [todas, misTimers] = await Promise.all([
-      this.tareaRepo.find({ order: { orden: 'ASC', created_at: 'DESC' } }),
+      this.tareaRepo.find({ where: { archivado: false }, order: { orden: 'ASC', created_at: 'DESC' } }),
       this.timerRepo.find({ where: { usuario_id: userId } }),
     ]);
     const timerMap = new Map(misTimers.map(t => [t.tarea_id, t]));
 
-    // Administrador ve todo con estado global de la tarea
-    if (rolId === ROL_ADMIN) {
-      return todas.map(t => ({ ...t, mi_timer: timerMap.get(t.id) ?? null }));
-    }
-
-    // Para otros usuarios: filtrar por asignación y aplicar estado de columna personal
+    // Cargar asignaciones del usuario para aplicar columna personal
     const misAsignaciones = await this.asignacionRepo.find({ where: { usuario_id: userId } });
     const asignacionMap = new Map(misAsignaciones.map(a => [a.tarea_id, a]));
 
-    // Pre-cargar columnas personales del usuario (las que difieren de la tarea)
     const columnaIdsPersonales = [
       ...new Set(misAsignaciones.filter(a => a.columna_id != null).map(a => a.columna_id!)),
     ];
@@ -190,20 +184,28 @@ export class TareasService implements OnModuleInit {
       for (const c of cols) columnasPersonalesMap.set(c.id, c);
     }
 
+    const aplicarColumnaPersonal = (t: Tarea) => {
+      const asig = asignacionMap.get(t.id);
+      if (asig?.columna_id != null) {
+        return {
+          ...t,
+          columna_id: asig.columna_id,
+          columna: columnasPersonalesMap.get(asig.columna_id) ?? t.columna,
+          mi_timer: timerMap.get(t.id) ?? null,
+        };
+      }
+      return { ...t, mi_timer: timerMap.get(t.id) ?? null };
+    };
+
+    // Administrador ve todas las tareas, pero con su columna personal si está asignado
+    if (rolId === ROL_ADMIN) {
+      return todas.map(aplicarColumnaPersonal);
+    }
+
+    // Otros usuarios: solo ven sus tareas asignadas con columna personal
     return todas
       .filter(t => asignacionMap.has(t.id))
-      .map(t => {
-        const asig = asignacionMap.get(t.id)!;
-        if (asig.columna_id != null) {
-          return {
-            ...t,
-            columna_id: asig.columna_id,
-            columna: columnasPersonalesMap.get(asig.columna_id) ?? t.columna,
-            mi_timer: timerMap.get(t.id) ?? null,
-          };
-        }
-        return { ...t, mi_timer: timerMap.get(t.id) ?? null };
-      });
+      .map(aplicarColumnaPersonal);
   }
 
   async obtenerPorId(id: number) {
@@ -306,7 +308,7 @@ export class TareasService implements OnModuleInit {
     });
 
     if (asignacion) {
-      // Usuario asignado: actualiza su estado personal de columna
+      // Usuario asignado (cualquier rol): actualiza su estado personal de columna
       await this.asignacionRepo.update(asignacion.id, {
         columna_id: columnaId,
         user_actua_id: userId,
@@ -321,6 +323,9 @@ export class TareasService implements OnModuleInit {
           updateData.timer_activo = false;
           updateData.timer_inicio = null;
         }
+        updateData.fecha_completado = new Date();
+      } else {
+        updateData.fecha_completado = null;
       }
       await this.tareaRepo.update(id, updateData);
     }
@@ -445,12 +450,13 @@ export class TareasService implements OnModuleInit {
         (tarea.asignaciones ?? []).map(a => ({ usuario_id: a.usuario_id ?? undefined })),
         tarea.user_crea_id ?? undefined,
       ).catch(() => {});
+    } else {
+      this.notificacionesService.notificarTareaComentada(
+        tareaId, tarea.titulo, userId,
+        (tarea.asignaciones ?? []).map(a => ({ usuario_id: a.usuario_id ?? undefined })),
+        tarea.user_crea_id ?? undefined,
+      ).catch(() => {});
     }
-    this.notificacionesService.notificarTareaComentada(
-      tareaId, tarea.titulo, userId,
-      (tarea.asignaciones ?? []).map(a => ({ usuario_id: a.usuario_id ?? undefined })),
-      tarea.user_crea_id ?? undefined,
-    ).catch(() => {});
     return this.comentarioRepo.findOne({ where: { id: comentario.id } });
   }
 
@@ -576,4 +582,61 @@ export class TareasService implements OnModuleInit {
 
     if (entidades.length) await this.asignacionRepo.save(entidades);
   }
+
+  // ─── Archivo ─────────────────────────────────────────────────────────────────
+
+  async listarArchivadas(filtros: {
+    busqueda?: string;
+    desde?: string;
+    hasta?: string;
+    prioridad_id?: number;
+    page?: number;
+    limit?: number;
+  } = {}) {
+    const { busqueda, desde, hasta, prioridad_id, page = 1, limit = 20 } = filtros;
+    const offset = (page - 1) * limit;
+
+    const conditions: string[] = ['t.archivado = 1'];
+    const params: any[] = [];
+
+    if (busqueda) { conditions.push('t.titulo LIKE ?'); params.push(`%${busqueda}%`); }
+    if (desde)    { conditions.push('DATE(COALESCE(t.fecha_completado, t.updated_at)) >= ?'); params.push(desde); }
+    if (hasta)    { conditions.push('DATE(COALESCE(t.fecha_completado, t.updated_at)) <= ?'); params.push(hasta); }
+    if (prioridad_id) { conditions.push('t.prioridad_id = ?'); params.push(Number(prioridad_id)); }
+
+    const where = 'WHERE ' + conditions.join(' AND ');
+
+    const [[{ total }], filas] = await Promise.all([
+      this.tareaRepo.query(`SELECT COUNT(*) AS total FROM tareas t ${where}`, params),
+      this.tareaRepo.query(
+        `SELECT t.id, t.titulo, t.descripcion, t.prioridad_id, t.fecha_completado, t.updated_at,
+                p.nombre AS prioridad_nombre, p.color AS prioridad_color,
+                tc.nombres AS crea_nombres, tc.apellidos AS crea_apellidos
+         FROM tareas t
+         LEFT JOIN tarea_prioridades p ON p.id = t.prioridad_id
+         LEFT JOIN trabajador_centro tc ON tc.id = t.user_crea_id
+         ${where}
+         ORDER BY COALESCE(t.fecha_completado, t.updated_at) DESC
+         LIMIT ? OFFSET ?`,
+        [...params, limit, offset],
+      ),
+    ]);
+
+    const totalNum = parseInt(total);
+    return { data: filas, total: totalNum, page, limit, totalPages: Math.ceil(totalNum / limit) };
+  }
+
+  async restaurar(id: number) {
+    const tarea = await this.tareaRepo.findOne({ where: { id } });
+    if (!tarea) throw new NotFoundException(`Tarea #${id} no encontrada`);
+
+    const [primeraColumna] = await this.columnaRepo.find({ order: { orden: 'ASC' }, take: 1 });
+    await this.tareaRepo.update(id, {
+      archivado: false,
+      fecha_completado: null,
+      columna_id: primeraColumna?.id ?? tarea.columna_id,
+    });
+    return this.obtenerPorId(id);
+  }
+
 }

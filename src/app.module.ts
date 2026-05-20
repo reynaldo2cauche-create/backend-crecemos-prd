@@ -242,6 +242,9 @@ import { TareaTimer } from './tareas/entities/tarea-timer.entity';
         },
       },
     }),
+
+
+    
     TypeOrmModule.forRoot({
       // type: 'mysql',
       // host: 'localhost',
@@ -253,8 +256,8 @@ import { TareaTimer } from './tareas/entities/tarea-timer.entity';
       host: 'localhost',
       port: 3306,
       username: 'root',
-      password: 'd339yr8l',
-      database: 'crecemos_websites',
+      password: 'admin',
+      database: 'crecemos_website',
       charset: 'utf8mb4',
       extra: {
         connectionLimit: 10,

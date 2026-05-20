@@ -69,6 +69,12 @@ export class Tarea {
   @OneToMany(() => TareaArchivo, a => a.tarea, { cascade: true, eager: true })
   archivos: TareaArchivo[];
 
+  @Column({ default: false })
+  archivado: boolean;
+
+  @Column({ type: 'datetime', nullable: true })
+  fecha_completado: Date;
+
   @CreateDateColumn()
   created_at: Date;
 

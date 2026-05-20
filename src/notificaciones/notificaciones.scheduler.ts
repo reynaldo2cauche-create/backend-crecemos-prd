@@ -38,11 +38,13 @@ export class NotificacionesScheduler {
     // Ejecutar sincronización inicial solo la primera vez
     await this.ejecutarSincronizacionInicial();
 
-    // Verificaciones generales cada hora (cumpleaños, aniversarios, inconsistencias)
+    // Verificaciones generales cada hora (cumpleaños, aniversarios, inconsistencias, archivado)
     this.verificarNotificaciones();
+    this.archivarTareasAntiguasA3AM();
     this.intervalId = setInterval(() => {
       this.verificarNotificaciones();
       this.verificarInconsistenciasAsistenciaA9PM();
+      this.archivarTareasAntiguasA3AM();
     }, 3600000);
 
     // Tareas vencidas: chequeo cada 5 minutos para notificar rápido
@@ -125,10 +127,10 @@ export class NotificacionesScheduler {
    * Sincroniza cumpleaños de pacientes para 0, 1 y 2 días
    */
   private async sincronizarCumpleaniosPacientesInicial() {
-    this.logger.log('🎂 Sincronizando cumpleaños de pacientes (0, 1, 2 días)...');
+    this.logger.log('🎂 Sincronizando cumpleaños de pacientes (0, 1, 3 días)...');
 
-    for (let dias = 0; dias <= 2; dias++) {
-      // Para todos los días enviar a ADMIN y ADMISIÓN (2 días antes)
+    // 0 = hoy, 1 = mañana, 2 = lunes cuando hoy es sábado
+    for (const dias of [0, 1, 2]) {
       await this.verificarCumpleaniosEnDias(dias, [1, 2]);
     }
 
@@ -235,10 +237,36 @@ export class NotificacionesScheduler {
 
   private async verificarCumpleaniosPacientes() {
     try {
-      await this.verificarCumpleaniosEnDias(2, [1, 2]); // 2 días antes para ADMIN y ADMISIÓN
+      const ahora = this.getAhoraLima();
+      const hora = ahora.getHours();
+      const diaSemana = ahora.getDay(); // 0=Dom, 1=Lun, 2=Mar, 3=Mié, 4=Jue, 5=Vie, 6=Sáb
+
+      // Domingo: no se notifica
+      if (diaSemana === 0) return;
+
+      // Sábado: ventana 8-10am — notifica domingo (1 día) y lunes (2 días)
+      if (diaSemana === 6) {
+        if (hora >= 8 && hora < 10) {
+          await this.verificarCumpleaniosEnDias(1, [1, 2]); // domingo
+          await this.verificarCumpleaniosEnDias(2, [1, 2]); // lunes
+        }
+        return;
+      }
+
+      // Lunes a Viernes: ventana 10am-12pm — solo notifica cumpleaños de mañana
+      if (hora >= 10 && hora < 12) {
+        await this.verificarCumpleaniosEnDias(1, [1, 2]);
+      }
     } catch (error) {
       this.logger.error(`Error al verificar cumpleaños: ${error.message}`);
     }
+  }
+
+  private getAhoraLima(): Date {
+    const ahora = new Date();
+    const limaOffset = -5 * 60;
+    const utcMinutes = ahora.getTime() / 60000 + ahora.getTimezoneOffset();
+    return new Date((utcMinutes + limaOffset) * 60000);
   }
 
   private async verificarCumpleaniosEnDias(dias: number, roles: number[]) {
@@ -786,6 +814,27 @@ export class NotificacionesScheduler {
     } catch (error) {
       this.logger.error(`Error al verificar notificación diaria: ${error.message}`);
       return true;
+    }
+  }
+
+  private async archivarTareasAntiguasA3AM() {
+    const ahora = this.getAhoraLima();
+    if (ahora.getHours() !== 3) return;
+    try {
+      const result = await this.tareaRepo.query(`
+        UPDATE tareas t
+        INNER JOIN tarea_columnas tc ON tc.id = t.columna_id
+        SET t.archivado = 1
+        WHERE t.archivado = 0
+          AND tc.es_final = 1
+          AND COALESCE(t.fecha_completado, t.updated_at) <= DATE_SUB(NOW(), INTERVAL 30 DAY)
+      `);
+      const archivadas = result.affectedRows ?? 0;
+      if (archivadas > 0) {
+        this.logger.log(`📦 Archivado automático: ${archivadas} tarea(s) con más de 30 días completadas`);
+      }
+    } catch (error) {
+      this.logger.error(`Error en archivado automático: ${error.message}`);
     }
   }
 
