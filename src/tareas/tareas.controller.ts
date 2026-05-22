@@ -8,6 +8,7 @@ import { UpdateTareaDto } from './dto/update-tarea.dto';
 import { CreateComentarioDto } from './dto/create-comentario.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
+import { Auditable } from '../auditoria/decorators/auditable.decorator';
 
 import { Res, StreamableFile } from '@nestjs/common';
 import { Response } from 'express';
@@ -32,6 +33,7 @@ export class TareasController {
     return this.tareasService.listarColumnas();
   }
 
+  @Auditable({ modulo: 'TAREAS', accion: 'CREAR_COLUMNA' })
   @Post('columnas')
   crearColumna(@Body() body: { nombre: string; color: string; es_final: boolean }, @Request() req) {
     return this.tareasService.crearColumna(body, req.user?.id);
@@ -42,6 +44,7 @@ export class TareasController {
     return this.tareasService.reordenarColumnas(body.ids, req.user?.id);
   }
 
+  @Auditable({ modulo: 'TAREAS', accion: 'ELIMINAR_COLUMNA' })
   @Delete('columnas/:id')
   eliminarColumna(@Param('id', ParseIntPipe) id: number) {
     return this.tareasService.eliminarColumna(id);
@@ -105,11 +108,13 @@ export class TareasController {
     });
   }
 
+  @Auditable({ modulo: 'TAREAS', accion: 'RESTAURAR_TAREA' })
   @Patch(':id/restaurar')
   restaurar(@Param('id', ParseIntPipe) id: number) {
     return this.tareasService.restaurar(id);
   }
 
+  @Auditable({ modulo: 'TAREAS', accion: 'ARCHIVAR_TAREA' })
   @Patch(':id/archivar')
   archivar(@Param('id', ParseIntPipe) id: number) {
     return this.tareasService.archivar(id);
@@ -120,12 +125,14 @@ export class TareasController {
     return this.tareasService.obtenerPorId(id);
   }
 
+  @Auditable({ modulo: 'TAREAS', accion: 'CREAR_TAREA' })
   @Post()
   crear(@Body() dto: CreateTareaDto, @Request() req) {
     const userId = req.user?.id;
     return this.tareasService.crear(dto, userId);
   }
 
+  @Auditable({ modulo: 'TAREAS', accion: 'EDITAR_TAREA' })
   @Put(':id')
   actualizar(
     @Param('id', ParseIntPipe) id: number,
@@ -136,6 +143,7 @@ export class TareasController {
     return this.tareasService.actualizar(id, dto, userId);
   }
 
+  @Auditable({ modulo: 'TAREAS', accion: 'ELIMINAR_TAREA' })
   @Delete(':id')
   eliminar(@Param('id', ParseIntPipe) id: number) {
     return this.tareasService.eliminar(id);
@@ -150,6 +158,7 @@ export class TareasController {
 
   // ─── Mover columna ──────────────────────────────────────────────────────────
 
+  @Auditable({ modulo: 'TAREAS', accion: 'MOVER_COLUMNA' })
   @Patch(':id/columna')
   moverColumna(
     @Param('id', ParseIntPipe) id: number,
@@ -180,6 +189,7 @@ export class TareasController {
     return this.tareasService.listarComentarios(id);
   }
 
+  @Auditable({ modulo: 'TAREAS', accion: 'ELIMINAR_COMENTARIO' })
   @Delete('comentarios/:comentarioId')
   eliminarComentario(
     @Param('comentarioId', ParseIntPipe) comentarioId: number,
@@ -190,6 +200,7 @@ export class TareasController {
     return this.tareasService.eliminarComentario(comentarioId, userId, esAdmin);
   }
 
+  @Auditable({ modulo: 'TAREAS', accion: 'COMENTAR_TAREA' })
   @Post(':id/comentarios')
   @UseInterceptors(FilesInterceptor('archivos', 10, {
     storage: diskStorage({
@@ -235,9 +246,11 @@ export class TareasController {
     @Param('id', ParseIntPipe) id: number,
     @UploadedFiles() files: Express.Multer.File[],
     @Request() req,
+    @Query('nonotif') nonotif?: string,
   ) {
     const userId = req.user?.id;
-    return Promise.all(files.map(f => this.tareasService.guardarArchivo(id, f, userId)));
+    const skipNotification = nonotif === '1';
+    return Promise.all(files.map(f => this.tareasService.guardarArchivo(id, f, userId, skipNotification)));
   }
 
   @Delete(':id/archivos/:archivoId')

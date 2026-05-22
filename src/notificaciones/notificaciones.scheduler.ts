@@ -846,6 +846,7 @@ export class NotificacionesScheduler {
         INNER JOIN tarea_columnas tc ON tc.id = t.columna_id
         WHERE t.fecha_limite < NOW()
           AND tc.es_final = 0
+          AND t.archivado = 0
           AND NOT EXISTS (
             SELECT 1 FROM eventos_sistema e
             WHERE e.tipo_evento = 'TAREA_VENCIDA'

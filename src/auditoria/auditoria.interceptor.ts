@@ -326,6 +326,18 @@ export class AuditoriaInterceptor implements NestInterceptor {
       CAMBIAR_ESTADO_POSTULACION: 'Cambió estado de una postulación',
       AGREGAR_COMENTARIO: 'Agregó un comentario a una postulación',
 
+      // CENTRO OPERATIVO – TAREAS
+      CREAR_TAREA: this.descTareaCrear(responseData),
+      EDITAR_TAREA: this.descTareaEditar(responseData),
+      ELIMINAR_TAREA: this.descTareaEliminar(request, responseData),
+      MOVER_COLUMNA: this.descTareaMover(responseData),
+      ARCHIVAR_TAREA: this.descTareaArchivar(responseData),
+      RESTAURAR_TAREA: this.descTareaRestaurar(responseData),
+      CREAR_COLUMNA: this.descColumnaCrear(responseData),
+      ELIMINAR_COLUMNA: this.descColumnaEliminar(request, responseData),
+      COMENTAR_TAREA: this.descTareaComentario(request, responseData),
+      ELIMINAR_COMENTARIO: this.descEliminarComentario(request, responseData),
+
       // SISTEMA
       EXPORTAR_DATOS: `Exportó datos del módulo ${metadata.modulo}`,
       LOGIN: 'Inició sesión en el sistema',
@@ -665,5 +677,127 @@ export class AuditoriaInterceptor implements NestInterceptor {
     }
 
     return `Eliminó cita del paciente ${pacienteNombre}`;
+  }
+
+  // ─── Descripciones Centro Operativo (TAREAS) ────────────────────────────────
+
+  private descTareaCrear(r: any): string {
+    const titulo = r?.titulo || 'una tarea';
+    const columna = r?.columna?.nombre;
+    return columna
+      ? `Creó la tarea "${titulo}" en la columna "${columna}"`
+      : `Creó la tarea "${titulo}"`;
+  }
+
+  private descTareaEditar(r: any): string {
+    const titulo = r?.titulo || 'una tarea';
+    const antes = r?.datosAnteriores;
+    if (!antes) return `Editó la tarea "${titulo}"`;
+
+    const cambios: string[] = [];
+
+    if (antes.titulo !== undefined && antes.titulo !== r.titulo) {
+      cambios.push(`título: "${antes.titulo}" → "${r.titulo}"`);
+    }
+
+    const colAntes = antes.columna;
+    const colDespues = r.columna?.nombre;
+    if (colAntes !== undefined && colDespues && colAntes !== colDespues) {
+      cambios.push(`columna: "${colAntes}" → "${colDespues}"`);
+    }
+
+    const prioAntes = antes.prioridad;
+    const prioDespues = r.prioridad?.nombre;
+    if (prioAntes !== undefined && prioDespues && prioAntes !== prioDespues) {
+      cambios.push(`prioridad: "${prioAntes}" → "${prioDespues}"`);
+    }
+
+    if (antes.descripcion !== undefined && antes.descripcion !== r.descripcion) {
+      const recortar = (s: string | null | undefined) => {
+        if (!s) return '(vacío)';
+        return s.length > 50 ? `"${s.slice(0, 50)}…"` : `"${s}"`;
+      };
+      cambios.push(`descripción: ${recortar(antes.descripcion)} → ${recortar(r.descripcion)}`);
+    }
+
+    if (antes.fecha_limite !== undefined) {
+      const fmt = (f: any) => {
+        if (!f) return 'sin fecha';
+        const d = new Date(f);
+        return `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')}/${d.getFullYear()} ${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
+      };
+      const fl1 = antes.fecha_limite ? new Date(antes.fecha_limite).toISOString() : null;
+      const fl2 = r.fecha_limite ? new Date(r.fecha_limite).toISOString() : null;
+      if (fl1 !== fl2) cambios.push(`fecha límite: ${fmt(antes.fecha_limite)} → ${fmt(r.fecha_limite)}`);
+    }
+
+    return cambios.length
+      ? `Editó la tarea "${titulo}": ${cambios.join(', ')}`
+      : `Editó la tarea "${titulo}"`;
+  }
+
+  private descTareaEliminar(req: any, r: any): string {
+    const titulo = r?.titulo;
+    const id = req?.params?.id;
+    return titulo
+      ? `Eliminó la tarea "${titulo}"`
+      : `Eliminó la tarea #${id ?? 'desconocida'}`;
+  }
+
+  private descTareaMover(r: any): string {
+    const titulo = r?.titulo || 'una tarea';
+    const columna = r?.columna?.nombre;
+    return columna
+      ? `Movió la tarea "${titulo}" a la columna "${columna}"`
+      : `Movió la tarea "${titulo}" de columna`;
+  }
+
+  private descTareaArchivar(r: any): string {
+    const titulo = r?.titulo || 'una tarea';
+    return `Archivó la tarea "${titulo}"`;
+  }
+
+  private descTareaRestaurar(r: any): string {
+    const titulo = r?.titulo || 'una tarea';
+    return `Restauró la tarea "${titulo}"`;
+  }
+
+  private descColumnaCrear(r: any): string {
+    const nombre = r?.nombre || 'una columna';
+    return `Creó la columna "${nombre}"`;
+  }
+
+  private descColumnaEliminar(req: any, r: any): string {
+    const nombre = r?.nombre;
+    const id = req?.params?.id;
+    return nombre
+      ? `Eliminó la columna "${nombre}"`
+      : `Eliminó la columna #${id ?? 'desconocida'}`;
+  }
+
+  private descTareaComentario(req: any, r: any): string {
+    const tareaId = req?.params?.id;
+    const tarea = r?.tarea;
+    const tituloTarea = tarea?.titulo;
+    const contenido: string = r?.contenido || '';
+    const resumen = contenido.length > 60 ? contenido.slice(0, 60) + '…' : contenido;
+
+    if (tituloTarea) {
+      return resumen
+        ? `Comentó en la tarea "${tituloTarea}": "${resumen}"`
+        : `Comentó en la tarea "${tituloTarea}"`;
+    }
+    return resumen
+      ? `Comentó en la tarea #${tareaId}: "${resumen}"`
+      : `Comentó en la tarea #${tareaId}`;
+  }
+
+  private descEliminarComentario(req: any, r: any): string {
+    const tarea = r?.tarea;
+    const tituloTarea = tarea?.titulo;
+    const id = req?.params?.comentarioId;
+    return tituloTarea
+      ? `Eliminó un comentario de la tarea "${tituloTarea}"`
+      : `Eliminó el comentario #${id ?? 'desconocido'}`;
   }
 }
