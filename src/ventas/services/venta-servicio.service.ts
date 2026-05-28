@@ -117,6 +117,7 @@ export class VentaServicioService {
     const paramsP: any[] = [];
     if (desde) { condP.push('vp.fecha_venta >= ?'); paramsP.push(desde); }
     if (hasta) { condP.push('vp.fecha_venta <= ?'); paramsP.push(hasta); }
+    if (pacienteId) { condP.push('vp.paciente_id = ?'); paramsP.push(pacienteId); }
     if (metodoPagoId) { condP.push('(EXISTS (SELECT 1 FROM venta_producto_pago vpp2 WHERE vpp2.venta_id = vp.id AND vpp2.modalidad_pago_id = ?) OR vp.modalidad_pago_id = ?)'); paramsP.push(metodoPagoId, metodoPagoId); }
     const whereP = condP.length ? 'AND ' + condP.join(' AND ') : '';
 
@@ -132,6 +133,7 @@ export class VentaServicioService {
     const paramsP_base: any[] = [];
     if (desde) { condP_base.push('vp.fecha_venta >= ?'); paramsP_base.push(desde); }
     if (hasta) { condP_base.push('vp.fecha_venta <= ?'); paramsP_base.push(hasta); }
+    if (pacienteId) { condP_base.push('vp.paciente_id = ?'); paramsP_base.push(pacienteId); }
     const whereP_base = condP_base.length ? 'AND ' + condP_base.join(' AND ') : '';
 
     let countSql: string;
