@@ -207,6 +207,12 @@ import { TareaArchivo } from './tareas/entities/tarea-archivo.entity';
 import { TareaComentarioArchivo } from './tareas/entities/tarea-comentario-archivo.entity';
 import { TareaTimer } from './tareas/entities/tarea-timer.entity';
 
+// ── Planificador Terapéutico ────────────────────────────────────────────────────
+import { PlanificadorModule } from './planificador/planificador.module';
+import { PlanificadorBloque } from './planificador/entities/planificador-bloque.entity';
+import { PlanificadorObjetivo } from './planificador/entities/planificador-objetivo.entity';
+import { PlanificadorSesion } from './planificador/entities/planificador-sesion.entity';
+
 
 @Module({
   imports: [
@@ -438,6 +444,10 @@ import { TareaTimer } from './tareas/entities/tarea-timer.entity';
         EstadoSolicitudInforme,
         RevisionInforme,
         HistorialEstadoSolicitud,
+        // Planificador Terapéutico
+        PlanificadorBloque,
+        PlanificadorObjetivo,
+        PlanificadorSesion,
 
       ],
         synchronize: false,   // true en desarrollo, false en producción - DESHABILITADO para evitar conflictos con foreign keys
@@ -482,6 +492,7 @@ import { TareaTimer } from './tareas/entities/tarea-timer.entity';
     LibroReclamacionesModule,
     CampanasModule,
     TareasModule,
+    PlanificadorModule,
   ],
   controllers: [AppController],
   providers: [
