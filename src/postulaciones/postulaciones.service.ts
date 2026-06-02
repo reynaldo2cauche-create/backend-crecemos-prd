@@ -10,6 +10,7 @@ import { EstadoPostulacion } from './estado-postulacion.entity';
 import { CreatePostulacionDto } from './dto/create-postulacion.dto';
 import { UpdatePostulacionDto } from './dto/update-postulacion.dto';
 import { CreateComentarioDto } from './dto/create-comentario.dto';
+import { MailService } from '../mail/mail.service';
 
 @Injectable()
 export class PostulacionesService {
@@ -24,6 +25,7 @@ export class PostulacionesService {
     private cargoRepository: Repository<CargoPostulacion>,
     @InjectRepository(EstadoPostulacion)
     private estadoRepository: Repository<EstadoPostulacion>,
+    private readonly mailService: MailService,
   ) {
     if (!existsSync(this.uploadDir)) {
       mkdirSync(this.uploadDir, { recursive: true });
@@ -95,9 +97,29 @@ export class PostulacionesService {
       });
 
       const result = await this.postulacionRepository.save(postulacion);
-      
+
       // ✅ Mapear campos virtuales antes de retornar
-      return this.mapearPostulacion(result);
+      const postulacionFinal = this.mapearPostulacion(result);
+
+      // 📧 Notificar a RR.HH. por correo con TODOS los datos + el CV adjunto.
+      // Va en su propio try/catch dentro del servicio de correo: nunca rompe el registro.
+      await this.mailService.enviarCorreoPostulacion(
+        {
+          id: postulacionFinal.id_postulacion,
+          nombre: createPostulacionDto.nombre,
+          apellido: createPostulacionDto.apellido,
+          email: createPostulacionDto.email,
+          telefono: createPostulacionDto.telefono,
+          distrito: createPostulacionDto.distrito,
+          cargo: cargo?.descripcion || createPostulacionDto.cargo_postulado,
+          estado: estado?.descripcion || estadoDescripcion,
+          fecha: postulacionFinal.fecha_postulacion,
+        },
+        file?.path,
+        file ? `CV_${createPostulacionDto.nombre}_${createPostulacionDto.apellido}.pdf` : undefined,
+      );
+
+      return postulacionFinal;
     } catch (error) {
       console.error('❌ Error creating postulación:', error);
       throw new BadRequestException(error.message || 'Error al crear la postulación');

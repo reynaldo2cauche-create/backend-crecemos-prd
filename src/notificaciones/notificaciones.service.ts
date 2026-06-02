@@ -798,11 +798,19 @@ export class NotificacionesService {
           OR NOT JSON_CONTAINS(JSON_EXTRACT(e.datos_adicionales, '$.terapeutas_destinatarios'), CAST(? AS JSON))
         )
       )
+      AND NOT (
+        n.tipo_notificacion = 'SESIONES_TERAPIA_24'
+        AND nd.rol_id = 4
+        AND (
+          JSON_EXTRACT(e.datos_adicionales, '$.usuarios_destinatarios') IS NULL
+          OR NOT JSON_CONTAINS(JSON_EXTRACT(e.datos_adicionales, '$.usuarios_destinatarios'), CAST(? AS JSON))
+        )
+      )
     `;
   }
-  /** Parámetros que acompañan a filtrosSql() — siempre 5 valores */
+  /** Parámetros que acompañan a filtrosSql() — siempre 6 valores */
   private filtrosParams(usuarioId: number, rolId: number): any[] {
-    return [usuarioId, rolId, usuarioId, usuarioId, usuarioId];
+    return [usuarioId, rolId, usuarioId, usuarioId, usuarioId, usuarioId];
   }
 
   // ────────────────────────────────────────────────────────────────
@@ -1259,8 +1267,11 @@ export class NotificacionesService {
         sesiones_cumplidas: sesionesCumplidas,
       };
 
-      const mensajeSesiones = `El paciente ${pacienteNombre} ha cumplido ${sesionesCumplidas} sesiones de ${servicioNombre} con el terapeuta ${terapeutaNombre}. Por favor, realizar el reporte de evolución correspondiente y replantear los objetivos terapéuticos según los avances observados.`;
-      const tituloSesiones = `${pacienteNombre} cumple ${sesionesCumplidas} sesiones de ${servicioNombre}`;
+      // El texto siempre muestra el hito (24). El acumulado (48, 72...) se guarda
+      // en datos_adicionales.sesiones_cumplidas solo para la lógica de deduplicación.
+      const SESIONES_POR_HITO = 24;
+      const mensajeSesiones = `El paciente ${pacienteNombre} ha cumplido ${SESIONES_POR_HITO} sesiones de ${servicioNombre} con el terapeuta ${terapeutaNombre}. Por favor, realizar el reporte de evolución correspondiente y replantear los objetivos terapéuticos según los avances observados.`;
+      const tituloSesiones = `${pacienteNombre} cumple ${SESIONES_POR_HITO} sesiones de ${servicioNombre}`;
 
       // ── Notificación al TERAPEUTA ──
       const terapeuta = await this.trabajadoresRepo.findOne({ where: { id: terapeutaId } });

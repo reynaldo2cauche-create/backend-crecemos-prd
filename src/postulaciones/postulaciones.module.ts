@@ -15,6 +15,7 @@ import { CargoPostulacionService } from './cargos-postulacion.service';
 import { EstadoPostulacion } from './estado-postulacion.entity';
 import { EstadosPostulacionController } from './estado-postulacion.controller';
 import { EstadoPostulacionService } from './estados-postulacion.service';
+import { MailModule } from '../mail/mail.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { EstadoPostulacionService } from './estados-postulacion.service';
     MulterModule.register({
       dest: './uploads/cvs',
     }),
+    MailModule,
   ],
   controllers: [PostulacionesController, CargosPostulacionController,EstadosPostulacionController],
   providers: [PostulacionesService,CargoPostulacionService,EstadoPostulacionService],

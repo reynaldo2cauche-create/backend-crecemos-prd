@@ -189,4 +189,82 @@ export class MailService {
       console.error('❌ Error al enviar correo de cambio de estado:', error);
     }
   }
+
+  /**
+   * Notifica a RR.HH. cuando se registra una nueva postulación desde la web.
+   * Adjunta el CV (PDF) y todos los datos del postulante.
+   */
+  async enviarCorreoPostulacion(
+    data: {
+      id?: number;
+      nombre: string;
+      apellido: string;
+      email: string;
+      telefono?: string;
+      distrito?: string;
+      cargo?: string;
+      estado?: string;
+      fecha?: Date | string;
+    },
+    cvPath?: string,
+    cvFilename?: string,
+  ): Promise<void> {
+    try {
+      const destino = this.configService.get('RRHH_EMAIL', 'rrhh@crecemos.com.pe');
+      const nombreCompleto = `${data.nombre} ${data.apellido}`.trim();
+      const fechaTexto = data.fecha
+        ? new Date(data.fecha).toLocaleString('es-PE')
+        : new Date().toLocaleString('es-PE');
+
+      console.log('📧 Enviando postulación a RR.HH.:', destino, '-', nombreCompleto);
+
+      const remitente = this.configService.get('MAIL_USER');
+      const mailOptions: any = {
+        from: `"Centro Crecemos - RR.HH." <${remitente}>`,
+        to: destino,
+        subject: `Nueva postulación: ${data.cargo || 'Sin cargo'} - ${nombreCompleto}`,
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2 style="color: #7B1FA2;">Nueva Postulación Recibida</h2>
+            <p>Se registró una nueva postulación desde la web pública.</p>
+
+            <div style="background-color: #f5f5f5; padding: 15px; border-radius: 5px; margin: 20px 0;">
+              ${data.id ? `<p style="margin: 5px 0;"><strong>N° de Postulación:</strong> ${data.id}</p>` : ''}
+              <p style="margin: 5px 0;"><strong>Nombre completo:</strong> ${nombreCompleto}</p>
+              <p style="margin: 5px 0;"><strong>Correo:</strong> ${data.email}</p>
+              <p style="margin: 5px 0;"><strong>Teléfono:</strong> ${data.telefono || 'No indicado'}</p>
+              <p style="margin: 5px 0;"><strong>Distrito:</strong> ${data.distrito || 'No indicado'}</p>
+              <p style="margin: 5px 0;"><strong>Cargo al que postula:</strong> ${data.cargo || 'No indicado'}</p>
+              <p style="margin: 5px 0;"><strong>Estado:</strong> ${data.estado || 'Nuevo'}</p>
+              <p style="margin: 5px 0;"><strong>Fecha de postulación:</strong> ${fechaTexto}</p>
+            </div>
+
+            <p>${cvPath ? '📎 Adjunto encontrará el <strong>CV del postulante</strong> en formato PDF.' : 'El postulante no adjuntó CV.'}</p>
+
+            <hr style="margin: 30px 0; border: none; border-top: 1px solid #ddd;">
+            <p style="font-size: 12px; color: #999;">
+              <strong>CONTIGO CRECEMOS E.I.R.L.</strong><br>
+              Notificación automática del sistema de postulaciones.
+            </p>
+          </div>
+        `,
+      };
+
+      if (cvPath) {
+        mailOptions.attachments = [
+          {
+            filename: cvFilename || `CV-${nombreCompleto.replace(/\s+/g, '_')}.pdf`,
+            path: cvPath,
+            contentType: 'application/pdf',
+          },
+        ];
+      }
+
+      await this.mailerService.sendMail(mailOptions);
+      console.log(`✅ Correo de postulación enviado a RR.HH.: ${destino}`);
+    } catch (error) {
+      console.error('❌ Error al enviar correo de postulación a RR.HH.:', error?.message || error);
+      // No relanzamos: el correo no debe romper el registro de la postulación
+    }
+  }
 }

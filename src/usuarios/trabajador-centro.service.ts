@@ -79,6 +79,26 @@ export class TrabajadorCentroService {
       throw new Error('Password es requerido para crear un usuario');
     }
 
+    // Validar que el nombre de usuario no esté ocupado
+    if (dto.username) {
+      const usuarioExistente = await this.trabajadorCentroRepository.findOne({
+        where: { username: dto.username },
+      });
+      if (usuarioExistente) {
+        throw new BadRequestException('El nombre de usuario ya está ocupado');
+      }
+    }
+
+    // Validar que el DNI no esté ya registrado
+    if (dto.dni) {
+      const dniExistente = await this.trabajadorCentroRepository.findOne({
+        where: { dni: dto.dni },
+      });
+      if (dniExistente) {
+        throw new BadRequestException('El DNI ya está registrado');
+      }
+    }
+
     const hashedPassword = await bcrypt.hash(dto.password, 10);
 
     const nuevoTrabajador = this.trabajadorCentroRepository.create({
