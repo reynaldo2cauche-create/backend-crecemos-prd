@@ -6,16 +6,16 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 
-@Entity('planificador_sesion')
-export class PlanificadorSesion {
+@Entity('plan_registro_sesion')
+export class PlanRegistroSesion {
   @PrimaryGeneratedColumn()
   id: number;
 
   @Column({ type: 'int' })
-  objetivo_id: number;
+  objetivo_especifico_id: number;
 
-  @Column({ type: 'int' })
-  bloque_id: number;
+  @Column({ type: 'int', nullable: true })
+  resultado_id: number;
 
   @Column({ type: 'int' })
   numero_sesion: number;
@@ -23,29 +23,11 @@ export class PlanificadorSesion {
   @Column({ type: 'int', nullable: true })
   cita_id: number;
 
-  @Column({
-    type: 'enum',
-    enum: ['NO_LOGRADO', 'EN_PROCESO', 'LOGRADO'],
-    nullable: true,
-  })
-  resultado: 'NO_LOGRADO' | 'EN_PROCESO' | 'LOGRADO';
-
-  // Columna generada en la BD (STORED). Nunca se inserta/actualiza desde el ORM.
-  @Column({
-    type: 'decimal',
-    precision: 5,
-    scale: 2,
-    insert: false,
-    update: false,
-    default: 0,
-  })
-  puntaje: number;
-
   @Column({ type: 'text', nullable: true })
   observaciones: string;
 
-  @Column({ type: 'datetime', nullable: true })
-  fecha_registro: Date;
+  @Column({ type: 'date', nullable: true })
+  fecha: string;
 
   @Column({ type: 'int', nullable: true })
   registrado_por: number;

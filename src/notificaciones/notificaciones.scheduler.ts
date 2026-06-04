@@ -176,6 +176,7 @@ export class NotificacionesScheduler {
         this.verificarAniversariosLaborales(),
         this.verificarCumpleaniosPacientes(),
         this.verificarCumpleanosEmpleados(),
+        this.verificarReunionPadres24Sesiones(),
       ]);
 
       this.logger.log(`✅ Verificación completada para ${fechaHoy}`);
@@ -835,6 +836,120 @@ export class NotificacionesScheduler {
       }
     } catch (error) {
       this.logger.error(`Error en archivado automático: ${error.message}`);
+    }
+  }
+
+  /**
+   * Reunión con padres cada 24 sesiones de TERAPIA (motivo_id = 4).
+   * Regla:
+   *  - Por paciente + servicio, se ordenan las citas de terapia por fecha (posición cronológica).
+   *  - Una cita SOLO cuenta como sesión si tiene al menos un lado marcado
+   *    en la asistencia (recepción O terapeuta).
+   *  - Se dispara EL MISMO DÍA de la cita 24/48/72…, una vez PASADA su hora.
+   *  - El mensaje siempre habla de "24 sesiones" (el bloque), no del acumulado.
+   *  - Dedup por cita_id (una sola notificación por hito).
+   *  - Destinatarios: Admin (1) + Terapeuta (4).
+   */
+  /** Fecha y hora actuales de Lima (UTC-5) como 'YYYY-MM-DD HH:MM:SS' para usar en SQL. */
+  private getAhoraLimaSQL(): string {
+    const ahora = new Date();
+    const limaOffset = -5 * 60;
+    const utcMinutes = ahora.getTime() / 60000 + ahora.getTimezoneOffset();
+    const d = new Date((utcMinutes + limaOffset) * 60000);
+    const p = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+  }
+
+  private async verificarReunionPadres24Sesiones(hoyParam?: string, ahoraParam?: string) {
+    try {
+      // Permite simular un día concreto (para pruebas). Por defecto: ahora en Lima.
+      const ahoraLima = ahoraParam || this.getAhoraLimaSQL(); // 'YYYY-MM-DD HH:MM:SS'
+      const hoyLima = hoyParam || ahoraLima.slice(0, 10);     // 'YYYY-MM-DD'
+      const query = `
+        SELECT
+          c.id            AS cita_id,
+          c.paciente_id,
+          c.servicio_id,
+          s.nombre        AS servicio_nombre,
+          TRIM(CONCAT(p.nombres, ' ', p.apellido_paterno, ' ', COALESCE(p.apellido_materno, ''))) AS paciente_nombre,
+          TRIM(CONCAT(COALESCE(t.nombres, ''), ' ', COALESCE(t.apellidos, ''))) AS terapeuta_nombre,
+          pos.posicion
+        FROM (
+          SELECT c.id,
+            1 + (SELECT COUNT(*) FROM citas c2
+               INNER JOIN seguimiento_asistencia sa2 ON sa2.cita_id = c2.id
+               WHERE c2.paciente_id = c.paciente_id
+                 AND c2.servicio_id = c.servicio_id
+                 AND c2.motivo_id = 4
+                 AND c2.flg_activo = 1
+                 AND (COALESCE(sa2.recepcion_marco,0) = 1 OR COALESCE(sa2.terapeuta_marco,0) = 1)
+                 AND (c2.fecha < c.fecha
+                      OR (c2.fecha = c.fecha AND (c2.hora_inicio < c.hora_inicio
+                      OR (c2.hora_inicio = c.hora_inicio AND c2.id < c.id))))
+            ) AS posicion
+          FROM citas c
+          WHERE c.motivo_id = 4
+            AND c.flg_activo = 1
+            AND c.fecha = ?
+        ) pos
+        INNER JOIN citas c            ON c.id = pos.id
+        INNER JOIN paciente p         ON p.id = c.paciente_id
+        INNER JOIN servicios s        ON s.id = c.servicio_id
+        LEFT  JOIN trabajador_centro t ON t.id = c.doctor_id
+        WHERE pos.posicion > 0 AND pos.posicion % 24 = 0
+          AND TIMESTAMP(c.fecha, c.hora_inicio) <= ?
+      `;
+
+      const hitos = await this.pacientesRepo.query(query, [hoyLima, ahoraLima]);
+      if (hitos.length) this.logger.log(`👪 ${hitos.length} hito(s) de 24 sesiones por revisar`);
+
+      for (const h of hitos) {
+        if (await this.existeReunionPadresNotificada(h.cita_id)) continue;
+
+        const bloque = Math.floor(Number(h.posicion) / 24); // 1, 2, 3...
+        const conTerapeuta = h.terapeuta_nombre ? ` con el terapeuta ${h.terapeuta_nombre}` : '';
+
+        const evento = await this.notificacionesService.crearEvento({
+          tipo_evento: 'SESIONES_TERAPIA_24',
+          descripcion: `24 sesiones de terapia - ${h.paciente_nombre}`,
+          usuario_id: 1,
+          datos_adicionales: {
+            cita_id: h.cita_id,
+            paciente_id: h.paciente_id,
+            servicio_id: h.servicio_id,
+            bloque,
+          },
+        });
+
+        await this.notificacionesService.crearNotificacion({
+          tipo_notificacion: 'SESIONES_TERAPIA_24',
+          titulo: `${h.paciente_nombre} cumple 24 sesiones de ${h.servicio_nombre}`.substring(0, 100),
+          mensaje: `El paciente ${h.paciente_nombre} ha cumplido 24 sesiones de ${h.servicio_nombre}${conTerapeuta}. Por favor, realizar el reporte de evolución correspondiente y replantear los objetivos terapéuticos según los avances observados.`,
+          evento_id: evento.id,
+          roles_destino: [1, 4], // Admin + Terapeuta
+        });
+
+        this.logger.log(`🐾 ✅ 24 sesiones notificada: ${h.paciente_nombre} (cita ${h.cita_id}, posición ${h.posicion})`);
+      }
+    } catch (error) {
+      this.logger.error(`Error al verificar reunión con padres (24 sesiones): ${error.message}`);
+    }
+  }
+
+  /** ¿Ya se notificó la reunión de padres para esta cita-hito? */
+  private async existeReunionPadresNotificada(citaId: number): Promise<boolean> {
+    try {
+      const query = `
+        SELECT COUNT(*) AS total
+        FROM eventos_sistema e
+        WHERE e.tipo_evento = 'SESIONES_TERAPIA_24'
+          AND JSON_EXTRACT(e.datos_adicionales, '$.cita_id') = ?
+      `;
+      const result = await this.trabajadoresRepo.query(query, [citaId]);
+      return parseInt(result[0].total) > 0;
+    } catch (error) {
+      this.logger.error(`Error al verificar reunión con padres existente: ${error.message}`);
+      return true; // seguro: ante error, no duplicar
     }
   }
 

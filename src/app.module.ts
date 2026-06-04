@@ -207,11 +207,19 @@ import { TareaArchivo } from './tareas/entities/tarea-archivo.entity';
 import { TareaComentarioArchivo } from './tareas/entities/tarea-comentario-archivo.entity';
 import { TareaTimer } from './tareas/entities/tarea-timer.entity';
 
-// ── Planificador Terapéutico ────────────────────────────────────────────────────
-import { PlanificadorModule } from './planificador/planificador.module';
-import { PlanificadorBloque } from './planificador/entities/planificador-bloque.entity';
-import { PlanificadorObjetivo } from './planificador/entities/planificador-objetivo.entity';
-import { PlanificadorSesion } from './planificador/entities/planificador-sesion.entity';
+
+
+// ── Plan Terapéutico v2 ─────────────────────────────────────────────────────────
+import { PlanTerapeuticoModule } from './plan-terapeutico/plan-terapeutico.module';
+import { PlanTerapeutico } from './plan-terapeutico/entities/plan-terapeutico.entity';
+import { PlanObjetivoGeneral } from './plan-terapeutico/entities/plan-objetivo-general.entity';
+import { PlanObjetivoEspecifico } from './plan-terapeutico/entities/plan-objetivo-especifico.entity';
+import { PlanRegistroSesion } from './plan-terapeutico/entities/plan-registro-sesion.entity';
+import { PlanBloqueObjetivo } from './plan-terapeutico/entities/plan-bloque-objetivo.entity';
+import { PlanArea } from './plan-terapeutico/entities/plan-area.entity';
+import { PlanFrecuencia } from './plan-terapeutico/entities/plan-frecuencia.entity';
+import { PlanResultado } from './plan-terapeutico/entities/plan-resultado.entity';
+import { PlanEstado } from './plan-terapeutico/entities/plan-estado.entity';
 
 
 @Module({
@@ -252,18 +260,18 @@ import { PlanificadorSesion } from './planificador/entities/planificador-sesion.
 
     
     TypeOrmModule.forRoot({
-      // type: 'mysql',
-      // host: 'localhost',
-      // port: 3306,
-      // username: 'crecemos',
-      // password: 'DB_PASSWORD_REMOVED',
-      // database: 'crecemos_website',
       type: 'mysql',
       host: 'localhost',
       port: 3306,
-      username: 'root',
-      password: 'admin',
+      username: 'crecemos',
+      password: 'DB_PASSWORD_REMOVED',
       database: 'crecemos_website',
+      // type: 'mysql',
+      // host: 'localhost',
+      // port: 3306,
+      // username: 'root',
+      // password: 'admin',
+      // database: 'crecemos_website',
       charset: 'utf8mb4',
       extra: {
         connectionLimit: 10,
@@ -445,9 +453,16 @@ import { PlanificadorSesion } from './planificador/entities/planificador-sesion.
         RevisionInforme,
         HistorialEstadoSolicitud,
         // Planificador Terapéutico
-        PlanificadorBloque,
-        PlanificadorObjetivo,
-        PlanificadorSesion,
+  
+        PlanTerapeutico,
+        PlanObjetivoGeneral,
+        PlanObjetivoEspecifico,
+        PlanRegistroSesion,
+        PlanBloqueObjetivo,
+        PlanArea,
+        PlanFrecuencia,
+        PlanResultado,
+        PlanEstado,
 
       ],
         synchronize: false,   // true en desarrollo, false en producción - DESHABILITADO para evitar conflictos con foreign keys
@@ -492,7 +507,8 @@ import { PlanificadorSesion } from './planificador/entities/planificador-sesion.
     LibroReclamacionesModule,
     CampanasModule,
     TareasModule,
-    PlanificadorModule,
+
+    PlanTerapeuticoModule,
   ],
   controllers: [AppController],
   providers: [

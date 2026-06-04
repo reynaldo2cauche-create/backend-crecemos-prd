@@ -6,34 +6,25 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 
-@Entity('planificador_bloque')
-export class PlanificadorBloque {
+@Entity('plan_objetivo_especifico')
+export class PlanObjetivoEspecifico {
   @PrimaryGeneratedColumn()
   id: number;
 
   @Column({ type: 'int' })
-  paciente_id: number;
+  objetivo_general_id: number;
 
-  @Column({ type: 'int' })
-  servicio_id: number;
-
-  @Column({ type: 'int', nullable: true })
-  terapeuta_id: number;
-
-  @Column({ type: 'int' })
-  numero_bloque: number;
-
-  @Column({ type: 'int' })
-  sesion_desde: number;
-
-  @Column({ type: 'int' })
-  sesion_hasta: number;
-
-  @Column({ type: 'enum', enum: ['ABIERTO', 'CERRADO'], default: 'ABIERTO' })
-  estado: 'ABIERTO' | 'CERRADO';
+  @Column({ type: 'text' })
+  descripcion: string;
 
   @Column({ type: 'text', nullable: true })
-  observacion_cierre: string;
+  actividad_ejemplo: string;
+
+  @Column({ type: 'text', nullable: true })
+  materiales: string;
+
+  @Column({ type: 'int', default: 0 })
+  orden: number;
 
   @Column({ type: 'int', nullable: true })
   user_id_crea: number;
