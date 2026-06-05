@@ -260,18 +260,18 @@ import { PlanEstado } from './plan-terapeutico/entities/plan-estado.entity';
 
     
     TypeOrmModule.forRoot({
-      type: 'mysql',
-      host: 'localhost',
-      port: 3306,
-      username: 'crecemos',
-      password: 'DB_PASSWORD_REMOVED',
-      database: 'crecemos_website',
       // type: 'mysql',
       // host: 'localhost',
       // port: 3306,
-      // username: 'root',
-      // password: 'admin',
+      // username: 'crecemos',
+      // password: 'DB_PASSWORD_REMOVED',
       // database: 'crecemos_website',
+      type: 'mysql',
+      host: 'localhost',
+      port: 3306,
+      username: 'root',
+      password: 'admin',
+      database: 'crecemos_website',
       charset: 'utf8mb4',
       extra: {
         connectionLimit: 10,

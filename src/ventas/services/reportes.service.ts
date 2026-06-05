@@ -3,7 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { VentaProducto } from '../entities/venta-producto.entity';
 import { VentaServicio } from '../entities/venta-servicio.entity';
-import { TipoReporte, ReporteParams, Metricas, VentaDia, TopItem, DescuentoPorTipo, IngresoResponsable } from '../types/reportes.types';
+import { TipoReporte, ReporteParams, Metricas, VentaDia, TopItem, DescuentoPorTipo, IngresoResponsable, CitasTerapeuta } from '../types/reportes.types';
 
 function incluyeProductos(tipo: TipoReporte) {
   return tipo === 'general' || tipo === 'productos';
@@ -33,16 +33,17 @@ export class ReportesService {
   async generarReporte(params: ReporteParams) {
     const { fechaInicio, fechaFin, tipo } = params;
 
-    const [metricas, ventasPorDia, topItems, descuentos, ingresosPorResponsable] =
+    const [metricas, ventasPorDia, topItems, descuentos, ingresosPorResponsable, citasPorTerapeuta] =
       await Promise.all([
         this.calcularMetricas(fechaInicio, fechaFin, tipo),
         this.getVentasPorDia(fechaInicio, fechaFin, tipo),
         this.getTopItems(fechaInicio, fechaFin, tipo),
         this.getDescuentos(fechaInicio, fechaFin, tipo),
         this.getIngresosPorResponsable(fechaInicio, fechaFin, tipo),
+        this.getCitasPorTerapeuta(fechaInicio, fechaFin),
       ]);
 
-    return { metricas, ventasPorDia, topItems, descuentos, ingresosPorResponsable };
+    return { metricas, ventasPorDia, topItems, descuentos, ingresosPorResponsable, citasPorTerapeuta };
   }
 
   // ── Métricas generales ────────────────────────────────────────────────────
@@ -421,6 +422,72 @@ export class ReportesService {
     return Array.from(mapa.entries())
       .map(([nombre, data]) => ({ nombre, ventas: data.ventas, ingresos: round2(data.ingresos) }))
       .sort((a, b) => b.ingresos - a.ingresos);
+  }
+
+  // ── Citas por terapeuta (vs período anterior) ─────────────────────────────
+
+  private async getCitasPorTerapeuta(
+    fechaInicio: string,
+    fechaFin: string,
+  ): Promise<CitasTerapeuta[]> {
+    // Período anterior: mismo número de días justo antes del inicio (igual que el crecimiento)
+    const dias = Math.ceil(
+      (new Date(fechaFin).getTime() - new Date(fechaInicio).getTime()) / 86_400_000,
+    );
+    const inicioAnterior = new Date(new Date(fechaInicio).getTime() - dias * 86_400_000)
+      .toISOString()
+      .split('T')[0];
+    const finAnterior = new Date(new Date(fechaInicio).getTime() - 86_400_000)
+      .toISOString()
+      .split('T')[0];
+
+    const sql = `
+      SELECT c.doctor_id AS terapeuta_id,
+             TRIM(CONCAT(COALESCE(t.nombres, ''), ' ', COALESCE(t.apellidos, ''))) AS nombre,
+             COUNT(*) AS citas
+      FROM citas c
+      INNER JOIN trabajador_centro t ON t.id = c.doctor_id
+      WHERE c.flg_activo = 1
+        AND c.doctor_id IS NOT NULL
+        AND c.fecha >= ? AND c.fecha <= ?
+      GROUP BY c.doctor_id, nombre`;
+
+    const [actuales, anteriores] = await Promise.all([
+      this.ventaServicioRepo.query(sql, [fechaInicio, fechaFin]),
+      this.ventaServicioRepo.query(sql, [inicioAnterior, finAnterior]),
+    ]);
+
+    const mapaAnterior = new Map<number, number>();
+    for (const row of anteriores) {
+      mapaAnterior.set(Number(row.terapeuta_id), Number(row.citas));
+    }
+
+    const mapa = new Map<number, { nombre: string; citas: number; citasAnterior: number }>();
+    for (const row of actuales) {
+      const id = Number(row.terapeuta_id);
+      mapa.set(id, {
+        nombre: row.nombre,
+        citas: Number(row.citas),
+        citasAnterior: mapaAnterior.get(id) ?? 0,
+      });
+    }
+    // Terapeutas que tuvieron citas antes pero ninguna ahora (decrecimiento a 0)
+    for (const row of anteriores) {
+      const id = Number(row.terapeuta_id);
+      if (!mapa.has(id)) {
+        mapa.set(id, { nombre: row.nombre, citas: 0, citasAnterior: Number(row.citas) });
+      }
+    }
+
+    return Array.from(mapa.values())
+      .map(d => {
+        const variacion =
+          d.citasAnterior === 0
+            ? (d.citas > 0 ? 100 : 0)
+            : Math.round(((d.citas - d.citasAnterior) / d.citasAnterior) * 1000) / 10;
+        return { nombre: d.nombre, citas: d.citas, citasAnterior: d.citasAnterior, variacion };
+      })
+      .sort((a, b) => b.citas - a.citas);
   }
 
   // ── Ventas sin cita agendada ──────────────────────────────────────────────

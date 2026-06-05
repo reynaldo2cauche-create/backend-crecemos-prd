@@ -43,3 +43,10 @@ export interface IngresoResponsable {
   ventas: number;
   ingresos: number;
 }
+
+export interface CitasTerapeuta {
+  nombre: string;
+  citas: number;          // cantidad de citas en el período actual
+  citasAnterior: number;  // cantidad de citas en el período anterior (mismo nº de días)
+  variacion: number;      // % de crecimiento (+) o decrecimiento (-) vs período anterior
+}

@@ -92,6 +92,9 @@ export class AsistenciaService {
   // VERIFICAR INCONSISTENCIA SOLO SI AMBOS YA MARCARON Y TIENEN ESTADOS DIFERENTES
   await this.verificarYNotificarInconsistencia(seguimiento, dto.cita_id);
 
+  // HITO DE 24 SESIONES: recalcular y notificar si corresponde (solo al marcar 6/7)
+  await this.verificarHito24Sesiones(dto.cita_id);
+
   return {
     success: true,
     message: dto.estado_id === 7 ? 'Llegada confirmada' : 'Sesión dictada registrada',
@@ -173,6 +176,9 @@ export class AsistenciaService {
 
   // VERIFICAR INCONSISTENCIA SOLO SI AMBOS YA MARCARON Y TIENEN ESTADOS DIFERENTES
   await this.verificarYNotificarInconsistencia(seguimiento, dto.cita_id);
+
+  // HITO DE 24 SESIONES: recalcular y notificar si corresponde (solo al marcar 6/7)
+  await this.verificarHito24Sesiones(dto.cita_id);
 
   return {
     success: true,
@@ -597,6 +603,9 @@ async obtenerAsistenciasPorTerapeuta(
 
       console.log(`✅ Admin modificó asistencia de cita ${citaId}`);
 
+      // HITO DE 24 SESIONES: recalcular y notificar si corresponde
+      await this.verificarHito24Sesiones(citaId);
+
       return {
         success: true,
         message: 'Asistencia modificada correctamente por administrador',
@@ -674,6 +683,173 @@ async obtenerAsistenciasPorTerapeuta(
       }
     } catch (error) {
       console.error('❌ Error al generar notificación de inconsistencia:', error);
+    }
+  }
+
+  /**
+   * HITO DE REPORTE DE EVOLUCIÓN cada 24 sesiones de TERAPIA (motivo_id = 4).
+   * Reglas confirmadas con jefatura:
+   *  - Solo cuentan las citas marcadas como ASISTIÓ (7) o SESIÓN DICTADA (6),
+   *    ya sea por recepción o por terapeuta. NO cuentan pendientes, faltas/no-asistió
+   *    ni canceladas.
+   *  - El conteo es por paciente + servicio, desde la primera cita registrada
+   *    (todo el histórico de sesiones efectivamente dadas).
+   *  - Por EVENTO: se evalúa al marcar la asistencia. Si el total acumulado cae en
+   *    múltiplo exacto de 24 (24, 48, 72…) y ese hito aún no fue notificado → notifica.
+   *  - NO se notifican hitos históricos ya pasados: como cada marca suma 1, solo se
+   *    dispara el bloque al que se llega ahora (ej. paciente con 71 → recién en la 72).
+   *  - Dedup por paciente + servicio + bloque.
+   *  - Destinatarios: Admin (1) + Terapeuta (4).
+   */
+  private async verificarHito24Sesiones(citaId: number): Promise<void> {
+    try {
+      // Datos de la cita marcada (paciente, servicio, motivo y nombres)
+      const filas = await this.citaRepo.query(`
+        SELECT
+          c.paciente_id,
+          c.servicio_id,
+          c.motivo_id,
+          s.nombre AS servicio_nombre,
+          TRIM(CONCAT(p.nombres, ' ', p.apellido_paterno, ' ', COALESCE(p.apellido_materno, ''))) AS paciente_nombre,
+          TRIM(CONCAT(COALESCE(t.nombres, ''), ' ', COALESCE(t.apellidos, ''))) AS terapeuta_nombre
+        FROM citas c
+        INNER JOIN paciente p ON p.id = c.paciente_id
+        LEFT  JOIN servicios s ON s.id = c.servicio_id
+        LEFT  JOIN trabajador_centro t ON t.id = c.doctor_id
+        WHERE c.id = ?
+      `, [citaId]);
+
+      const cita = filas?.[0];
+      if (!cita) return;
+
+      // Solo aplica a sesiones de terapia
+      if (Number(cita.motivo_id) !== 4) return;
+
+      // Contar sesiones efectivamente dadas (asistió/sesión dictada) del paciente+servicio.
+      // Cuenta si recepción O terapeuta marcó estado 6 o 7. Pendientes/faltas/canceladas no.
+      const conteo = await this.citaRepo.query(`
+        SELECT COUNT(DISTINCT c.id) AS total
+        FROM citas c
+        INNER JOIN seguimiento_asistencia sa ON sa.cita_id = c.id
+        WHERE c.paciente_id = ?
+          AND c.servicio_id = ?
+          AND c.motivo_id = 4
+          AND c.flg_activo = 1
+          AND (
+            (sa.recepcion_marco = 1 AND sa.recepcion_estado_id IN (6, 7))
+            OR (sa.terapeuta_marco = 1 AND sa.terapeuta_estado_id IN (6, 7))
+          )
+      `, [cita.paciente_id, cita.servicio_id]);
+
+      const total = parseInt(conteo?.[0]?.total ?? '0', 10);
+
+      // Reconciliar hitos obsoletos: si el total bajó (p. ej. un admin desmarcó
+      // asistencias), borrar los eventos de bloques que el conteo actual ya no
+      // sostiene, para que la notificación se pueda REGENERAR si el paciente
+      // vuelve a alcanzar ese bloque. No afecta bloques aún válidos.
+      await this.eliminarHitos24Obsoletos(cita.paciente_id, cita.servicio_id, Math.floor(total / 24));
+
+      if (total <= 0 || total % 24 !== 0) return;
+
+      const bloque = total / 24; // 1, 2, 3...
+
+      // Dedup: ¿ya se notificó este hito (paciente + servicio + bloque)?
+      if (await this.existeHito24Notificado(cita.paciente_id, cita.servicio_id, bloque)) return;
+
+      const servicioNombre = cita.servicio_nombre || 'terapia';
+      const conTerapeuta = cita.terapeuta_nombre ? ` con el terapeuta ${cita.terapeuta_nombre}` : '';
+
+      const evento = await this.notificacionesService.crearEvento({
+        tipo_evento: 'SESIONES_TERAPIA_24',
+        descripcion: `${total} sesiones de terapia - ${cita.paciente_nombre}`,
+        usuario_id: 1,
+        datos_adicionales: {
+          cita_id: citaId,
+          paciente_id: cita.paciente_id,
+          servicio_id: cita.servicio_id,
+          bloque,
+          total_sesiones: total,
+        },
+      });
+
+      await this.notificacionesService.crearNotificacion({
+        tipo_notificacion: 'SESIONES_TERAPIA_24',
+        titulo: `${cita.paciente_nombre} cumple ${total} sesiones de ${servicioNombre}`.substring(0, 100),
+        mensaje: `El paciente ${cita.paciente_nombre} ha cumplido ${total} sesiones de ${servicioNombre}${conTerapeuta}. Por favor, realizar el reporte de evolución correspondiente y replantear los objetivos terapéuticos según los avances observados.`,
+        evento_id: evento.id,
+        roles_destino: [1, 4], // Admin + Terapeuta
+      });
+
+      console.log(`🐾 ✅ Hito de ${total} sesiones notificado: ${cita.paciente_nombre} (paciente ${cita.paciente_id}, servicio ${cita.servicio_id}, bloque ${bloque})`);
+    } catch (error) {
+      console.error('❌ Error al verificar hito de 24 sesiones:', error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  /** ¿Ya se notificó el hito de 24 sesiones para este paciente + servicio + bloque? */
+  private async existeHito24Notificado(pacienteId: number, servicioId: number, bloque: number): Promise<boolean> {
+    try {
+      const result = await this.citaRepo.query(`
+        SELECT COUNT(*) AS total
+        FROM eventos_sistema e
+        WHERE e.tipo_evento = 'SESIONES_TERAPIA_24'
+          AND JSON_EXTRACT(e.datos_adicionales, '$.paciente_id') = ?
+          AND JSON_EXTRACT(e.datos_adicionales, '$.servicio_id') = ?
+          AND JSON_EXTRACT(e.datos_adicionales, '$.bloque') = ?
+      `, [pacienteId, servicioId, bloque]);
+      return parseInt(result[0].total) > 0;
+    } catch (error) {
+      console.error('Error al verificar hito de 24 sesiones existente:', error);
+      return true; // seguro: ante error, no duplicar
+    }
+  }
+
+  /**
+   * Elimina los hitos de 24 sesiones (evento + notificaciones) de bloques que el
+   * conteo actual de un paciente+servicio ya no sostiene. Se usa para reconciliar
+   * cuando un admin desmarca asistencias y el total baja por debajo de un bloque
+   * que ya se había notificado, de modo que el hito pueda regenerarse si el
+   * paciente vuelve a alcanzarlo.
+   * @param bloquesValidos Mayor número de bloque que el total actual aún soporta (floor(total/24)).
+   */
+  private async eliminarHitos24Obsoletos(pacienteId: number, servicioId: number, bloquesValidos: number): Promise<void> {
+    // Condición común que identifica los hitos obsoletos de este paciente+servicio.
+    const filtro = `
+      e.tipo_evento = 'SESIONES_TERAPIA_24'
+      AND JSON_EXTRACT(e.datos_adicionales, '$.paciente_id') = ?
+      AND JSON_EXTRACT(e.datos_adicionales, '$.servicio_id') = ?
+      AND JSON_EXTRACT(e.datos_adicionales, '$.bloque') > ?
+    `;
+    const params = [pacienteId, servicioId, bloquesValidos];
+
+    try {
+      // Borrar en orden por dependencias: marcas de leído → notificaciones → eventos.
+      // Se usan JOINs con parámetros escalares (sin IN(array)) para evitar problemas
+      // de binding y que un fallo deje el evento huérfano bloqueando la regeneración.
+      await this.citaRepo.query(`
+        DELETE nl FROM notificaciones_leidas nl
+        INNER JOIN notificaciones n ON n.id = nl.notificacion_id
+        INNER JOIN eventos_sistema e ON e.id = n.evento_id
+        WHERE ${filtro}
+      `, params);
+
+      await this.citaRepo.query(`
+        DELETE n FROM notificaciones n
+        INNER JOIN eventos_sistema e ON e.id = n.evento_id
+        WHERE ${filtro}
+      `, params);
+
+      const res = await this.citaRepo.query(`
+        DELETE e FROM eventos_sistema e
+        WHERE ${filtro}
+      `, params);
+
+      const eliminados = res?.affectedRows ?? 0;
+      if (eliminados > 0) {
+        console.log(`🧹 Hitos de 24 sesiones obsoletos eliminados (paciente ${pacienteId}, servicio ${servicioId}, bloques > ${bloquesValidos}): ${eliminados} evento(s)`);
+      }
+    } catch (error) {
+      console.error('❌ Error al reconciliar hitos de 24 sesiones obsoletos:', error instanceof Error ? error.message : String(error));
     }
   }
 
