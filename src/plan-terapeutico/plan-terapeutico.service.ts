@@ -15,12 +15,16 @@ import { PlanArea } from './entities/plan-area.entity';
 import { PlanFrecuencia } from './entities/plan-frecuencia.entity';
 import { PlanResultado } from './entities/plan-resultado.entity';
 import { PlanEstado } from './entities/plan-estado.entity';
+import { SERVICIOS } from '../constants/servicios.constants';
 
 const MOTIVO_TERAPIA = 4; // motivo_cita de "sesión de terapia"
 const ESTADOS_NO_VALIDOS = [5, 8]; // citas canceladas / no-asistió-reprog.
 const MAX_GENERALES = 3;
 const MAX_ESPECIFICOS = 3;
 const SESIONES_POR_BLOQUE = 4; // un bloque agrupa 4 sesiones
+// Servicios de Terapia de Lenguaje (infantil y adultos): aquí la subordinada solo
+// registra progreso y observaciones; objetivos/actividades/materiales los maneja la jefa o admin.
+const SERVICIOS_LENGUAJE: number[] = [SERVICIOS.TERAPIA_LENGUAJE_INFANTIL, SERVICIOS.TERAPIA_LENGUAJE_ADULTOS];
 
 /** Bloque (1..N) al que pertenece una sesión. */
 const bloqueDeSesion = (numeroSesion: number): number =>
@@ -67,6 +71,37 @@ export class PlanTerapeuticoService {
    */
   private esAdmin(user: any): boolean {
     return !this.esTerapeuta(user);
+  }
+
+  /** ¿El trabajador ocupa un cargo jefatura (cargo.es_jefe)? */
+  private async esJefe(userId: number): Promise<boolean> {
+    if (!userId) return false;
+    const rows = await this.planRepo.query(
+      `SELECT c.es_jefe FROM trabajador_centro t
+       INNER JOIN cargos c ON c.id = t.cargo_id
+       WHERE t.id = ? LIMIT 1`,
+      [userId],
+    );
+    return !!rows[0]?.es_jefe;
+  }
+
+  /**
+   * ¿Puede gestionar objetivos/actividades/materiales del plan?
+   * Admin siempre; en servicios que NO son Terapia de Lenguaje, cualquier terapeuta asignado;
+   * en Terapia de Lenguaje, solo la jefa (cargo.es_jefe).
+   */
+  private async puedeGestionarObjetivos(user: any, servicioId: number): Promise<boolean> {
+    if (this.esAdmin(user)) return true;
+    if (!SERVICIOS_LENGUAJE.includes(Number(servicioId))) return true;
+    return this.esJefe(user?.id);
+  }
+
+  /** Igual que puedeGestionarObjetivos pero lanza 403 si no tiene permiso. */
+  private async assertPuedeGestionar(user: any, servicioId: number): Promise<void> {
+    if (await this.puedeGestionarObjetivos(user, servicioId)) return;
+    throw new ForbiddenException(
+      'En Terapia de Lenguaje solo la jefa puede gestionar objetivos, actividades y materiales',
+    );
   }
 
   private hoyISO(): string {
@@ -290,6 +325,8 @@ export class PlanTerapeuticoService {
       ? Math.round(generales.reduce((a, g) => a + g.progreso, 0) / generales.length)
       : 0;
 
+    const gestionarObjetivos = await this.puedeGestionarObjetivos(user, servicioId);
+
     return {
       plan: {
         id: plan.id,
@@ -307,6 +344,7 @@ export class PlanTerapeuticoService {
       generales,
       catalogos: { frecuencias, resultados },
       limites: { max_generales: MAX_GENERALES, max_especificos: MAX_ESPECIFICOS },
+      permisos: { gestionar_objetivos: gestionarObjetivos },
     };
   }
 
@@ -377,6 +415,8 @@ export class PlanTerapeuticoService {
             resultado_codigo: r.resultado_codigo,
             resultado_color: r.resultado_color,
             observaciones: r.observaciones,
+            actividad: r.actividad,
+            materiales: r.materiales,
             cita_id: r.cita_id,
           };
           return map;
@@ -421,6 +461,7 @@ export class PlanTerapeuticoService {
   async crearGeneral(body: any, user: any): Promise<any> {
     const plan = await this.getPlanOrFail(body.plan_id);
     await this.assertAcceso(user, plan.paciente_id, plan.servicio_id);
+    await this.assertPuedeGestionar(user, plan.servicio_id);
 
     const activos = await this.generalRepo.count({ where: { plan_id: plan.id, flg_activo: 1 } });
     if (activos >= MAX_GENERALES) {
@@ -455,6 +496,7 @@ export class PlanTerapeuticoService {
     if (!general) throw new NotFoundException('Objetivo general no encontrado');
     const plan = await this.getPlanOrFail(general.plan_id);
     await this.assertAcceso(user, plan.paciente_id, plan.servicio_id);
+    await this.assertPuedeGestionar(user, plan.servicio_id);
 
     if (body.area_id !== undefined && body.area_id !== general.area_id) {
       const area = await this.areaRepo.findOne({ where: { id: body.area_id, flg_activo: 1 } });
@@ -475,6 +517,7 @@ export class PlanTerapeuticoService {
     if (!general) throw new NotFoundException('Objetivo general no encontrado');
     const plan = await this.getPlanOrFail(general.plan_id);
     await this.assertAcceso(user, plan.paciente_id, plan.servicio_id);
+    await this.assertPuedeGestionar(user, plan.servicio_id);
     general.flg_activo = 0;
     general.user_id_actua = user?.id ?? null;
     await this.generalRepo.save(general);
@@ -495,6 +538,7 @@ export class PlanTerapeuticoService {
   async crearEspecifico(body: any, user: any): Promise<any> {
     const { general, plan } = await this.getGeneralConPlan(body.objetivo_general_id);
     await this.assertAcceso(user, plan.paciente_id, plan.servicio_id);
+    await this.assertPuedeGestionar(user, plan.servicio_id);
 
     const activos = await this.especificoRepo.count({
       where: { objetivo_general_id: general.id, flg_activo: 1 },
@@ -524,6 +568,7 @@ export class PlanTerapeuticoService {
     if (!esp) throw new NotFoundException('Objetivo específico no encontrado');
     const { plan } = await this.getGeneralConPlan(esp.objetivo_general_id);
     await this.assertAcceso(user, plan.paciente_id, plan.servicio_id);
+    await this.assertPuedeGestionar(user, plan.servicio_id);
     for (const campo of ['descripcion', 'actividad_ejemplo', 'materiales']) {
       if (body[campo] !== undefined) esp[campo] = body[campo];
     }
@@ -536,6 +581,7 @@ export class PlanTerapeuticoService {
     if (!esp) throw new NotFoundException('Objetivo específico no encontrado');
     const { plan } = await this.getGeneralConPlan(esp.objetivo_general_id);
     await this.assertAcceso(user, plan.paciente_id, plan.servicio_id);
+    await this.assertPuedeGestionar(user, plan.servicio_id);
     esp.flg_activo = 0;
     esp.user_id_actua = user?.id ?? null;
     await this.especificoRepo.save(esp);
@@ -564,16 +610,27 @@ export class PlanTerapeuticoService {
     }
 
     const resultado = await this.resolverResultado(body.resultado, body.resultado_id);
+    // Actividad y materiales solo los define quien gestiona objetivos (jefa/admin en Lenguaje).
+    // La subordinada guarda resultado y observaciones; no toca actividad/materiales.
+    const puedeGestionar = await this.puedeGestionarObjetivos(user, plan.servicio_id);
 
+    // Buscar SIN filtrar por flg_activo: el índice único uq_reg (objetivo_especifico_id,
+    // numero_sesion) no considera flg_activo, así que un registro desactivado debe reusarse
+    // (reactivarse) en vez de insertar uno nuevo, que chocaría con el índice.
     let registro = await this.registroRepo.findOne({
-      where: { objetivo_especifico_id: esp.id, numero_sesion: numeroSesion, flg_activo: 1 },
+      where: { objetivo_especifico_id: esp.id, numero_sesion: numeroSesion },
     });
     if (registro) {
       registro.resultado_id = resultado?.id ?? null;
       registro.observaciones = body.observaciones ?? null;
+      if (puedeGestionar) {
+        registro.actividad = body.actividad ?? null;
+        registro.materiales = body.materiales ?? null;
+      }
       registro.cita_id = cita.id;
       registro.fecha = this.fechaISO(cita.fecha);
       registro.registrado_por = user?.id ?? null;
+      registro.flg_activo = 1;
     } else {
       registro = this.registroRepo.create({
         objetivo_especifico_id: esp.id,
@@ -581,6 +638,8 @@ export class PlanTerapeuticoService {
         numero_sesion: numeroSesion,
         cita_id: cita.id,
         observaciones: body.observaciones ?? null,
+        actividad: puedeGestionar ? (body.actividad ?? null) : null,
+        materiales: puedeGestionar ? (body.materiales ?? null) : null,
         fecha: this.fechaISO(cita.fecha),
         registrado_por: user?.id ?? null,
       });
@@ -632,6 +691,7 @@ export class PlanTerapeuticoService {
     if (!esp) throw new NotFoundException('Objetivo específico no encontrado');
     const { plan } = await this.getGeneralConPlan(esp.objetivo_general_id);
     await this.assertAcceso(user, plan.paciente_id, plan.servicio_id);
+    await this.assertPuedeGestionar(user, plan.servicio_id);
 
     const numeroBloque = Number(body.numero_bloque);
     if (!numeroBloque || numeroBloque < 1) throw new BadRequestException('Número de bloque inválido');
@@ -646,6 +706,7 @@ export class PlanTerapeuticoService {
     if (!esp) throw new NotFoundException('Objetivo específico no encontrado');
     const { plan } = await this.getGeneralConPlan(esp.objetivo_general_id);
     await this.assertAcceso(user, plan.paciente_id, plan.servicio_id);
+    await this.assertPuedeGestionar(user, plan.servicio_id);
     if (!numeroBloque || numeroBloque < 1) throw new BadRequestException('Número de bloque inválido');
 
     await this.bloqueObjetivoRepo.update(

@@ -26,6 +26,12 @@ export class PlanRegistroSesion {
   @Column({ type: 'text', nullable: true })
   observaciones: string;
 
+  @Column({ type: 'text', nullable: true })
+  actividad: string;
+
+  @Column({ type: 'text', nullable: true })
+  materiales: string;
+
   @Column({ type: 'date', nullable: true })
   fecha: string;
 
