@@ -267,4 +267,30 @@ export class MailService {
       // No relanzamos: el correo no debe romper el registro de la postulación
     }
   }
+
+  /**
+   * Envía el reporte diario de agenda semanal + recordatorios de citas de mañana.
+   * Adjunta un Excel por cada terapeuta activa (la agenda de la semana).
+   */
+  async enviarReporteAgendaSemanal(opts: {
+    to: string[];
+    subject: string;
+    html: string;
+    attachments: { filename: string; content: Buffer }[];
+  }): Promise<void> {
+    const remitente = this.configService.get('MAIL_USER');
+    await this.mailerService.sendMail({
+      from: `"Centro Crecemos - Agenda" <${remitente}>`,
+      to: opts.to,
+      subject: opts.subject,
+      html: opts.html,
+      attachments: opts.attachments.map((a) => ({
+        filename: a.filename,
+        content: a.content,
+        contentType:
+          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      })),
+    });
+    console.log(`✅ Reporte de agenda enviado a: ${opts.to.join(', ')}`);
+  }
 }

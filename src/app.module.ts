@@ -221,6 +221,9 @@ import { PlanFrecuencia } from './plan-terapeutico/entities/plan-frecuencia.enti
 import { PlanResultado } from './plan-terapeutico/entities/plan-resultado.entity';
 import { PlanEstado } from './plan-terapeutico/entities/plan-estado.entity';
 
+// ── Reportes Agenda (correo diario 7 PM) ────────────────────────────────────────
+import { ReportesAgendaModule } from './reportes-agenda/reportes-agenda.module';
+
 
 @Module({
   imports: [
@@ -260,19 +263,19 @@ import { PlanEstado } from './plan-terapeutico/entities/plan-estado.entity';
 
     
     TypeOrmModule.forRoot({
-      // type: 'mysql',
-      // host: 'localhost',
-      // port: 3306,
-      // username: 'crecemos',
-      // password: 'DB_PASSWORD_REMOVED',
-      // database: 'crecemos_website',
       type: 'mysql',
       host: 'localhost',
       port: 3306,
-      username: 'root',
-      password: 'admin',
+      username: 'crecemos',
+      password: 'DB_PASSWORD_REMOVED',
       database: 'crecemos_website',
-      charset: 'utf8mb4',
+      // type: 'mysql',
+      // host: 'localhost',
+      // port: 3306,
+      // username: 'root',
+      // password: 'admin',
+      // database: 'crecemos_website',
+      // charset: 'utf8mb4',
       extra: {
         connectionLimit: 10,
         waitForConnections: true,
@@ -509,6 +512,7 @@ import { PlanEstado } from './plan-terapeutico/entities/plan-estado.entity';
     TareasModule,
 
     PlanTerapeuticoModule,
+    ReportesAgendaModule,
   ],
   controllers: [AppController],
   providers: [
