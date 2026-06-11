@@ -50,3 +50,24 @@ export interface CitasTerapeuta {
   citasAnterior: number;  // cantidad de citas en el período anterior (mismo nº de días)
   variacion: number;      // % de crecimiento (+) o decrecimiento (-) vs período anterior
 }
+
+// ── Histórico de citas por terapeuta (matriz multi-período) ──────────────────
+
+export interface PeriodoHistorico {
+  key: string;   // '2026-01' (mensual) o '2026' (anual)
+  label: string; // 'Ene 2026' (mensual) o '2026' (anual)
+}
+
+export interface FilaCitasHistorico {
+  terapeuta_id: number;
+  nombre: string;
+  valores: Record<string, number>; // key de período -> nº de citas
+  total: number;                    // suma de todos los períodos
+  crecimiento: number;              // % del último período vs el anterior
+}
+
+export interface CitasTerapeutaHistorico {
+  modo: 'mensual' | 'anual';
+  periodos: PeriodoHistorico[];     // ordenados del más antiguo al más reciente
+  filas: FilaCitasHistorico[];
+}

@@ -3,7 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { VentaProducto } from '../entities/venta-producto.entity';
 import { VentaServicio } from '../entities/venta-servicio.entity';
-import { TipoReporte, ReporteParams, Metricas, VentaDia, TopItem, DescuentoPorTipo, IngresoResponsable, CitasTerapeuta } from '../types/reportes.types';
+import { TipoReporte, ReporteParams, Metricas, VentaDia, TopItem, DescuentoPorTipo, IngresoResponsable, CitasTerapeuta, CitasTerapeutaHistorico, PeriodoHistorico, FilaCitasHistorico } from '../types/reportes.types';
 
 function incluyeProductos(tipo: TipoReporte) {
   return tipo === 'general' || tipo === 'productos';
@@ -488,6 +488,101 @@ export class ReportesService {
         return { nombre: d.nombre, citas: d.citas, citasAnterior: d.citasAnterior, variacion };
       })
       .sort((a, b) => b.citas - a.citas);
+  }
+
+  // ── Histórico de citas por terapeuta (matriz multi-período) ───────────────
+  // Si el rango seleccionado es ~mensual → 6 meses terminando en el mes filtrado.
+  // Si el rango es ~anual → el año filtrado y el año anterior.
+
+  async getCitasPorTerapeutaHistorico(
+    fechaInicio: string,
+    fechaFin: string,
+  ): Promise<CitasTerapeutaHistorico> {
+    const inicio = new Date(fechaInicio + 'T00:00:00');
+    const fin = new Date(fechaFin + 'T00:00:00');
+    const dias = Math.round((fin.getTime() - inicio.getTime()) / 86_400_000);
+    const esAnual = dias >= 180; // un filtro anual abarca ~365 días; uno mensual ~30
+
+    const MESES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+    const pad = (n: number) => String(n).padStart(2, '0');
+
+    let periodos: PeriodoHistorico[] = [];
+    let rangoInicio: string;
+    let rangoFin: string;
+    let formatoSql: string; // DATE_FORMAT de MySQL
+
+    if (esAnual) {
+      const anioAncla = fin.getFullYear();
+      const anios = [anioAncla - 1, anioAncla];
+      periodos = anios.map((a) => ({ key: String(a), label: String(a) }));
+      rangoInicio = `${anios[0]}-01-01`;
+      rangoFin = `${anioAncla}-12-31`;
+      formatoSql = '%Y';
+    } else {
+      const anclaAnio = fin.getFullYear();
+      const anclaMes = fin.getMonth(); // 0-based
+      for (let i = 5; i >= 0; i--) {
+        const d = new Date(anclaAnio, anclaMes - i, 1);
+        periodos.push({
+          key: `${d.getFullYear()}-${pad(d.getMonth() + 1)}`,
+          label: `${MESES[d.getMonth()]} ${d.getFullYear()}`,
+        });
+      }
+      const primero = new Date(anclaAnio, anclaMes - 5, 1);
+      const ultimo = new Date(anclaAnio, anclaMes + 1, 0); // último día del mes ancla
+      rangoInicio = `${primero.getFullYear()}-${pad(primero.getMonth() + 1)}-01`;
+      rangoFin = `${ultimo.getFullYear()}-${pad(ultimo.getMonth() + 1)}-${pad(ultimo.getDate())}`;
+      formatoSql = '%Y-%m';
+    }
+
+    // formatoSql es una constante interna controlada, no entrada del usuario → seguro interpolarlo
+    const sql = `
+      SELECT c.doctor_id AS terapeuta_id,
+             TRIM(CONCAT(COALESCE(t.nombres, ''), ' ', COALESCE(t.apellidos, ''))) AS nombre,
+             DATE_FORMAT(c.fecha, '${formatoSql}') AS periodo,
+             COUNT(*) AS citas
+      FROM citas c
+      INNER JOIN trabajador_centro t ON t.id = c.doctor_id
+      WHERE c.flg_activo = 1
+        AND c.doctor_id IS NOT NULL
+        AND c.fecha >= ? AND c.fecha <= ?
+      GROUP BY c.doctor_id, nombre, periodo`;
+
+    const rows = await this.ventaServicioRepo.query(sql, [rangoInicio, rangoFin]);
+
+    const mapa = new Map<number, { nombre: string; valores: Record<string, number> }>();
+    for (const row of rows) {
+      const id = Number(row.terapeuta_id);
+      if (!mapa.has(id)) mapa.set(id, { nombre: row.nombre, valores: {} });
+      mapa.get(id)!.valores[String(row.periodo)] = Number(row.citas);
+    }
+
+    const keys = periodos.map((p) => p.key);
+    const ultimoKey = keys[keys.length - 1];
+    const penultimoKey = keys[keys.length - 2];
+
+    const filas: FilaCitasHistorico[] = Array.from(mapa.entries())
+      .map(([id, data]) => {
+        const valores: Record<string, number> = {};
+        let total = 0;
+        for (const k of keys) {
+          const v = data.valores[k] ?? 0;
+          valores[k] = v;
+          total += v;
+        }
+        const actual = valores[ultimoKey] ?? 0;
+        const previo = penultimoKey ? valores[penultimoKey] ?? 0 : 0;
+        const crecimiento =
+          previo === 0
+            ? actual > 0
+              ? 100
+              : 0
+            : Math.round(((actual - previo) / previo) * 1000) / 10;
+        return { terapeuta_id: id, nombre: data.nombre, valores, total, crecimiento };
+      })
+      .sort((a, b) => b.total - a.total);
+
+    return { modo: esAnual ? 'anual' : 'mensual', periodos, filas };
   }
 
   // ── Ventas sin cita agendada ──────────────────────────────────────────────

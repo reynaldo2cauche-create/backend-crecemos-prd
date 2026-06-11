@@ -13,6 +13,14 @@ export class ReportesController {
     return this.reportesService.getVentasSinCita();
   }
 
+  @Get('citas-historico')
+  getCitasHistorico(
+    @Query('fechaInicio') fechaInicio: string,
+    @Query('fechaFin') fechaFin: string,
+  ) {
+    return this.reportesService.getCitasPorTerapeutaHistorico(fechaInicio, fechaFin);
+  }
+
   @Get()
   async getReportes(
     @Query('fechaInicio') fechaInicio: string,
