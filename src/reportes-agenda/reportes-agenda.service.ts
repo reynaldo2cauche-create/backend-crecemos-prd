@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { Cron } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
@@ -20,8 +21,6 @@ type GrupoTerapeuta = { terapeuta: any; semana: any[]; manana: any[] };
 @Injectable()
 export class ReportesAgendaService {
   private readonly logger = new Logger(ReportesAgendaService.name);
-  private intervalId: NodeJS.Timeout;
-  private ultimaFechaEnviada: string | null = null;
 
   constructor(
     private readonly citasService: CitasService,
@@ -31,28 +30,14 @@ export class ReportesAgendaService {
     private readonly responsablePacienteRepo: Repository<ResponsablePaciente>,
   ) {}
 
-  /** Arranca el chequeo periódico (lo invoca el módulo en onModuleInit). */
-  iniciar(): void {
-    this.logger.log('📅 Scheduler de reporte de agenda iniciado');
-    this.verificarEnvio();
-    // Cada 10 minutos revisa si son las 7 PM (hora Lima) y aún no se envió hoy
-    this.intervalId = setInterval(() => this.verificarEnvio(), 600000);
-  }
-
-  detener(): void {
-    if (this.intervalId) clearInterval(this.intervalId);
-    this.logger.log('🛑 Scheduler de reporte de agenda detenido');
-  }
-
-  /** Se ejecuta a las 7 PM de Lima, una sola vez por día. */
-  private async verificarEnvio(): Promise<void> {
-    const ahora = this.getAhoraLima();
-    if (ahora.getHours() !== 19) return;
-
-    const hoy = this.fechaLima(0);
-    if (this.ultimaFechaEnviada === hoy) return; // ya se envió hoy
-    this.ultimaFechaEnviada = hoy;
-
+  /**
+   * Se ejecuta TODOS los días a las 7:00:00 PM exactas (hora de Lima).
+   * El decorador @Cron dispara una sola vez al día — no consume CPU el resto
+   * del tiempo, a diferencia del antiguo setInterval que despertaba cada 10 min.
+   */
+  @Cron('0 19 * * *', { timeZone: 'America/Lima' })
+  async verificarEnvio(): Promise<void> {
+    this.logger.log('📅 Disparo programado del reporte de agenda (19:00 Lima)');
     try {
       await this.enviarReporteDiario();
     } catch (error) {

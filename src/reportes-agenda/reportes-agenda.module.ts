@@ -1,4 +1,4 @@
-import { Module, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { CitasModule } from '../citas/citas.module';
 import { MailModule } from '../mail/mail.module';
@@ -11,14 +11,4 @@ import { ReportesAgendaController } from './reportes-agenda.controller';
   controllers: [ReportesAgendaController],
   providers: [ReportesAgendaService],
 })
-export class ReportesAgendaModule implements OnModuleInit, OnModuleDestroy {
-  constructor(private readonly service: ReportesAgendaService) {}
-
-  onModuleInit() {
-    this.service.iniciar();
-  }
-
-  onModuleDestroy() {
-    this.service.detener();
-  }
-}
+export class ReportesAgendaModule {}

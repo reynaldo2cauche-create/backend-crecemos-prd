@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { ScheduleModule } from '@nestjs/schedule';
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { join } from 'path';
 import { TypeOrmModule } from '@nestjs/typeorm';
@@ -230,6 +231,7 @@ import { ReportesAgendaModule } from './reportes-agenda/reportes-agenda.module';
     ConfigModule.forRoot({
       isGlobal: true, // Hace las variables accesibles en toda la aplicación
     }),
+    ScheduleModule.forRoot(),
     ServeStaticModule.forRoot({
       rootPath: join(__dirname, '..', 'uploads'),  // Ruta de la carpeta de archivos
       serveRoot: '/uploads',  // URL base para acceder a los archivos
@@ -275,7 +277,7 @@ import { ReportesAgendaModule } from './reportes-agenda/reportes-agenda.module';
       // username: 'root',
       // password: 'admin',
       // database: 'crecemos_website',
-      // charset: 'utf8mb4',
+      charset: 'utf8mb4',
       extra: {
         connectionLimit: 10,
         waitForConnections: true,
