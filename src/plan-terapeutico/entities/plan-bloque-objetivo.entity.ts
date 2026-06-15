@@ -7,10 +7,11 @@ import {
 } from 'typeorm';
 
 /**
- * Asignación de un objetivo específico a un BLOQUE de sesiones.
- * Un bloque agrupa 4 sesiones (numero_bloque = floor((numero_sesion - 1) / 4) + 1).
- * Las 4 sesiones del bloque comparten los objetivos asignados; el resultado
- * se sigue registrando por sesión en plan_registro_sesion.
+ * Asignación de un objetivo específico a una SESIÓN concreta.
+ * Los bloques de 4 sesiones siguen existiendo como agrupación visual, pero
+ * cada sesión (día) elige sus propios objetivos de forma independiente; el
+ * resultado se registra por sesión en plan_registro_sesion.
+ * (La tabla conserva el nombre histórico plan_bloque_objetivo.)
  */
 @Entity('plan_bloque_objetivo')
 export class PlanBloqueObjetivo {
@@ -24,7 +25,7 @@ export class PlanBloqueObjetivo {
   objetivo_especifico_id: number;
 
   @Column({ type: 'int' })
-  numero_bloque: number;
+  numero_sesion: number;
 
   @Column({ type: 'int', nullable: true })
   user_id_crea: number;

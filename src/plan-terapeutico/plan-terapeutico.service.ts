@@ -383,7 +383,7 @@ export class PlanTerapeuticoService {
 
     const asignaciones = espIds.length
       ? await this.planRepo.query(
-          `SELECT objetivo_especifico_id, numero_bloque
+          `SELECT objetivo_especifico_id, numero_sesion
            FROM plan_bloque_objetivo
            WHERE objetivo_especifico_id IN (${espIds.map(() => '?').join(',')}) AND flg_activo = 1`,
           espIds,
@@ -397,16 +397,16 @@ export class PlanTerapeuticoService {
       const progreso = evaluados.length
         ? Math.round((evaluados.reduce((a, r) => a + Number(r.resultado_valor || 0), 0) / (evaluados.length * 2)) * 100)
         : 0;
-      // Bloques asignados = asignaciones explícitas ∪ bloques que ya tienen registro.
-      const bloquesAsig = asignaciones
+      // Sesiones asignadas = asignaciones explícitas ∪ sesiones que ya tienen registro.
+      const sesionesAsig = asignaciones
         .filter((a) => a.objetivo_especifico_id === e.id)
-        .map((a) => Number(a.numero_bloque));
-      const bloquesReg = regs.map((r) => bloqueDeSesion(Number(r.numero_sesion)));
-      const bloques_asignados = Array.from(new Set([...bloquesAsig, ...bloquesReg])).sort((a, b) => a - b);
+        .map((a) => Number(a.numero_sesion));
+      const sesionesReg = regs.map((r) => Number(r.numero_sesion));
+      const sesiones_asignadas = Array.from(new Set([...sesionesAsig, ...sesionesReg])).sort((a, b) => a - b);
       return {
         ...e,
         progreso,
-        bloques_asignados,
+        sesiones_asignadas,
         registros: regs.reduce((map, r) => {
           map[r.numero_sesion] = {
             id: r.id,
@@ -646,21 +646,21 @@ export class PlanTerapeuticoService {
     }
     await this.registroRepo.save(registro);
 
-    // Asegurar que el objetivo quede asignado al bloque de esta sesión.
-    await this.asegurarAsignacionBloque(plan.id, esp.id, bloqueDeSesion(numeroSesion), user);
+    // Asegurar que el objetivo quede asignado a esta sesión.
+    await this.asegurarAsignacionSesion(plan.id, esp.id, numeroSesion, user);
 
     return { ok: true, id: registro.id };
   }
 
-  /** Crea (o reactiva) la asignación objetivo↔bloque si no existe. */
-  private async asegurarAsignacionBloque(
+  /** Crea (o reactiva) la asignación objetivo↔sesión si no existe. */
+  private async asegurarAsignacionSesion(
     planId: number,
     objetivoEspecificoId: number,
-    numeroBloque: number,
+    numeroSesion: number,
     user: any,
   ): Promise<PlanBloqueObjetivo> {
     let asig = await this.bloqueObjetivoRepo.findOne({
-      where: { objetivo_especifico_id: objetivoEspecificoId, numero_bloque: numeroBloque },
+      where: { objetivo_especifico_id: objetivoEspecificoId, numero_sesion: numeroSesion },
     });
     if (asig) {
       if (!asig.flg_activo) {
@@ -673,18 +673,18 @@ export class PlanTerapeuticoService {
     asig = this.bloqueObjetivoRepo.create({
       plan_id: planId,
       objetivo_especifico_id: objetivoEspecificoId,
-      numero_bloque: numeroBloque,
+      numero_sesion: numeroSesion,
       user_id_crea: user?.id ?? null,
     });
     return this.bloqueObjetivoRepo.save(asig);
   }
 
   // ────────────────────────────────────────────────────────────────
-  // Asignación de objetivos por bloque de sesiones
+  // Asignación de objetivos por sesión
   // ────────────────────────────────────────────────────────────────
 
-  /** Asigna un objetivo específico a un bloque de 4 sesiones. */
-  async asignarObjetivoBloque(body: any, user: any): Promise<any> {
+  /** Asigna un objetivo específico a una sesión concreta. */
+  async asignarObjetivoSesion(body: any, user: any): Promise<any> {
     const esp = await this.especificoRepo.findOne({
       where: { id: body.objetivo_especifico_id, flg_activo: 1 },
     });
@@ -693,36 +693,34 @@ export class PlanTerapeuticoService {
     await this.assertAcceso(user, plan.paciente_id, plan.servicio_id);
     await this.assertPuedeGestionar(user, plan.servicio_id);
 
-    const numeroBloque = Number(body.numero_bloque);
-    if (!numeroBloque || numeroBloque < 1) throw new BadRequestException('Número de bloque inválido');
+    const numeroSesion = Number(body.numero_sesion);
+    if (!numeroSesion || numeroSesion < 1) throw new BadRequestException('Número de sesión inválido');
 
-    const asig = await this.asegurarAsignacionBloque(plan.id, esp.id, numeroBloque, user);
+    const asig = await this.asegurarAsignacionSesion(plan.id, esp.id, numeroSesion, user);
     return { ok: true, id: asig.id };
   }
 
-  /** Quita un objetivo de un bloque (y borra los registros de ese objetivo en las sesiones del bloque). */
-  async desasignarObjetivoBloque(especificoId: number, numeroBloque: number, user: any): Promise<any> {
+  /** Quita un objetivo de una sesión (y borra el registro de ese objetivo en esa sesión). */
+  async desasignarObjetivoSesion(especificoId: number, numeroSesion: number, user: any): Promise<any> {
     const esp = await this.especificoRepo.findOne({ where: { id: especificoId, flg_activo: 1 } });
     if (!esp) throw new NotFoundException('Objetivo específico no encontrado');
     const { plan } = await this.getGeneralConPlan(esp.objetivo_general_id);
     await this.assertAcceso(user, plan.paciente_id, plan.servicio_id);
     await this.assertPuedeGestionar(user, plan.servicio_id);
-    if (!numeroBloque || numeroBloque < 1) throw new BadRequestException('Número de bloque inválido');
+    if (!numeroSesion || numeroSesion < 1) throw new BadRequestException('Número de sesión inválido');
 
     await this.bloqueObjetivoRepo.update(
-      { objetivo_especifico_id: especificoId, numero_bloque: numeroBloque },
+      { objetivo_especifico_id: especificoId, numero_sesion: numeroSesion },
       { flg_activo: 0 },
     );
 
-    // Desactivar los registros de ese objetivo en las sesiones del bloque.
-    const desde = (numeroBloque - 1) * SESIONES_POR_BLOQUE + 1;
-    const hasta = numeroBloque * SESIONES_POR_BLOQUE;
+    // Desactivar el registro de ese objetivo en esa sesión.
     await this.registroRepo
       .createQueryBuilder()
       .update()
       .set({ flg_activo: 0 })
       .where('objetivo_especifico_id = :id', { id: especificoId })
-      .andWhere('numero_sesion BETWEEN :desde AND :hasta', { desde, hasta })
+      .andWhere('numero_sesion = :numeroSesion', { numeroSesion })
       .andWhere('flg_activo = 1')
       .execute();
 

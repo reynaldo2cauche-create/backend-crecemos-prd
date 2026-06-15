@@ -87,18 +87,18 @@ export class PlanTerapeuticoController {
     return this.service.guardarRegistro(body, req.user);
   }
 
-  // ── Asignación de objetivos por bloque de 4 sesiones ──
-  @Post('asignacion-bloque')
-  asignarBloque(@Body() body: any, @Req() req: any) {
-    return this.service.asignarObjetivoBloque(body, req.user);
+  // ── Asignación de objetivos por sesión ──
+  @Post('asignacion-sesion')
+  asignarSesion(@Body() body: any, @Req() req: any) {
+    return this.service.asignarObjetivoSesion(body, req.user);
   }
 
-  @Delete('asignacion-bloque/:especificoId/:numeroBloque')
-  desasignarBloque(
+  @Delete('asignacion-sesion/:especificoId/:numeroSesion')
+  desasignarSesion(
     @Param('especificoId', ParseIntPipe) especificoId: number,
-    @Param('numeroBloque', ParseIntPipe) numeroBloque: number,
+    @Param('numeroSesion', ParseIntPipe) numeroSesion: number,
     @Req() req: any,
   ) {
-    return this.service.desasignarObjetivoBloque(especificoId, numeroBloque, req.user);
+    return this.service.desasignarObjetivoSesion(especificoId, numeroSesion, req.user);
   }
 }

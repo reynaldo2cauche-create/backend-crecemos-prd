@@ -493,8 +493,6 @@ export class NotaEvolucionService {
         .leftJoinAndSelect('usuario.rol', 'rol')
         .where('nota.paciente_id = :paciente_id', { paciente_id })
         .orderBy('nota.fecha_crea', 'DESC')
-        .take(limit)
-        .skip((page - 1) * limit)
         .getManyAndCount();
 
     } else if (terapeutaId) {
@@ -502,38 +500,52 @@ export class NotaEvolucionService {
       const esJefeDeArea = usuario?.rol?.id === 4 && usuario?.cargo?.es_jefe === true;
 
       if (esJefeDeArea) {
-        console.log('👔 Usuario es JEFE DE ÁREA - filtrando por subordinados');
+        console.log('👔 Usuario es JEFE DE ÁREA - notas por servicio/especialidad + subordinados');
 
-        // Obtener subordinados del jefe
+        // Subordinados del jefe (+ el propio jefe, para ver también sus notas).
         const subordinados = await this.trabajadorRepository.find({
           where: { jefe: { id: terapeutaId } },
           select: ['id', 'nombres', 'apellidos']
         });
+        const idsParaBuscar = [...subordinados.map(s => s.id), terapeutaId];
 
-        const subordinadosIds = subordinados.map(s => s.id);
+        // Especialidades de los servicios que el jefe tiene con este paciente.
+        const especialidades = await this.asignacionRepository
+          .createQueryBuilder('asig')
+          .innerJoin('asig.pacienteServicio', 'ps')
+          .innerJoin('ps.servicio', 's')
+          .where('asig.terapeuta_id = :terapeutaId', { terapeutaId })
+          .andWhere('ps.paciente_id = :paciente_id', { paciente_id })
+          .andWhere('s.especialidad_id IS NOT NULL')
+          .select('DISTINCT s.especialidad_id', 'id')
+          .getRawMany();
+        const especialidadIds = especialidades.map(e => e.id).filter(Boolean);
 
-        // ✅ INCLUIR AL PROPIO JEFE para que vea sus propias notas también
-        const idsParaBuscar = [...subordinadosIds, terapeutaId];
+        console.log('👥 IDs (subordinados + jefe):', idsParaBuscar, '| Especialidades:', especialidadIds);
 
-        console.log('👥 Subordinados del jefe:', subordinadosIds, subordinados.map(s => `${s.nombres} ${s.apellidos}`));
-        console.log('✅ IDs totales a buscar (subordinados + jefe):', idsParaBuscar);
-
-        // Ver todas las notas del paciente creadas por el jefe y sus subordinados
-        [notas, total] = await this.notaEvolucionRepository
+        // Notas del MISMO servicio/especialidad O hechas por el jefe/subordinados.
+        const qb = this.notaEvolucionRepository
           .createQueryBuilder('nota')
           .leftJoinAndSelect('nota.servicio', 'servicio')
           .leftJoinAndSelect('servicio.especialidad', 'especialidad')
           .leftJoinAndSelect('nota.usuarioCreador', 'usuario')
           .leftJoinAndSelect('usuario.especialidad', 'usuarioEspecialidad')
           .leftJoinAndSelect('usuario.rol', 'rol')
-          .where('nota.paciente_id = :paciente_id', { paciente_id })
-          .andWhere('usuario.id IN (:...idsParaBuscar)', { idsParaBuscar })
+          .where('nota.paciente_id = :paciente_id', { paciente_id });
+
+        const condiciones: string[] = ['usuario.id IN (:...idsParaBuscar)'];
+        const params: any = { idsParaBuscar };
+        if (especialidadIds.length > 0) {
+          condiciones.push('especialidad.id IN (:...especialidadIds)');
+          params.especialidadIds = especialidadIds;
+        }
+        qb.andWhere(`(${condiciones.join(' OR ')})`, params);
+
+        [notas, total] = await qb
           .orderBy('nota.fecha_crea', 'DESC')
-          .take(limit)
-          .skip((page - 1) * limit)
           .getManyAndCount();
 
-        console.log(`✅ Notas de subordinados visibles: ${total}`);
+        console.log(`✅ Notas visibles (servicio + subordinados): ${total}`);
 
       } else {
         console.log('👨‍⚕️ Terapeuta regular - filtrando por especialidades');
@@ -571,8 +583,6 @@ export class NotaEvolucionService {
           .where('nota.paciente_id = :paciente_id', { paciente_id })
           .andWhere('especialidad.id IN (:...especialidadIds)', { especialidadIds })
           .orderBy('nota.fecha_crea', 'DESC')
-          .take(limit)
-          .skip((page - 1) * limit)
           .getManyAndCount();
 
         console.log(`✅ Notas visibles: ${total}`);
