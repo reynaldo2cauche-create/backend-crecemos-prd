@@ -3,6 +3,18 @@ import { CampanaEstado } from './campana-estado.entity';
 import { CampanaSeccion } from './campana-seccion.entity';
 import { TrabajadorCentro } from 'src/usuarios/trabajador-centro.entity';
 
+// Devuelve los datetime como texto local 'YYYY-MM-DD HH:mm:ss' (sin convertir a UTC),
+// para que el frontend reciba la hora tal cual se guardó.
+const dtTransformer = {
+  to: (v?: string) => v ?? null,
+  from: (v?: Date | string) => {
+    if (!v) return v as any;
+    if (typeof v === 'string') return v;
+    const p = (n: number) => String(n).padStart(2, '0');
+    return `${v.getFullYear()}-${p(v.getMonth() + 1)}-${p(v.getDate())} ${p(v.getHours())}:${p(v.getMinutes())}:${p(v.getSeconds())}`;
+  },
+};
+
 @Entity('campana')
 export class Campana {
   @PrimaryGeneratedColumn()
@@ -14,10 +26,10 @@ export class Campana {
   @Column({ type: 'text', nullable: true })
   descripcion_corta: string;
 
-  @Column({ type: 'date' })
+  @Column({ type: 'datetime', transformer: dtTransformer })
   fecha_inicio: string;
 
-  @Column({ type: 'date' })
+  @Column({ type: 'datetime', transformer: dtTransformer })
   fecha_fin: string;
 
   @Column({ name: 'estado_id', default: 2 })

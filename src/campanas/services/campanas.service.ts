@@ -6,6 +6,16 @@ import { CampanaSeccion } from '../entities/campana-seccion.entity';
 import { CreateCampanaDto } from '../dto/create-campana.dto';
 import { UpdateCampanaDto } from '../dto/update-campana.dto';
 
+// Normaliza un datetime que llega del frontend ('YYYY-MM-DDTHH:mm' o con segundos)
+// al formato que MySQL acepta sin ambigüedad: 'YYYY-MM-DD HH:mm:ss' (sin conversión de zona).
+const normalizarDatetime = (v?: string): string => {
+  if (!v) return v;
+  let s = v.replace('T', ' ').trim();
+  if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(s)) s += ':00'; // agrega segundos si faltan
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) s += ' 00:00:00';       // solo fecha → medianoche
+  return s;
+};
+
 @Injectable()
 export class CampanasService {
   constructor(
@@ -33,13 +43,17 @@ export class CampanasService {
    * El filtro por año se hace en el frontend
    */
   async findActivas() {
-    return this.campanaRepo.find({
-      where: {
-        estado_id: 1, // Estado "activa"
-      },
-      relations: ['secciones'],
-      order: { fecha_inicio: 'DESC', orden: 'ASC' },
-    });
+    // Se publica sola cuando llega su fecha+hora de inicio (la columna es datetime).
+    // NO se filtra por fecha_fin a propósito: una campaña sigue mostrándose aunque haya
+    // terminado; el filtro por año (en el frontend) la agrupa por año.
+    return this.campanaRepo
+      .createQueryBuilder('campana')
+      .leftJoinAndSelect('campana.secciones', 'secciones')
+      .where('campana.estado_id = :estado', { estado: 1 })
+      .andWhere('campana.fecha_inicio <= NOW()')
+      .orderBy('campana.fecha_inicio', 'DESC')
+      .addOrderBy('campana.orden', 'ASC')
+      .getMany();
   }
 
   /**
@@ -71,8 +85,8 @@ export class CampanasService {
       const campana = manager.create(Campana, {
         titulo: dto.titulo,
         descripcion_corta: dto.descripcion_corta,
-        fecha_inicio: dto.fecha_inicio,
-        fecha_fin: dto.fecha_fin,
+        fecha_inicio: normalizarDatetime(dto.fecha_inicio),
+        fecha_fin: normalizarDatetime(dto.fecha_fin),
         estado_id: dto.estado_id ?? 2,
         orden: dto.orden ?? 0,
         user_crea_id: dto.user_crea_id,
@@ -112,8 +126,8 @@ export class CampanasService {
       const cambios: Partial<Campana> = {};
       if (dto.titulo !== undefined) cambios.titulo = dto.titulo;
       if (dto.descripcion_corta !== undefined) cambios.descripcion_corta = dto.descripcion_corta;
-      if (dto.fecha_inicio !== undefined) cambios.fecha_inicio = dto.fecha_inicio;
-      if (dto.fecha_fin !== undefined) cambios.fecha_fin = dto.fecha_fin;
+      if (dto.fecha_inicio !== undefined) cambios.fecha_inicio = normalizarDatetime(dto.fecha_inicio);
+      if (dto.fecha_fin !== undefined) cambios.fecha_fin = normalizarDatetime(dto.fecha_fin);
       if (dto.estado_id !== undefined) cambios.estado_id = dto.estado_id;
       if (dto.orden !== undefined) cambios.orden = dto.orden;
       if (dto.user_actua_id !== undefined) cambios.user_actua_id = dto.user_actua_id;
