@@ -104,17 +104,23 @@ export class CampanasService {
    */
   async update(id: number, dto: UpdateCampanaDto) {
     await this.dataSource.transaction(async (manager) => {
-      const campana = await this.findOne(id);
+      const campana = await this.findOne(id); // valida que exista
 
-      if (dto.titulo !== undefined) campana.titulo = dto.titulo;
-      if (dto.descripcion_corta !== undefined) campana.descripcion_corta = dto.descripcion_corta;
-      if (dto.fecha_inicio !== undefined) campana.fecha_inicio = dto.fecha_inicio;
-      if (dto.fecha_fin !== undefined) campana.fecha_fin = dto.fecha_fin;
-      if (dto.estado_id !== undefined) campana.estado_id = dto.estado_id;
-      if (dto.orden !== undefined) campana.orden = dto.orden;
-      if (dto.user_actua_id !== undefined) campana.user_actua_id = dto.user_actua_id;
+      // Actualizar SOLO columnas escalares con un UPDATE directo. Si se guardara la
+      // entidad cargada (con la relación `estado`/`usuarioActualiza`), TypeORM daría
+      // prioridad al objeto de relación y sobreescribiría el estado_id que cambiamos.
+      const cambios: Partial<Campana> = {};
+      if (dto.titulo !== undefined) cambios.titulo = dto.titulo;
+      if (dto.descripcion_corta !== undefined) cambios.descripcion_corta = dto.descripcion_corta;
+      if (dto.fecha_inicio !== undefined) cambios.fecha_inicio = dto.fecha_inicio;
+      if (dto.fecha_fin !== undefined) cambios.fecha_fin = dto.fecha_fin;
+      if (dto.estado_id !== undefined) cambios.estado_id = dto.estado_id;
+      if (dto.orden !== undefined) cambios.orden = dto.orden;
+      if (dto.user_actua_id !== undefined) cambios.user_actua_id = dto.user_actua_id;
 
-      await manager.save(Campana, campana);
+      if (Object.keys(cambios).length > 0) {
+        await manager.update(Campana, id, cambios);
+      }
 
       if (dto.secciones !== undefined) {
         await manager.delete(CampanaSeccion, { campana_id: id });
