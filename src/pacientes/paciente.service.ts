@@ -1,6 +1,11 @@
 import { Injectable, UnauthorizedException, NotFoundException, ForbiddenException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository, LessThan, Brackets } from 'typeorm';
+import { In, Repository, LessThan, Brackets, DataSource } from 'typeorm';
+import { MailService } from '../mail/mail.service';
+import * as ExcelJS from 'exceljs';
+import * as fs from 'fs';
+import * as path from 'path';
+import * as JSZip from 'jszip';
 import { Paciente } from './paciente.entity';
 import { CreatePacienteDto } from './dto/create-paciente.dto';
 import { UpdatePacienteDto } from './dto/update-paciente.dto';
@@ -16,6 +21,7 @@ import { UpdateEstadoPacienteDto } from './dto/update-estado-paciente.dto';
 import { ConveniosService } from 'src/convenios/convenios.service';
 import { tieneAccesoBeneficios } from '../constants/estados-paciente.constants';
 import { Cita } from '../citas/entities/cita.entity';
+import { ResponsablePaciente } from './entities/responsable-paciente.entity';
 import { NotificacionesService } from 'src/notificaciones/notificaciones.service';
 import { AuditoriaService } from 'src/auditoria/auditoria.service';
 
@@ -37,11 +43,478 @@ export class PacienteService {
     private serviciosRepository: Repository<Servicios>,
     @InjectRepository(Cita)
     private citaRepository: Repository<Cita>,
+    @InjectRepository(ResponsablePaciente)
+    private responsablePacienteRepository: Repository<ResponsablePaciente>,
     private parejaPacienteService: ParejaPacienteService,
     private pacienteResponsableService: PacienteResponsableService,
     private readonly notificacionesService: NotificacionesService,
     private readonly auditoriaService: AuditoriaService,
+    private readonly dataSource: DataSource,
+    private readonly mailService: MailService,
   ) {}
+
+  /**
+   * ⚠️ ELIMINACIÓN TOTAL E IRREVERSIBLE de un paciente y TODO lo relacionado
+   * (historia clínica, citas, ventas/pagos, archivos, etc.), a solicitud del paciente.
+   *
+   * Descubre dinámicamente, vía claves foráneas (information_schema), todas las
+   * tablas que dependen del paciente y las borra de hijas a padre dentro de una
+   * transacción. Antes de borrar, captura los datos del paciente y el conteo por
+   * tabla para enviar el correo informativo a info@ y rrhh@.
+   */
+  /**
+   * Arma el "backup" del paciente que se adjunta al correo antes de borrarlo:
+   * un Excel con sus notas de evolución y todos sus archivos digitales subidos.
+   * Devuelve los adjuntos (en memoria) y las rutas físicas para eliminarlas luego.
+   */
+  private async construirBackupPaciente(
+    pacienteId: number,
+    paciente: Paciente,
+  ): Promise<{
+    attachments: Array<{ filename: string; content: Buffer; contentType?: string }>;
+    rutasFisicas: string[];
+  }> {
+    const rutasFisicas: string[] = [];
+    const docSafe = String(paciente.numero_documento || pacienteId).replace(/[^\w.-]/g, '_');
+    const zip = new JSZip();
+    let tieneContenido = false;
+
+    // 1) Notas de evolución + datos del paciente → Excel con diseño
+    try {
+      const notas = await this.dataSource.query(
+        `SELECT n.fecha_crea,
+                COALESCE(s.nombre, '') AS servicio,
+                n.entrevista, n.sesion_evaluacion, n.sesion_terapias,
+                n.objetivos_terapeuticos, n.observaciones,
+                TRIM(CONCAT(COALESCE(t.nombres, ''), ' ', COALESCE(t.apellidos, ''))) AS creado_por
+         FROM nota_evolucion n
+         LEFT JOIN servicios s ON s.id = n.servicio_id
+         LEFT JOIN trabajador_centro t ON t.id = n.user_id_crea
+         WHERE n.paciente_id = ?
+         ORDER BY n.fecha_crea ASC`,
+        [pacienteId],
+      );
+
+      // ── Paleta y helpers de estilo ──────────────────────────────────────
+      const PURPLE = 'FF7B1FA2';
+      const PURPLE_DARK = 'FF6A1B9A';
+      const PURPLE_SOFT = 'FFF3EAF8';
+      const ROW_ALT = 'FFF8F5FB';
+      const GRAY_TXT = 'FF374151';
+      const thin: Partial<ExcelJS.Border> = { style: 'thin', color: { argb: 'FFD1D5DB' } };
+      const boxBorder: Partial<ExcelJS.Borders> = { top: thin, left: thin, bottom: thin, right: thin };
+
+      const fmtFecha = (f: any) => {
+        if (!f) return '—';
+        const d = new Date(f);
+        return isNaN(d.getTime()) ? '—' : d.toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric' });
+      };
+
+      // Edad y si es menor
+      const fnac = paciente.fecha_nacimiento ? new Date(paciente.fecha_nacimiento) : null;
+      let edad: number | null = null;
+      if (fnac && !isNaN(fnac.getTime())) {
+        const hoy = new Date();
+        edad = hoy.getFullYear() - fnac.getFullYear();
+        const m = hoy.getMonth() - fnac.getMonth();
+        if (m < 0 || (m === 0 && hoy.getDate() < fnac.getDate())) edad--;
+      }
+      const esMenor = edad !== null && edad < 18;
+
+      const wb = new ExcelJS.Workbook();
+      wb.creator = 'Centro Crecemos';
+      const ws = wb.addWorksheet('Historia del paciente', { views: [{ showGridLines: false }] });
+      ws.columns = [
+        { width: 22 }, { width: 26 }, { width: 22 }, { width: 22 },
+        { width: 22 }, { width: 26 }, { width: 22 }, { width: 22 },
+      ];
+
+      let r = 1;
+      const sectionHeader = (text: string) => {
+        ws.mergeCells(r, 1, r, 8);
+        const c = ws.getCell(r, 1);
+        c.value = text;
+        c.font = { bold: true, size: 12, color: { argb: 'FFFFFFFF' } };
+        c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: PURPLE_DARK } };
+        c.alignment = { vertical: 'middle', horizontal: 'left', indent: 1 };
+        ws.getRow(r).height = 20;
+        r++;
+      };
+      const pairRow = (l1: string, v1: any, l2?: string, v2?: any) => {
+        const lab = (cell: ExcelJS.Cell) => {
+          cell.font = { bold: true, size: 10, color: { argb: GRAY_TXT } };
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: PURPLE_SOFT } };
+          cell.alignment = { vertical: 'middle' };
+          cell.border = boxBorder;
+        };
+        const val = (cell: ExcelJS.Cell) => {
+          cell.font = { size: 10, color: { argb: 'FF111827' } };
+          cell.alignment = { vertical: 'middle', wrapText: true };
+          cell.border = boxBorder;
+        };
+        ws.getCell(r, 1).value = l1; lab(ws.getCell(r, 1));
+        ws.mergeCells(r, 2, r, 4); ws.getCell(r, 2).value = v1 ?? '—'; val(ws.getCell(r, 2));
+        if (l2 !== undefined) {
+          ws.getCell(r, 5).value = l2; lab(ws.getCell(r, 5));
+          ws.mergeCells(r, 6, r, 8); ws.getCell(r, 6).value = (v2 ?? '—'); val(ws.getCell(r, 6));
+        } else {
+          ws.mergeCells(r, 5, r, 8); val(ws.getCell(r, 5));
+        }
+        ws.getRow(r).height = 18;
+        r++;
+      };
+
+      // Título
+      ws.mergeCells(r, 1, r, 8);
+      const titulo = ws.getCell(r, 1);
+      titulo.value = 'CENTRO CRECEMOS — HISTORIA DEL PACIENTE';
+      titulo.font = { bold: true, size: 16, color: { argb: 'FFFFFFFF' } };
+      titulo.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: PURPLE } };
+      titulo.alignment = { vertical: 'middle', horizontal: 'center' };
+      ws.getRow(r).height = 30; r++;
+      ws.mergeCells(r, 1, r, 8);
+      const subt = ws.getCell(r, 1);
+      subt.value = `Respaldo generado el ${new Date().toLocaleString('es-PE')}`;
+      subt.font = { italic: true, size: 10, color: { argb: 'FF6B7280' } };
+      subt.alignment = { horizontal: 'center' };
+      r++; r++;
+
+      // Datos del paciente
+      sectionHeader('DATOS DEL PACIENTE');
+      pairRow('Nombre completo', `${paciente.nombres} ${paciente.apellido_paterno} ${paciente.apellido_materno}`.trim(),
+        'Documento', `${paciente.tipo_documento?.nombre || 'Doc'}: ${paciente.numero_documento || '—'}`);
+      pairRow('Fecha de nacimiento', fmtFecha(paciente.fecha_nacimiento),
+        'Edad', edad !== null ? `${edad} años${esMenor ? ' (menor de edad)' : ''}` : '—');
+      pairRow('Sexo', paciente.sexo?.nombre || '—', 'Distrito', paciente.distrito?.nombre || '—');
+      pairRow('Celular', paciente.celular || '—', 'Celular 2', paciente.celular2 || '—');
+      pairRow('Correo', paciente.correo || '—', 'Dirección', paciente.direccion || '—');
+      pairRow('Diagnóstico médico', paciente.diagnostico_medico || '—');
+      pairRow('Alergias', paciente.alergias || '—', 'Medicamentos', paciente.medicamentos_actuales || '—');
+      r++;
+
+      // Responsables → tabla relacional responsable_paciente (un paciente puede tener varios)
+      let responsablesRP: ResponsablePaciente[] = [];
+      try {
+        responsablesRP = await this.responsablePacienteRepository.find({
+          where: { paciente_id: pacienteId },
+          relations: ['responsable', 'responsable.tipo_documento', 'responsable_relacion'],
+          order: { orden: 'ASC' },
+        });
+      } catch (e) {
+        this.logger.warn(`No se pudieron cargar responsables del paciente ${pacienteId}: ${e?.message}`);
+      }
+
+      if (responsablesRP.length) {
+        sectionHeader(esMenor ? 'RESPONSABLES / PADRES (menor de edad)' : 'RESPONSABLES');
+        responsablesRP.forEach((rp, idx) => {
+          const resp = rp.responsable;
+          const nombre = `${resp?.nombres || ''} ${resp?.apellido_paterno || ''} ${resp?.apellido_materno || ''}`.trim();
+          const etiqueta = `Responsable ${idx + 1}${rp.orden === 1 ? ' (principal)' : ''}`;
+          pairRow(etiqueta, nombre || '—',
+            'Documento', resp?.numero_documento
+              ? `${resp?.tipo_documento?.nombre || 'Doc'}: ${resp.numero_documento}` : '—');
+          pairRow('Relación / parentesco', rp.responsable_relacion?.nombre || '—',
+            'Teléfono', resp?.telefono || '—');
+          pairRow('Correo', resp?.email || '—',
+            'Proceso legal', rp.tiene_proceso_legal ? 'Sí' : 'No');
+          r++; // separación entre responsables
+        });
+      } else {
+        // Fallback: columnas planas del paciente (modelo antiguo)
+        const tieneResponsable = !!(paciente.responsable_nombre || paciente.responsable_telefono || paciente.responsable_numero_documento);
+        if (esMenor || tieneResponsable) {
+          sectionHeader(esMenor ? 'RESPONSABLE / PADRES (menor de edad)' : 'RESPONSABLE');
+          const nombreResp = `${paciente.responsable_nombre || ''} ${paciente.responsable_apellido_paterno || ''} ${paciente.responsable_apellido_materno || ''}`.trim();
+          pairRow('Nombre', nombreResp || '—',
+            'Documento', paciente.responsable_numero_documento
+              ? `${paciente.responsable_tipo_documento?.nombre || 'Doc'}: ${paciente.responsable_numero_documento}` : '—');
+          pairRow('Relación / parentesco', paciente.responsable_relacion?.nombre || '—',
+            'Teléfono', paciente.responsable_telefono || '—');
+          pairRow('Correo', paciente.responsable_email || '—');
+          r++;
+        }
+      }
+
+      // Notas de evolución
+      sectionHeader('NOTAS DE EVOLUCIÓN');
+      const headers = ['Fecha', 'Servicio', 'Entrevista', 'Sesión evaluación', 'Sesión terapias', 'Objetivos terapéuticos', 'Observaciones', 'Creado por'];
+      headers.forEach((h, idx) => {
+        const c = ws.getCell(r, idx + 1);
+        c.value = h;
+        c.font = { bold: true, size: 10, color: { argb: 'FFFFFFFF' } };
+        c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: PURPLE } };
+        c.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+        c.border = boxBorder;
+      });
+      ws.getRow(r).height = 24; r++;
+
+      if (!notas.length) {
+        ws.mergeCells(r, 1, r, 8);
+        const c = ws.getCell(r, 1);
+        c.value = 'Sin notas de evolución registradas.';
+        c.font = { italic: true, size: 10, color: { argb: 'FF9CA3AF' } };
+        c.alignment = { horizontal: 'center' };
+        c.border = boxBorder;
+        r++;
+      } else {
+        notas.forEach((n: any, i: number) => {
+          const valores = [
+            n.fecha_crea ? new Date(n.fecha_crea).toLocaleString('es-PE') : '',
+            n.servicio || '',
+            n.entrevista || '',
+            n.sesion_evaluacion || '',
+            n.sesion_terapias || '',
+            n.objetivos_terapeuticos || '',
+            n.observaciones || '',
+            n.creado_por || '',
+          ];
+          valores.forEach((v, idx) => {
+            const c = ws.getCell(r, idx + 1);
+            c.value = v;
+            c.font = { size: 9, color: { argb: 'FF111827' } };
+            c.alignment = { vertical: 'top', wrapText: true };
+            c.border = boxBorder;
+            if (i % 2 === 1) c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: ROW_ALT } };
+          });
+          r++;
+        });
+      }
+
+      const buffer = await wb.xlsx.writeBuffer();
+      zip.file(`Historia_${docSafe}.xlsx`, Buffer.from(buffer as ArrayBuffer));
+      tieneContenido = true;
+    } catch (e) {
+      this.logger.error(`Error generando Excel de notas del paciente ${pacienteId}: ${e?.message}`);
+    }
+
+    // 2) Archivos digitales → meter al zip (carpeta "archivos/") y registrar su ruta física
+    try {
+      const archivos = await this.dataSource.query(
+        `SELECT nombre_original, ruta_archivo FROM archivos_digitales WHERE paciente_id = ?`,
+        [pacienteId],
+      );
+      let i = 0;
+      for (const a of archivos) {
+        if (!a.ruta_archivo) continue;
+        const rutaCompleta = path.join(process.cwd(), 'uploads', a.ruta_archivo);
+        rutasFisicas.push(rutaCompleta);
+        try {
+          if (fs.existsSync(rutaCompleta)) {
+            i++;
+            const nombre = a.nombre_original || path.basename(rutaCompleta);
+            // prefijo numérico para evitar choques de nombres repetidos
+            zip.file(`archivos/${i}_${nombre}`, await fs.promises.readFile(rutaCompleta));
+            tieneContenido = true;
+          }
+        } catch (e) {
+          this.logger.warn(`No se pudo leer archivo ${rutaCompleta}: ${e?.message}`);
+        }
+      }
+    } catch (e) {
+      this.logger.error(`Error recopilando archivos digitales del paciente ${pacienteId}: ${e?.message}`);
+    }
+
+    // 3) Generar el ZIP único (solo si hay algo que respaldar)
+    const attachments: Array<{ filename: string; content: Buffer; contentType?: string }> = [];
+    if (tieneContenido) {
+      try {
+        const zipBuffer = await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' });
+        attachments.push({
+          filename: `Backup_paciente_${docSafe}.zip`,
+          content: zipBuffer,
+          contentType: 'application/zip',
+        });
+      } catch (e) {
+        this.logger.error(`Error generando ZIP de respaldo del paciente ${pacienteId}: ${e?.message}`);
+      }
+    }
+
+    return { attachments, rutasFisicas };
+  }
+
+  async eliminarDeRaiz(
+    pacienteId: number,
+    ctx: { userId?: number; userNombre?: string; motivo?: string } = {},
+  ): Promise<{ success: boolean; paciente: any; counts: Record<string, number> }> {
+    const paciente = await this.pacienteRepository.findOne({
+      where: { id: pacienteId },
+      relations: ['tipo_documento', 'sexo', 'distrito', 'responsable_relacion', 'responsable_tipo_documento'],
+    });
+    if (!paciente) {
+      throw new NotFoundException(`Paciente con ID ${pacienteId} no encontrado`);
+    }
+
+    const resumenPaciente = {
+      id: paciente.id,
+      nombreCompleto: `${paciente.nombres} ${paciente.apellido_paterno} ${paciente.apellido_materno}`.trim(),
+      tipoDocumento: paciente.tipo_documento?.nombre || 'Documento',
+      numeroDocumento: paciente.numero_documento,
+    };
+
+    // Backup (Excel de notas + archivos digitales) ANTES de borrar nada
+    const backup = await this.construirBackupPaciente(pacienteId, paciente);
+
+    const rootTable = this.pacienteRepository.metadata.tableName;
+
+    // 1) Descubrir todas las FKs del esquema
+    const fks: Array<{
+      TABLE_NAME: string;
+      COLUMN_NAME: string;
+      REFERENCED_TABLE_NAME: string;
+      REFERENCED_COLUMN_NAME: string;
+    }> = await this.dataSource.query(
+      `SELECT TABLE_NAME, COLUMN_NAME, REFERENCED_TABLE_NAME, REFERENCED_COLUMN_NAME
+       FROM information_schema.KEY_COLUMN_USAGE
+       WHERE TABLE_SCHEMA = DATABASE() AND REFERENCED_TABLE_NAME IS NOT NULL`,
+    );
+
+    // 2) PK de una sola columna por tabla (para poder recursar a sus hijos)
+    const pkRows: Array<{ TABLE_NAME: string; COLUMN_NAME: string }> = await this.dataSource.query(
+      `SELECT k.TABLE_NAME, k.COLUMN_NAME
+       FROM information_schema.KEY_COLUMN_USAGE k
+       JOIN information_schema.TABLE_CONSTRAINTS t
+         ON t.CONSTRAINT_NAME = k.CONSTRAINT_NAME
+        AND t.TABLE_NAME = k.TABLE_NAME
+        AND t.TABLE_SCHEMA = k.TABLE_SCHEMA
+       WHERE t.CONSTRAINT_TYPE = 'PRIMARY KEY' AND k.TABLE_SCHEMA = DATABASE()`,
+    );
+    const pkCount: Record<string, number> = {};
+    const pkCol: Record<string, string> = {};
+    for (const r of pkRows) {
+      pkCount[r.TABLE_NAME] = (pkCount[r.TABLE_NAME] || 0) + 1;
+      pkCol[r.TABLE_NAME] = r.COLUMN_NAME;
+    }
+
+    // refValues[tabla][columna] = Set(valores) que sus hijos referencian
+    const refValues: Record<string, Record<string, Set<any>>> = {};
+    const addRef = (table: string, col: string, vals: any[]): any[] => {
+      if (!refValues[table]) refValues[table] = {};
+      if (!refValues[table][col]) refValues[table][col] = new Set();
+      const set = refValues[table][col];
+      const nuevos: any[] = [];
+      for (const v of vals) {
+        if (v !== null && v !== undefined && !set.has(v)) {
+          set.add(v);
+          nuevos.push(v);
+        }
+      }
+      return nuevos;
+    };
+
+    const chunk = <T>(arr: T[], size: number): T[][] => {
+      const out: T[][] = [];
+      for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+      return out;
+    };
+
+    // Instrucciones de borrado: borrar `table` donde `col` IN (vals)
+    const deleteInstrucciones: Array<{ table: string; col: string; vals: any[] }> = [];
+
+    // 3) BFS de cierre transitivo a partir del paciente
+    addRef(rootTable, 'id', [pacienteId]);
+    const queue: Array<{ table: string; col: string; vals: any[] }> = [
+      { table: rootTable, col: 'id', vals: [pacienteId] },
+    ];
+
+    while (queue.length) {
+      const { table, col, vals } = queue.shift();
+      if (!vals.length) continue;
+
+      const hijos = fks.filter(
+        (f) => f.REFERENCED_TABLE_NAME === table && f.REFERENCED_COLUMN_NAME === col,
+      );
+
+      for (const fk of hijos) {
+        const childTable = fk.TABLE_NAME;
+        const childCol = fk.COLUMN_NAME;
+
+        // Registrar borrado de las filas hijas que apuntan a estos valores
+        deleteInstrucciones.push({ table: childTable, col: childCol, vals: [...vals] });
+
+        // Si el hijo tiene PK de una sola columna, recursar a sus propios hijos
+        if (pkCount[childTable] === 1) {
+          const childPk = pkCol[childTable];
+          const idsHijo: any[] = [];
+          for (const part of chunk(vals, 500)) {
+            const placeholders = part.map(() => '?').join(',');
+            const rows = await this.dataSource.query(
+              `SELECT DISTINCT \`${childPk}\` AS id FROM \`${childTable}\` WHERE \`${childCol}\` IN (${placeholders})`,
+              part,
+            );
+            for (const r of rows) idsHijo.push(r.id);
+          }
+          const nuevos = addRef(childTable, childPk, idsHijo);
+          if (nuevos.length) queue.push({ table: childTable, col: childPk, vals: nuevos });
+        }
+      }
+    }
+
+    // 4) Red de seguridad: cualquier tabla con columna `paciente_id` (relación sin FK declarada)
+    const tablasConPacienteId: Array<{ TABLE_NAME: string }> = await this.dataSource.query(
+      `SELECT DISTINCT TABLE_NAME FROM information_schema.COLUMNS
+       WHERE TABLE_SCHEMA = DATABASE() AND COLUMN_NAME = 'paciente_id'`,
+    );
+    for (const t of tablasConPacienteId) {
+      if (t.TABLE_NAME === rootTable) continue;
+      deleteInstrucciones.push({ table: t.TABLE_NAME, col: 'paciente_id', vals: [pacienteId] });
+    }
+
+    // 5) Ejecutar borrado en transacción con FK checks desactivados
+    const qr = this.dataSource.createQueryRunner();
+    await qr.connect();
+    await qr.startTransaction();
+    const counts: Record<string, number> = {};
+    try {
+      await qr.query('SET FOREIGN_KEY_CHECKS = 0');
+
+      for (const ins of deleteInstrucciones) {
+        if (!ins.vals.length) continue;
+        for (const part of chunk(ins.vals, 500)) {
+          const placeholders = part.map(() => '?').join(',');
+          const res = await qr.query(
+            `DELETE FROM \`${ins.table}\` WHERE \`${ins.col}\` IN (${placeholders})`,
+            part,
+          );
+          const afected = res?.affectedRows || 0;
+          if (afected) counts[ins.table] = (counts[ins.table] || 0) + afected;
+        }
+      }
+
+      // Finalmente el propio paciente
+      const resP = await qr.query(`DELETE FROM \`${rootTable}\` WHERE \`id\` = ?`, [pacienteId]);
+      counts[rootTable] = (counts[rootTable] || 0) + (resP?.affectedRows || 0);
+
+      await qr.query('SET FOREIGN_KEY_CHECKS = 1');
+      await qr.commitTransaction();
+    } catch (e) {
+      await qr.rollbackTransaction();
+      this.logger.error(`Error en eliminación total del paciente ${pacienteId}: ${e?.message}`, e?.stack);
+      throw e;
+    } finally {
+      await qr.release();
+    }
+
+    // 6) Correo de respaldo + informativo (no rompe la operación si falla).
+    //    Adjunta el Excel de notas de evolución y los archivos digitales del paciente.
+    await this.mailService.enviarCorreoEliminacionPaciente({
+      paciente: resumenPaciente,
+      motivo: ctx.motivo,
+      ejecutadoPor: ctx.userNombre,
+      counts,
+      attachments: backup.attachments,
+    });
+
+    // 7) Borrar los archivos físicos del disco para que no quede nada en el sistema
+    for (const ruta of backup.rutasFisicas) {
+      try {
+        if (fs.existsSync(ruta)) await fs.promises.unlink(ruta);
+      } catch (e) {
+        this.logger.warn(`No se pudo eliminar el archivo físico ${ruta}: ${e?.message}`);
+      }
+    }
+
+    return { success: true, paciente: resumenPaciente, counts };
+  }
 
   /**
    * Parsea una fecha desde string (YYYY-MM-DD) a Date sin problemas de timezone

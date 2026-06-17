@@ -15,6 +15,7 @@ import { VentaProductoPago } from './entities/venta-producto-pago.entity';
 import { Paciente } from '../pacientes/paciente.entity';
 import { PacienteResponsable } from '../pacientes/entities/paciente-responsable.entity';
 import { Servicios } from '../catalogos/servicios.entity';
+import { AreaServicio } from '../catalogos/area-servicio.entity';
 import { Paquete } from '../catalogos/paquete.entity';
 import { Producto } from '../inventario/entities/producto.entity';
 
@@ -56,6 +57,7 @@ import { ComprobanteService } from './services/comprobante.service';
       VentaProductoPago,
       // Entidades externas necesarias para los repositorios
       Paciente,
+      AreaServicio,
       PacienteResponsable,
       ServicioTarifa,
       ServicioPaquetePrecio,

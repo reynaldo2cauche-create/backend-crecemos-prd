@@ -71,3 +71,28 @@ export interface CitasTerapeutaHistorico {
   periodos: PeriodoHistorico[];     // ordenados del más antiguo al más reciente
   filas: FilaCitasHistorico[];
 }
+
+export interface FilaPacientesHistorico {
+  servicio_id: number;
+  nombre: string;
+  valores: Record<string, number>; // key de período -> nº de pacientes registrados
+  total: number;                    // suma de todos los períodos
+  crecimiento: number;              // % del último período vs el anterior
+}
+
+export interface PacientesRegistradosHistorico {
+  modo: 'mensual' | 'anual';
+  periodos: PeriodoHistorico[];     // ordenados del más antiguo al más reciente
+  filas: FilaPacientesHistorico[];  // filas por servicio
+  totalesPorPeriodo: Record<string, number>; // total de registros por período
+  totalGeneral: number;             // total de pacientes registrados en el rango
+}
+
+export interface PacienteInactivadoDetalle {
+  id: number;
+  nombre: string;
+  documento: string;
+  servicio: string;
+  area: string;
+  fecha_inactivacion: string;
+}

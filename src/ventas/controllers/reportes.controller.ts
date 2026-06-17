@@ -21,6 +21,22 @@ export class ReportesController {
     return this.reportesService.getCitasPorTerapeutaHistorico(fechaInicio, fechaFin);
   }
 
+  @Get('pacientes-historico')
+  getPacientesHistorico(
+    @Query('fechaInicio') fechaInicio: string,
+    @Query('fechaFin') fechaFin: string,
+  ) {
+    return this.reportesService.getPacientesRegistradosHistorico(fechaInicio, fechaFin);
+  }
+
+  @Get('pacientes-inactivados')
+  getPacientesInactivados(
+    @Query('fechaInicio') fechaInicio: string,
+    @Query('fechaFin') fechaFin: string,
+  ) {
+    return this.reportesService.getPacientesInactivadosDetalle(fechaInicio, fechaFin);
+  }
+
   @Get()
   async getReportes(
     @Query('fechaInicio') fechaInicio: string,

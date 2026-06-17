@@ -41,6 +41,7 @@ import { GeofencingModule } from 'src/geofencing/geofencing.module';
 import { AuditoriaModule } from 'src/auditoria/auditoria.module';
 import { Cita } from '../citas/entities/cita.entity';
 import { PacientesInactivosScheduler } from './pacientes-inactivos.task';
+import { MailModule } from '../mail/mail.module';
 
 @Module({
   imports: [
@@ -64,6 +65,7 @@ import { PacientesInactivosScheduler } from './pacientes-inactivos.task';
     NotificacionesModule,
     GeofencingModule,
     AuditoriaModule,
+    MailModule,
   ],
   providers: [
     PacienteService,

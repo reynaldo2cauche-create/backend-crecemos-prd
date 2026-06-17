@@ -1,4 +1,4 @@
-import { Controller, Post, Body, Get, Patch, Param, Query, UseGuards, Request } from '@nestjs/common';
+import { Controller, Post, Body, Get, Patch, Delete, Param, Query, UseGuards, Request, ForbiddenException } from '@nestjs/common';
 import { PacienteService } from './paciente.service';
 import { AsignacionTerapeutaService } from './asignacion-terapeuta.service';
 import { PacientesInactivosScheduler } from './pacientes-inactivos.task';
@@ -190,6 +190,38 @@ async findAllIncludingInactive(@Query() query: any) {
   })
   findOne(@Param('id') id: string) {
     return this.pacienteService.findOneById(+id);
+  }
+
+  /**
+   * ⚠️ ELIMINACIÓN TOTAL E IRREVERSIBLE del paciente y todo lo relacionado
+   * (historia clínica, citas, ventas/pagos, archivos), a solicitud del paciente.
+   * Solo accesible para Administrador (rol_id = 1). Envía correo informativo a
+   * info@ y rrhh@ con el detalle.
+   */
+  @Delete(':id/eliminar-de-raiz')
+  @Auditable({
+    modulo: 'PACIENTES',
+    accion: 'ELIMINAR_PACIENTE_DE_RAIZ',
+  })
+  async eliminarDeRaiz(
+    @Param('id') id: string,
+    @Body() body: { motivo?: string },
+    @Request() req,
+  ) {
+    const rolId = req.user?.rol?.id;
+    if (rolId !== 1) {
+      throw new ForbiddenException('Solo un administrador puede eliminar totalmente a un paciente.');
+    }
+
+    const userNombre = `${req.user?.nombres || ''} ${req.user?.apellidos || ''}`.trim()
+      || req.user?.correo
+      || `Usuario ${req.user?.id ?? ''}`.trim();
+
+    return this.pacienteService.eliminarDeRaiz(+id, {
+      userId: req.user?.id,
+      userNombre,
+      motivo: body?.motivo,
+    });
   }
 
   @Patch(':id/estado')

@@ -293,4 +293,106 @@ export class MailService {
     });
     console.log(`✅ Reporte de agenda enviado a: ${opts.to.join(', ')}`);
   }
+
+  /**
+   * Notifica (informativo) la eliminación total de un paciente del sistema,
+   * realizada a solicitud del propio paciente (derecho de supresión).
+   * Se envía a info@ y rrhh@ con el nombre, documento y el detalle de lo eliminado.
+   */
+  async enviarCorreoEliminacionPaciente(data: {
+    paciente: {
+      id: number;
+      nombreCompleto: string;
+      tipoDocumento: string;
+      numeroDocumento: string;
+    };
+    motivo?: string;
+    ejecutadoPor?: string;
+    counts: Record<string, number>;
+    attachments?: Array<{ filename: string; content: Buffer; contentType?: string }>;
+  }): Promise<void> {
+    try {
+      const remitente = this.configService.get('MAIL_USER');
+      const destinoInfo = this.configService.get('INFO_EMAIL', 'info@crecemos.com.pe');
+      const destinoRrhh = this.configService.get('RRHH_EMAIL', 'rrhh@crecemos.com.pe');
+
+      const totalRegistros = Object.values(data.counts || {}).reduce((a, b) => a + (b || 0), 0);
+
+      const filasDetalle = Object.entries(data.counts || {})
+        .filter(([, n]) => n > 0)
+        .sort((a, b) => b[1] - a[1])
+        .map(
+          ([tabla, n]) => `
+            <tr>
+              <td style="padding:6px 10px; border:1px solid #eee;">${tabla}</td>
+              <td style="padding:6px 10px; border:1px solid #eee; text-align:right;">${n}</td>
+            </tr>`,
+        )
+        .join('');
+
+      const fechaTexto = new Date().toLocaleString('es-PE');
+
+      const mailOptions = {
+        from: `"Centro Crecemos - Sistema" <${remitente}>`,
+        to: [destinoInfo, destinoRrhh],
+        subject: `Eliminación de paciente a solicitud — ${data.paciente.nombreCompleto} (${data.paciente.numeroDocumento})`,
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 640px; margin: 0 auto;">
+            <h2 style="color: #b91c1c;">Eliminación total de paciente</h2>
+
+            <p>Se informa que, <strong>a solicitud del propio paciente</strong>, se ha eliminado
+            de forma permanente del sistema toda la información del paciente, incluida su
+            <strong>historia clínica</strong> y todo lo relacionado (citas, ventas/pagos, archivos, etc.).</p>
+
+            <div style="background-color: #fef2f2; border: 1px solid #fecaca; padding: 15px; border-radius: 6px; margin: 20px 0;">
+              <p style="margin: 5px 0;"><strong>Paciente:</strong> ${data.paciente.nombreCompleto}</p>
+              <p style="margin: 5px 0;"><strong>${data.paciente.tipoDocumento}:</strong> ${data.paciente.numeroDocumento}</p>
+              <p style="margin: 5px 0;"><strong>ID interno:</strong> ${data.paciente.id}</p>
+              <p style="margin: 5px 0;"><strong>Fecha de eliminación:</strong> ${fechaTexto}</p>
+              ${data.ejecutadoPor ? `<p style="margin: 5px 0;"><strong>Ejecutado por:</strong> ${data.ejecutadoPor}</p>` : ''}
+              ${data.motivo ? `<p style="margin: 5px 0;"><strong>Detalle de la solicitud:</strong> ${data.motivo}</p>` : ''}
+            </div>
+
+            <h3 style="color: #7B1FA2;">Resumen de registros eliminados (${totalRegistros})</h3>
+            <table style="border-collapse: collapse; width: 100%; font-size: 13px;">
+              <thead>
+                <tr style="background:#f5f5f5;">
+                  <th style="padding:6px 10px; border:1px solid #eee; text-align:left;">Tabla</th>
+                  <th style="padding:6px 10px; border:1px solid #eee; text-align:right;">Registros</th>
+                </tr>
+              </thead>
+              <tbody>${filasDetalle || '<tr><td colspan="2" style="padding:6px 10px;">Sin registros relacionados.</td></tr>'}</tbody>
+            </table>
+
+            ${(data.attachments?.length || 0) > 0 ? `
+            <p style="font-size: 13px; color: #374151; margin-top: 16px;">
+              📎 Se adjunta un <strong>ZIP de respaldo</strong> del paciente que contiene el Excel de notas de evolución
+              y todos sus archivos digitales subidos.
+            </p>` : ''}
+
+            <p style="font-size: 12px; color: #b91c1c; margin-top: 16px;">
+              <strong>Esta acción es irreversible.</strong> Este correo es informativo y constancia de la eliminación solicitada.
+            </p>
+
+            <hr style="margin: 30px 0; border: none; border-top: 1px solid #ddd;">
+            <p style="font-size: 12px; color: #999;">
+              <strong>CONTIGO CRECEMOS E.I.R.L.</strong><br>
+              Notificación automática del sistema de gestión de pacientes.
+            </p>
+          </div>
+        `,
+        attachments: (data.attachments || []).map((a) => ({
+          filename: a.filename,
+          content: a.content,
+          contentType: a.contentType,
+        })),
+      };
+
+      await this.mailerService.sendMail(mailOptions);
+      console.log(`✅ Correo de eliminación de paciente enviado a: ${destinoInfo}, ${destinoRrhh}`);
+    } catch (error) {
+      console.error('❌ Error al enviar correo de eliminación de paciente:', error?.message || error);
+      // No relanzamos: el correo no debe romper la operación de eliminación
+    }
+  }
 }

@@ -3,7 +3,8 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { VentaProducto } from '../entities/venta-producto.entity';
 import { VentaServicio } from '../entities/venta-servicio.entity';
-import { TipoReporte, ReporteParams, Metricas, VentaDia, TopItem, DescuentoPorTipo, IngresoResponsable, CitasTerapeuta, CitasTerapeutaHistorico, PeriodoHistorico, FilaCitasHistorico } from '../types/reportes.types';
+import { AreaServicio } from '../../catalogos/area-servicio.entity';
+import { TipoReporte, ReporteParams, Metricas, VentaDia, TopItem, DescuentoPorTipo, IngresoResponsable, CitasTerapeuta, CitasTerapeutaHistorico, PeriodoHistorico, FilaCitasHistorico, PacientesRegistradosHistorico, FilaPacientesHistorico, PacienteInactivadoDetalle } from '../types/reportes.types';
 
 function incluyeProductos(tipo: TipoReporte) {
   return tipo === 'general' || tipo === 'productos';
@@ -28,6 +29,8 @@ export class ReportesService {
     private readonly ventaProductoRepo: Repository<VentaProducto>,
     @InjectRepository(VentaServicio)
     private readonly ventaServicioRepo: Repository<VentaServicio>,
+    @InjectRepository(AreaServicio)
+    private readonly areaServicioRepo: Repository<AreaServicio>,
   ) {}
 
   async generarReporte(params: ReporteParams) {
@@ -583,6 +586,134 @@ export class ReportesService {
       .sort((a, b) => b.total - a.total);
 
     return { modo: esAnual ? 'anual' : 'mensual', periodos, filas };
+  }
+
+  // ── Pacientes registrados (histórico por servicio) ────────────────────────
+  // Mismo formato que "citas por terapeuta": mensual (últimos 6 meses + actual)
+  // o anual (este año vs el anterior). Filas = servicio del paciente.
+  async getPacientesRegistradosHistorico(
+    fechaInicio: string,
+    fechaFin: string,
+  ): Promise<PacientesRegistradosHistorico> {
+    const inicio = new Date(fechaInicio + 'T00:00:00');
+    const fin = new Date(fechaFin + 'T00:00:00');
+    const dias = Math.round((fin.getTime() - inicio.getTime()) / 86_400_000);
+    const esAnual = dias >= 180;
+
+    const MESES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+    const pad = (n: number) => String(n).padStart(2, '0');
+
+    let periodos: PeriodoHistorico[] = [];
+    let rangoInicio: string;
+    let rangoFin: string;
+    let formatoSql: string;
+
+    if (esAnual) {
+      const anioAncla = fin.getFullYear();
+      const anios = [anioAncla - 1, anioAncla];
+      periodos = anios.map((a) => ({ key: String(a), label: String(a) }));
+      rangoInicio = `${anios[0]}-01-01`;
+      rangoFin = `${anioAncla}-12-31`;
+      formatoSql = '%Y';
+    } else {
+      const anclaAnio = fin.getFullYear();
+      const anclaMes = fin.getMonth();
+      for (let i = 5; i >= 0; i--) {
+        const d = new Date(anclaAnio, anclaMes - i, 1);
+        periodos.push({
+          key: `${d.getFullYear()}-${pad(d.getMonth() + 1)}`,
+          label: `${MESES[d.getMonth()]} ${d.getFullYear()}`,
+        });
+      }
+      const primero = new Date(anclaAnio, anclaMes - 5, 1);
+      const ultimo = new Date(anclaAnio, anclaMes + 1, 0);
+      rangoInicio = `${primero.getFullYear()}-${pad(primero.getMonth() + 1)}-01`;
+      rangoFin = `${ultimo.getFullYear()}-${pad(ultimo.getMonth() + 1)}-${pad(ultimo.getDate())}`;
+      formatoSql = '%Y-%m';
+    }
+
+    // Nombres de tabla resueltos por metadata (evita adivinar mayúsc/min en MySQL)
+    const areaTable = this.areaServicioRepo.metadata.tableName;
+
+    // formatoSql y areaTable son valores internos controlados → seguro interpolarlos
+    const sql = `
+      SELECT COALESCE(s.id, 0) AS servicio_id,
+             COALESCE(s.nombre, 'Sin servicio') AS servicio_nombre,
+             COALESCE(a.nombre, '') AS area_nombre,
+             DATE_FORMAT(p.created_at, '${formatoSql}') AS periodo,
+             COUNT(*) AS total
+      FROM paciente p
+      LEFT JOIN servicios s ON s.id = p.servicio_id
+      LEFT JOIN \`${areaTable}\` a ON a.id = s.area_id
+      WHERE DATE(p.created_at) >= ? AND DATE(p.created_at) <= ?
+      GROUP BY servicio_id, servicio_nombre, area_nombre, periodo`;
+
+    const rows = await this.ventaServicioRepo.query(sql, [rangoInicio, rangoFin]);
+
+    // La clave agrupa por servicio (que ya es único por área), el nombre incluye el área
+    // para distinguir servicios homónimos de distintas áreas.
+    const mapa = new Map<string, { nombre: string; valores: Record<string, number> }>();
+    for (const row of rows) {
+      const id = Number(row.servicio_id);
+      const area = (row.area_nombre || '').trim();
+      const nombre = area ? `${row.servicio_nombre} — ${area}` : row.servicio_nombre;
+      const clave = `${id}`;
+      if (!mapa.has(clave)) mapa.set(clave, { nombre, valores: {} });
+      mapa.get(clave)!.valores[String(row.periodo)] = Number(row.total);
+    }
+
+    const keys = periodos.map((p) => p.key);
+    const ultimoKey = keys[keys.length - 1];
+    const penultimoKey = keys[keys.length - 2];
+
+    const totalesPorPeriodo: Record<string, number> = {};
+    for (const k of keys) totalesPorPeriodo[k] = 0;
+
+    const filas: FilaPacientesHistorico[] = Array.from(mapa.entries())
+      .map(([clave, data]) => {
+        const valores: Record<string, number> = {};
+        let total = 0;
+        for (const k of keys) {
+          const v = data.valores[k] ?? 0;
+          valores[k] = v;
+          total += v;
+          totalesPorPeriodo[k] += v;
+        }
+        const actual = valores[ultimoKey] ?? 0;
+        const previo = penultimoKey ? valores[penultimoKey] ?? 0 : 0;
+        const crecimiento =
+          previo === 0 ? (actual > 0 ? 100 : 0) : Math.round(((actual - previo) / previo) * 1000) / 10;
+        return { servicio_id: Number(clave), nombre: data.nombre, valores, total, crecimiento };
+      })
+      .sort((a, b) => b.total - a.total);
+
+    const totalGeneral = Object.values(totalesPorPeriodo).reduce((a, b) => a + b, 0);
+
+    return { modo: esAnual ? 'anual' : 'mensual', periodos, filas, totalesPorPeriodo, totalGeneral };
+  }
+
+  // ── Pacientes inactivados (lista detallada según el filtro de fechas) ──────
+  // Pacientes en estado Inactivo (estado_paciente_id = 5) cuya inactivación
+  // (última actualización) cae dentro del rango, con su servicio y área.
+  async getPacientesInactivadosDetalle(
+    fechaInicio: string,
+    fechaFin: string,
+  ): Promise<PacienteInactivadoDetalle[]> {
+    const areaTable = this.areaServicioRepo.metadata.tableName;
+    const sql = `
+      SELECT p.id,
+             TRIM(CONCAT(COALESCE(p.nombres, ''), ' ', COALESCE(p.apellido_paterno, ''), ' ', COALESCE(p.apellido_materno, ''))) AS nombre,
+             p.numero_documento AS documento,
+             COALESCE(s.nombre, 'Sin servicio') AS servicio,
+             COALESCE(a.nombre, '') AS area,
+             p.updated_at AS fecha_inactivacion
+      FROM paciente p
+      LEFT JOIN servicios s ON s.id = p.servicio_id
+      LEFT JOIN \`${areaTable}\` a ON a.id = s.area_id
+      WHERE p.estado_paciente_id = 5
+        AND DATE(p.updated_at) >= ? AND DATE(p.updated_at) <= ?
+      ORDER BY p.updated_at DESC`;
+    return this.ventaServicioRepo.query(sql, [fechaInicio, fechaFin]);
   }
 
   // ── Ventas sin cita agendada ──────────────────────────────────────────────
