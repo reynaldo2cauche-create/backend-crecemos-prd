@@ -110,8 +110,12 @@ export class BloqueosService {
   async verificarBloqueado(dto: VerificarBloqueoDto): Promise<boolean> {
     const { trabajadorId, fecha, hora } = dto;
 
-    // Obtener día de la semana (0=Domingo, 1=Lunes, etc.)
-    const diaSemana = new Date(fecha).getDay();
+    // Obtener día de la semana (0=Domingo, 1=Lunes, etc.).
+    // 'fecha' viene como 'YYYY-MM-DD' y se parsea como medianoche UTC; se usa
+    // getUTCDay() para que el día NO se corra según la zona horaria del servidor
+    // (con getDay() en un server UTC-5 el miércoles se calculaba como martes).
+    const [anio, mes, dia] = fecha.split('-').map(Number);
+    const diaSemana = new Date(Date.UTC(anio, mes - 1, dia)).getUTCDay();
 
     const query = this.bloqueoRepo
       .createQueryBuilder('bloqueo')
