@@ -309,7 +309,7 @@ export class ReportesAgendaService {
     citas: any[],
     conResponsable: Set<number>,
     saludo: string,
-  ): Promise<{ paciente: string; telefono: string; mensaje: string }[]> {
+  ): Promise<{ paciente: string; telefono: string; mensaje: string; hora: string }[]> {
     // Agrupar por paciente (igual que el modal: todas sus citas de ese día)
     const porPaciente = new Map<number, any[]>();
     for (const c of citas) {
@@ -319,7 +319,7 @@ export class ReportesAgendaService {
       porPaciente.get(pid).push(c);
     }
 
-    const out: { paciente: string; telefono: string; mensaje: string }[] = [];
+    const out: { paciente: string; telefono: string; mensaje: string; hora: string }[] = [];
 
     for (const [pid, citasPac] of porPaciente) {
       citasPac.sort((a, b) => this.hhmm(a.hora_inicio).localeCompare(this.hhmm(b.hora_inicio)));
@@ -381,10 +381,16 @@ export class ReportesAgendaService {
         }
       }
 
-      out.push({ paciente: nombrePaciente, telefono, mensaje });
+      // Hora de la cita más temprana del paciente (citasPac ya está ordenado por hora)
+      const horaMasTemprana = this.hhmm(cita0.hora_inicio);
+
+      out.push({ paciente: nombrePaciente, telefono, mensaje, hora: horaMasTemprana });
     }
 
-    return out.sort((a, b) => a.paciente.localeCompare(b.paciente));
+    // Ordenar por hora (más temprano arriba); a igual hora, por nombre de paciente
+    return out.sort(
+      (a, b) => a.hora.localeCompare(b.hora) || a.paciente.localeCompare(b.paciente),
+    );
   }
 
   /**
