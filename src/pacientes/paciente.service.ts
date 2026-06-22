@@ -1473,19 +1473,35 @@ async findAll(filters?: {
       .andWhere('paciente.fecha_actua <= :fin', { fin: ultimoDiaMes })
       .getCount();
 
-    // Estadísticas por estado desde paciente_servicio (suma todos los servicios activos)
-    const estadisticasPorEstado = await this.pacienteServicioRepository
-      .createQueryBuilder('ps')
-      .innerJoin('ps.estadoPaciente', 'ep')
-      .innerJoin('ps.paciente', 'paciente')
-      .select('ep.id', 'id')
+    // Estadísticas por estado contando PACIENTES ÚNICOS (no servicios).
+    // Cada paciente se cuenta una sola vez, en su estado MÁS AVANZADO entre sus
+    // servicios activos. Los ids de estado respetan el avance:
+    //   Nuevo=1 < Entrevista=2 < Evaluación=3 < Terapia=4, Inactivo=5.
+    // Los servicios "Inactivo" se excluyen antes de calcular el máximo, así un
+    // paciente con un servicio inactivo y otro activo se cuenta por el activo
+    // (ej.: Inactivo + Evaluación -> Evaluación; Entrevista + Terapia -> Terapia).
+    const estadisticasPorEstado = await this.dataSource
+      .createQueryBuilder()
+      .select('rep.estado_id', 'id')
       .addSelect('ep.nombre', 'nombre')
-      .addSelect('COUNT(ps.id)', 'total')
-      .where('ps.activo = :activo', { activo: true })
-      .andWhere('ep.nombre != :inactivo', { inactivo: 'Inactivo' })
-      .andWhere('paciente.activo = :pacActivo', { pacActivo: true })
-      .andWhere('paciente.mostrar_en_listado = :mostrar', { mostrar: true })
-      .groupBy('ep.id')
+      .addSelect('COUNT(*)', 'total')
+      .from(
+        qb =>
+          qb
+            .select('ps.paciente_id', 'paciente_id')
+            .addSelect('MAX(ps.estado_paciente_id)', 'estado_id')
+            .from(PacienteServicio, 'ps')
+            .innerJoin('ps.estadoPaciente', 'ep2')
+            .innerJoin('ps.paciente', 'paciente')
+            .where('ps.activo = :activo', { activo: true })
+            .andWhere('ep2.nombre != :inactivo', { inactivo: 'Inactivo' })
+            .andWhere('paciente.activo = :pacActivo', { pacActivo: true })
+            .andWhere('paciente.mostrar_en_listado = :mostrar', { mostrar: true })
+            .groupBy('ps.paciente_id'),
+        'rep',
+      )
+      .innerJoin(EstadoPaciente, 'ep', 'ep.id = rep.estado_id')
+      .groupBy('rep.estado_id')
       .addGroupBy('ep.nombre')
       .getRawMany();
 
