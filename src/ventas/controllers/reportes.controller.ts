@@ -13,6 +13,11 @@ export class ReportesController {
     return this.reportesService.getVentasSinCita();
   }
 
+  @Get('paquetes-por-renovar')
+  getPaquetesPorRenovar() {
+    return this.reportesService.getPaquetesPorRenovar();
+  }
+
   @Get('citas-historico')
   getCitasHistorico(
     @Query('fechaInicio') fechaInicio: string,

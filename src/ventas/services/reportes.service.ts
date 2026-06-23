@@ -750,6 +750,98 @@ export class ReportesService {
     `);
   }
 
+  // ── Paquetes por renovar (paciente + servicio con paquete vencido) ─────────
+  // Un par paciente+servicio aparece cuando:
+  //   1) Todas las sesiones vendidas de ese servicio ya tienen cita agendada
+  //      (no queda ninguna sesión libre → no hay venta posterior para seguir
+  //      agendando).  pendientes_por_agendar <= 0
+  //   2) No queda ninguna cita pendiente de atender → la última cita del
+  //      paquete ya fue atendida.  citas_no_atendidas = 0
+  //   3) Asistió al menos a una sesión (sesiones_atendidas > 0).
+  //   4) El paciente está activo EN ESE servicio (paciente_servicio activo y
+  //      con estado_paciente_id <> 5). El estado es por servicio, no global.
+  // Estados de asistencia: 6 = Sesión Dictada, 7 = Asistió.
+  async getPaquetesPorRenovar(): Promise<any[]> {
+    const areaTable = this.areaServicioRepo.metadata.tableName;
+    return this.ventaServicioRepo.query(`
+      SELECT
+        base.paciente_id,
+        base.paciente,
+        base.documento,
+        base.servicio_id,
+        base.servicio,
+        base.area,
+        base.sesiones_totales,
+        base.sesiones_atendidas,
+        base.ultima_venta,
+        base.ultima_cita_fecha
+      FROM (
+        SELECT
+          p.id AS paciente_id,
+          CONCAT(
+            p.nombres, ' ', p.apellido_paterno,
+            IF(p.apellido_materno IS NOT NULL AND p.apellido_materno != '',
+              CONCAT(' ', p.apellido_materno), '')
+          ) AS paciente,
+          p.numero_documento AS documento,
+          st.servicio_id AS servicio_id,
+          COALESCE(s.nombre, 'Sin servicio') AS servicio,
+          COALESCE(a.nombre, '') AS area,
+          SUM(d.sesiones_totales)                              AS sesiones_totales,
+          SUM(d.citas_agendadas)                               AS sesiones_agendadas,
+          SUM(d.citas_atendidas)                               AS sesiones_atendidas,
+          SUM(d.sesiones_totales) - SUM(d.citas_agendadas)     AS pendientes_por_agendar,
+          SUM(d.citas_no_atendidas)                            AS citas_no_atendidas,
+          MAX(d.fecha_venta)                                   AS ultima_venta,
+          MAX(d.ultima_cita_fecha)                             AS ultima_cita_fecha
+        FROM (
+          SELECT
+            vsd.id               AS detalle_id,
+            vsd.paciente_id,
+            vsd.servicio_tarifa_id,
+            vsd.sesiones_totales,
+            vs.fecha_venta,
+            (SELECT COUNT(*) FROM citas c
+               WHERE c.venta_servicio_detalle_id = vsd.id AND c.flg_activo = 1) AS citas_agendadas,
+            (SELECT COUNT(*) FROM citas c
+               LEFT JOIN seguimiento_asistencia sa ON sa.cita_id = c.id
+               WHERE c.venta_servicio_detalle_id = vsd.id AND c.flg_activo = 1
+                 AND (sa.recepcion_estado_id IN (6, 7) OR sa.terapeuta_estado_id IN (6, 7))) AS citas_atendidas,
+            (SELECT COUNT(*) FROM citas c
+               LEFT JOIN seguimiento_asistencia sa ON sa.cita_id = c.id
+               WHERE c.venta_servicio_detalle_id = vsd.id AND c.flg_activo = 1
+                 AND NOT (COALESCE(sa.recepcion_estado_id, 0) IN (6, 7)
+                       OR COALESCE(sa.terapeuta_estado_id, 0) IN (6, 7))) AS citas_no_atendidas,
+            (SELECT MAX(c.fecha) FROM citas c
+               LEFT JOIN seguimiento_asistencia sa ON sa.cita_id = c.id
+               WHERE c.venta_servicio_detalle_id = vsd.id AND c.flg_activo = 1
+                 AND (sa.recepcion_estado_id IN (6, 7) OR sa.terapeuta_estado_id IN (6, 7))) AS ultima_cita_fecha
+          FROM venta_servicio_detalle vsd
+          INNER JOIN venta_servicio vs ON vs.id = vsd.venta_id
+          WHERE vsd.tipo_item_venta = 1
+            AND vsd.servicio_tarifa_id IS NOT NULL
+        ) d
+        INNER JOIN servicio_tarifa st ON st.id = d.servicio_tarifa_id
+        INNER JOIN paciente p ON p.id = d.paciente_id
+        LEFT JOIN servicios s ON s.id = st.servicio_id
+        LEFT JOIN \`${areaTable}\` a ON a.id = s.area_id
+        WHERE EXISTS (
+          SELECT 1 FROM paciente_servicio ps
+          WHERE ps.paciente_id = p.id
+            AND ps.servicio_id = st.servicio_id
+            AND ps.activo = 1
+            AND COALESCE(ps.estado_paciente_id, 0) <> 5
+        )
+        GROUP BY p.id, st.servicio_id
+      ) base
+      WHERE base.pendientes_por_agendar <= 0
+        AND base.citas_no_atendidas = 0
+        AND base.sesiones_atendidas > 0
+      ORDER BY base.ultima_cita_fecha DESC
+      LIMIT 500
+    `);
+  }
+
   // ── Queries base ──────────────────────────────────────────────────────────
 
   private queryVentasProducto(fechaInicio: string, fechaFin: string) {
