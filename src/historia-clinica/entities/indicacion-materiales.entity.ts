@@ -45,6 +45,28 @@ export class IndicacionMateriales {
   @Column({ name: 'guantes_bajalengua_hisopos_crema', default: false })
   guantesBajalenguaHisoposCrema: boolean;
 
+  // ── Materiales granulares de Terapia de Lenguaje ──
+  @Column({ default: false })
+  guantes: boolean;
+
+  @Column({ default: false })
+  bajalengua: boolean;
+
+  @Column({ name: 'hisopos_pequenos', default: false })
+  hisoposPequenos: boolean;
+
+  @Column({ name: 'hisopos_largos', default: false })
+  hisoposLargos: boolean;
+
+  @Column({ name: 'plumones_gruesos', default: false })
+  plumonesGruesos: boolean;
+
+  @Column({ name: 'cuaderno_cuadriculado', default: false })
+  cuadernoCuadriculado: boolean;
+
+  @Column({ name: 'cuaderno_decroly', default: false })
+  cuadernoDecroly: boolean;
+
   @Column({ name: 'cinta_embalaje', default: false })
   cintaEmbalaje: boolean;
 

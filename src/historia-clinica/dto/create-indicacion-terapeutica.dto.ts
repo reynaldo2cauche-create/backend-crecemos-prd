@@ -309,6 +309,35 @@ export class CreateIndicacionMaterialesDto {
   @IsBoolean()
   guantesBajalenguaHisoposCrema?: boolean;
 
+  // ── Materiales granulares de Terapia de Lenguaje ──
+  @IsOptional()
+  @IsBoolean()
+  guantes?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  bajalengua?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  hisoposPequenos?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  hisoposLargos?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  plumonesGruesos?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  cuadernoCuadriculado?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  cuadernoDecroly?: boolean;
+
   @IsOptional()
   @IsBoolean()
   cintaEmbalaje?: boolean;
