@@ -217,15 +217,23 @@ export class SolicitudInformeService {
       );
     }
 
-    // Unicidad por venta
+    // Unicidad por línea de informe dentro de la venta.
+    // Una venta puede vender varios informes (varias líneas venta_servicio_detalle
+    // con tipo_item_venta = 2). Cada informe se identifica por la combinación
+    // venta + documento_tarifa + servicio, por lo que bloquear la venta completa
+    // impedía registrar el segundo informe. Se valida solo esa combinación.
     if (dto.venta_servicio_id) {
       const existe = await this.solicitudRepo.findOne({
-        where: { venta_servicio_id: dto.venta_servicio_id },
+        where: {
+          venta_servicio_id:   dto.venta_servicio_id,
+          documento_tarifa_id: dto.documento_tarifa_id,
+          servicio_id:         dto.servicio_id,
+        },
       });
       if (existe) {
         throw new BadRequestException(
-          `Esta venta ya fue utilizada para la solicitud #${existe.id}. ` +
-          'No se puede reutilizar la misma venta.',
+          `Ya existe una solicitud (#${existe.id}) para este informe de la venta. ` +
+          'No se puede duplicar el mismo informe.',
         );
       }
     }
