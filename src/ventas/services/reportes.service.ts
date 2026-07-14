@@ -750,21 +750,27 @@ export class ReportesService {
     `);
   }
 
-  // ── Paquetes por renovar (paciente + servicio con paquete vencido) ─────────
-  // Un par paciente+servicio aparece cuando:
-  //   1) Todas las sesiones vendidas de ese servicio ya tienen cita agendada
-  //      (no queda ninguna sesión libre → no hay venta posterior para seguir
-  //      agendando).  pendientes_por_agendar <= 0
-  //   2) No queda ninguna cita pendiente de atender → la última cita del
-  //      paquete ya fue atendida.  citas_no_atendidas = 0
-  //   3) Asistió al menos a una sesión (sesiones_atendidas > 0).
-  //   4) El paciente está activo EN ESE servicio (paciente_servicio activo y
-  //      con estado_paciente_id <> 5). El estado es por servicio, no global.
-  // Estados de asistencia: 6 = Sesión Dictada, 7 = Asistió.
+  // ── Paquetes por renovar (un paquete vendido = una fila, criterio por fecha) ─
+  // Base = paquetes vendidos (venta_servicio_detalle). Cada fila es UN paquete:
+  //   - Combo: se agrupan todas las líneas con el mismo paquete_combo_id
+  //     (evaluación + informe verbal, etc. → un solo paquete).
+  //   - Suelto: se agrupa por motivo de cita dentro de la venta.
+  // Un paquete aparece como "por renovar" cuando (criterio POR FECHA, no por
+  // asistencia):
+  //   1) El paciente está activo EN ESE servicio: paciente_servicio con
+  //      activo = 1, estado = 'ACTIVO' y estado_paciente_id <> 5. Excluye
+  //      INACTIVO y FINALIZADO. El estado es por servicio, no global.
+  //   2) El paquete tiene al menos una cita y la fecha de su ÚLTIMA cita ya
+  //      llegó (ultima_cita_fecha <= hoy).
+  //   3) El paciente NO tiene ninguna cita futura (fecha > hoy) en ese servicio
+  //      → si tiene algo agendado más adelante ya renovó / sigue → no aparece.
+  // Las citas canceladas/eliminadas son soft-delete (flg_activo = 0), así que
+  // se ignoran automáticamente. La hora/asistencia ya no importa: manda la fecha.
   async getPaquetesPorRenovar(): Promise<any[]> {
     const areaTable = this.areaServicioRepo.metadata.tableName;
     return this.ventaServicioRepo.query(`
       SELECT
+        base.grupo_id,
         base.paciente_id,
         base.paciente,
         base.documento,
@@ -772,11 +778,19 @@ export class ReportesService {
         base.servicio,
         base.area,
         base.sesiones_totales,
-        base.sesiones_atendidas,
         base.ultima_venta,
-        base.ultima_cita_fecha
+        base.ultima_cita_fecha,
+        (SELECT mc.nombre
+           FROM citas c2
+           LEFT JOIN motivo_cita mc ON mc.id = c2.motivo_id
+           WHERE c2.paciente_id = base.paciente_id
+             AND c2.servicio_id = base.servicio_id
+             AND c2.flg_activo = 1
+           ORDER BY c2.fecha DESC, c2.hora_inicio DESC
+           LIMIT 1) AS ultima_cita_motivo
       FROM (
         SELECT
+          CONCAT(d.venta_id, '-', st.servicio_id, '-', d.grupo_key) AS grupo_id,
           p.id AS paciente_id,
           CONCAT(
             p.nombres, ' ', p.apellido_paterno,
@@ -788,34 +802,26 @@ export class ReportesService {
           COALESCE(s.nombre, 'Sin servicio') AS servicio,
           COALESCE(a.nombre, '') AS area,
           SUM(d.sesiones_totales)                              AS sesiones_totales,
-          SUM(d.citas_agendadas)                               AS sesiones_agendadas,
-          SUM(d.citas_atendidas)                               AS sesiones_atendidas,
-          SUM(d.sesiones_totales) - SUM(d.citas_agendadas)     AS pendientes_por_agendar,
-          SUM(d.citas_no_atendidas)                            AS citas_no_atendidas,
+          SUM(d.citas_count)                                   AS citas_count,
           MAX(d.fecha_venta)                                   AS ultima_venta,
           MAX(d.ultima_cita_fecha)                             AS ultima_cita_fecha
         FROM (
           SELECT
             vsd.id               AS detalle_id,
+            vsd.venta_id,
             vsd.paciente_id,
             vsd.servicio_tarifa_id,
+            vsd.paquete_combo_id,
+            vsd.motivo_cita_id,
             vsd.sesiones_totales,
             vs.fecha_venta,
+            CASE WHEN vsd.paquete_combo_id IS NOT NULL
+                 THEN CONCAT('c', vsd.paquete_combo_id)
+                 ELSE CONCAT('m', COALESCE(vsd.motivo_cita_id, 0)) END AS grupo_key,
             (SELECT COUNT(*) FROM citas c
-               WHERE c.venta_servicio_detalle_id = vsd.id AND c.flg_activo = 1) AS citas_agendadas,
-            (SELECT COUNT(*) FROM citas c
-               LEFT JOIN seguimiento_asistencia sa ON sa.cita_id = c.id
-               WHERE c.venta_servicio_detalle_id = vsd.id AND c.flg_activo = 1
-                 AND (sa.recepcion_estado_id IN (6, 7) OR sa.terapeuta_estado_id IN (6, 7))) AS citas_atendidas,
-            (SELECT COUNT(*) FROM citas c
-               LEFT JOIN seguimiento_asistencia sa ON sa.cita_id = c.id
-               WHERE c.venta_servicio_detalle_id = vsd.id AND c.flg_activo = 1
-                 AND NOT (COALESCE(sa.recepcion_estado_id, 0) IN (6, 7)
-                       OR COALESCE(sa.terapeuta_estado_id, 0) IN (6, 7))) AS citas_no_atendidas,
+               WHERE c.venta_servicio_detalle_id = vsd.id AND c.flg_activo = 1) AS citas_count,
             (SELECT MAX(c.fecha) FROM citas c
-               LEFT JOIN seguimiento_asistencia sa ON sa.cita_id = c.id
-               WHERE c.venta_servicio_detalle_id = vsd.id AND c.flg_activo = 1
-                 AND (sa.recepcion_estado_id IN (6, 7) OR sa.terapeuta_estado_id IN (6, 7))) AS ultima_cita_fecha
+               WHERE c.venta_servicio_detalle_id = vsd.id AND c.flg_activo = 1) AS ultima_cita_fecha
           FROM venta_servicio_detalle vsd
           INNER JOIN venta_servicio vs ON vs.id = vsd.venta_id
           WHERE vsd.tipo_item_venta = 1
@@ -830,13 +836,22 @@ export class ReportesService {
           WHERE ps.paciente_id = p.id
             AND ps.servicio_id = st.servicio_id
             AND ps.activo = 1
+            AND ps.estado = 'ACTIVO'
             AND COALESCE(ps.estado_paciente_id, 0) <> 5
         )
-        GROUP BY p.id, st.servicio_id
+        AND NOT EXISTS (
+          SELECT 1 FROM citas cf
+          WHERE cf.paciente_id = p.id
+            AND cf.servicio_id = st.servicio_id
+            AND cf.flg_activo = 1
+            AND cf.fecha > CURDATE()
+        )
+        GROUP BY d.venta_id, st.servicio_id, d.grupo_key,
+                 p.id, p.numero_documento, p.nombres, p.apellido_paterno,
+                 p.apellido_materno, s.nombre, a.nombre
       ) base
-      WHERE base.pendientes_por_agendar <= 0
-        AND base.citas_no_atendidas = 0
-        AND base.sesiones_atendidas > 0
+      WHERE base.citas_count > 0
+        AND base.ultima_cita_fecha <= CURDATE()
       ORDER BY base.ultima_cita_fecha DESC
       LIMIT 500
     `);
