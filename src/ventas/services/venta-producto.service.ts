@@ -211,11 +211,33 @@ export class VentaProductoService {
   async update(id: number, dto: UpdateVentaProductoDto) {
     const venta = await this.ventaRepo.findOne({
       where: { id },
-      relations: ['detalles']
+      relations: ['detalles', 'detalles.producto', 'tipo_comprobante', 'modalidad_pago'],
     });
     if (!venta) throw new NotFoundException(`Venta de producto ${id} no encontrada`);
 
-    return this.dataSource.transaction(async (manager) => {
+    // 📋 Snapshot del estado ANTES de editar (para auditoría descriptiva con antes → después)
+    const _auditoriaAntes = {
+      total: Number(venta.total),
+      subtotal: Number(venta.subtotal),
+      descuento_monto: Number(venta.descuento_monto),
+      nota: venta.nota,
+      observaciones: venta.observaciones,
+      tipo_comprobante_id: venta.tipo_comprobante_id,
+      tipo_comprobante_nombre: venta.tipo_comprobante?.nombre ?? null,
+      modalidad_pago_id: venta.modalidad_pago_id,
+      modalidad_pago_nombre: venta.modalidad_pago?.nombre ?? null,
+      numDetalles: venta.detalles.length,
+      // Cada línea con sus valores, para detectar cambios a nivel de ítem
+      itemsDetalle: venta.detalles.map((d: any) => ({
+        clave: `p${d.producto_id}`,
+        nombre: d.producto?.nombre ?? 'producto',
+        cantidad: Number(d.cantidad ?? 1),
+        precio: Number(d.precio_unitario ?? 0),
+        subtotal: Number(d.subtotal ?? 0),
+      })),
+    };
+
+    await this.dataSource.transaction(async (manager) => {
       let subtotalFinal = venta.subtotal;
 
       // Si se envían detalles, reemplazar completamente
@@ -323,17 +345,35 @@ export class VentaProductoService {
         }
       }
 
-      return this.findOne(id);
     });
+
+    // ⚠️ findOne DESPUÉS del commit para que refleje los valores NUEVOS
+    // (dentro de la transacción leía los valores viejos → "sin cambios").
+    const actualizada: any = await this.findOne(id);
+    actualizada._auditoriaAntes = _auditoriaAntes;
+    return actualizada;
   }
 
   /** Elimina una venta de producto y devuelve el stock a los productos */
   async remove(id: number) {
     const venta = await this.ventaRepo.findOne({
       where: { id },
-      relations: ['detalles', 'detalles.producto']
+      relations: ['detalles', 'detalles.producto',
+        'paciente', 'responsable', 'comprador_externo', 'tipo_comprobante'],
     });
     if (!venta) throw new NotFoundException(`Venta de producto ${id} no encontrada`);
+
+    // 📋 Resumen de lo que se elimina (para auditoría, antes de borrar los registros)
+    const resumen = {
+      codigo_comprobante: venta.codigo_comprobante,
+      total: Number(venta.total),
+      fecha_venta: venta.fecha_venta,
+      tipo_comprobante: venta.tipo_comprobante,
+      paciente: venta.paciente,
+      responsable: venta.responsable,
+      comprador_externo: venta.comprador_externo,
+      detalles: venta.detalles,
+    };
 
     return this.dataSource.transaction(async (manager) => {
       // Devolver stock a los productos
@@ -358,7 +398,7 @@ export class VentaProductoService {
       // Eliminar venta
       await manager.delete(VentaProducto, id);
 
-      return { message: 'Venta de producto eliminada exitosamente', id };
+      return { message: 'Venta de producto eliminada exitosamente', id, resumen };
     });
   }
 

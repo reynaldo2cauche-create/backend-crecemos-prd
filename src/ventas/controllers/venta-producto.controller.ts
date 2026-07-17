@@ -30,6 +30,7 @@ export class VentaProductoController {
   }
 
   @Patch('pago/:pagoId/validar')
+  @Auditable({ modulo: 'VENTAS', accion: 'VALIDAR_PAGO_VENTA' })
   validarPago(@Param('pagoId') pagoId: string, @Request() req) {
     return this.service.validarPago(+pagoId, req.user?.id);
   }

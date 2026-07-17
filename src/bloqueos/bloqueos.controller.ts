@@ -1,15 +1,21 @@
-import { Controller, Get, Post, Put, Delete, Body, Param, Query, ParseIntPipe } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Body, Param, Query, ParseIntPipe, UseGuards, Request } from '@nestjs/common';
 import { BloqueosService } from './bloqueos.service';
 import { CreateBloqueoDto } from './dto/create-bloqueo.dto';
 import { UpdateBloqueoDto } from './dto/update-bloqueo.dto';
 import { VerificarBloqueoDto } from './dto/verificar-bloqueo.dto';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { Auditable } from '../auditoria/decorators/auditable.decorator';
 
 @Controller('backend_api/bloqueos')
+@UseGuards(JwtAuthGuard)
 export class BloqueosController {
   constructor(private readonly bloqueosService: BloqueosService) {}
 
+  @Auditable({ modulo: 'BLOQUEOS', accion: 'CREAR_BLOQUEO' })
   @Post()
-  async create(@Body() createBloqueoDto: CreateBloqueoDto) {
+  async create(@Body() createBloqueoDto: CreateBloqueoDto, @Request() req) {
+    // El usuario responsable se toma del token (no del cliente) para que la auditoría sea confiable
+    createBloqueoDto.userIdCrea = req.user?.id ?? createBloqueoDto.userIdCrea;
     return await this.bloqueosService.create(createBloqueoDto);
   }
 
@@ -33,6 +39,7 @@ export class BloqueosController {
     return await this.bloqueosService.findOne(id);
   }
 
+  @Auditable({ modulo: 'BLOQUEOS', accion: 'EDITAR_BLOQUEO' })
   @Put(':id')
   async update(
     @Param('id', ParseIntPipe) id: number,
@@ -41,12 +48,16 @@ export class BloqueosController {
     return await this.bloqueosService.update(id, updateBloqueoDto);
   }
 
+  @Auditable({ modulo: 'BLOQUEOS', accion: 'ELIMINAR_BLOQUEO' })
   @Delete(':id')
   async delete(
     @Param('id', ParseIntPipe) id: number,
-    @Query('userId', ParseIntPipe) userId?: number,
+    @Request() req,
+    @Body('motivoEliminacion') motivoEliminacion?: string,
   ) {
-    return await this.bloqueosService.delete(id, userId);
+    // Usuario responsable desde el token; motivo de eliminación desde el body
+    const userId = req.user?.id;
+    return await this.bloqueosService.delete(id, userId, motivoEliminacion);
   }
 
   @Post('verificar')

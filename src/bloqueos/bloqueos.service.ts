@@ -30,7 +30,9 @@ export class BloqueosService {
       userIdCrea: dto.userIdCrea,
     });
 
-    return await this.bloqueoRepo.save(bloqueo);
+    const guardado = await this.bloqueoRepo.save(bloqueo);
+    // Recargar con relaciones (trabajador, tipo) para que la auditoría lo describa
+    return await this.findOne(guardado.id);
   }
 
   async findAll(): Promise<BloqueoHorarios[]> {
@@ -99,12 +101,15 @@ export class BloqueosService {
     return await this.bloqueoRepo.save(bloqueo);
   }
 
-  async delete(id: number, userId?: number): Promise<void> {
+  async delete(id: number, userId?: number, motivoEliminacion?: string): Promise<any> {
+    // findOne carga las relaciones (trabajador, tipoBloqueo) antes de desactivar
     const bloqueo = await this.findOne(id);
     bloqueo.activo = false;
     bloqueo.userIdActua = userId;
     bloqueo.fechaActua = new Date();
     await this.bloqueoRepo.save(bloqueo);
+    // Se devuelve el bloqueo (con relaciones) + el motivo de eliminación para la auditoría
+    return { ...bloqueo, motivoEliminacion };
   }
 
   async verificarBloqueado(dto: VerificarBloqueoDto): Promise<boolean> {

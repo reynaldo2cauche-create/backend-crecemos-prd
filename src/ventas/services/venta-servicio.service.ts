@@ -715,7 +715,8 @@ export class VentaServicioService {
 
     const venta = await this.ventaRepo.findOne({
       where: { id },
-      relations: ['detalles']
+      relations: ['detalles', 'detalles.servicio_tarifa', 'detalles.servicio_tarifa.servicio',
+        'tipo_comprobante', 'modalidad_pago'],
     });
     if (!venta) {
       console.log(`❌ Venta ${id} no encontrada`);
@@ -723,6 +724,28 @@ export class VentaServicioService {
     }
 
     console.log(`✅ Venta ${id} encontrada, tiene ${venta.detalles.length} detalles`);
+
+    // 📋 Snapshot del estado ANTES de editar (para auditoría descriptiva con antes → después)
+    const _auditoriaAntes = {
+      total: Number(venta.total),
+      subtotal: Number(venta.subtotal),
+      descuento_monto: Number(venta.descuento_monto),
+      nota: venta.nota,
+      observaciones: venta.observaciones,
+      tipo_comprobante_id: venta.tipo_comprobante_id,
+      tipo_comprobante_nombre: venta.tipo_comprobante?.nombre ?? null,
+      modalidad_pago_id: venta.modalidad_pago_id,
+      modalidad_pago_nombre: venta.modalidad_pago?.nombre ?? null,
+      numDetalles: venta.detalles.length,
+      // Cada línea con sus valores, para detectar cambios a nivel de ítem
+      itemsDetalle: venta.detalles.map((d: any) => ({
+        clave: d.descripcionLinea || d.servicio_tarifa?.servicio?.nombre || `st${d.servicio_tarifa_id}` || 'item',
+        nombre: d.descripcionLinea || d.servicio_tarifa?.servicio?.nombre || 'ítem',
+        cantidad: Number(d.sesiones_totales ?? 1),
+        precio: Number(d.precio_unitario ?? 0),
+        subtotal: Number(d.subtotal ?? 0),
+      })),
+    };
 
     // 🔥 VERIFICAR SI REALMENTE HAY CITAS ASOCIADAS (no confiar solo en sesiones_usadas)
     if (dto.detalles && dto.detalles.length > 0) {
@@ -751,7 +774,7 @@ export class VentaServicioService {
       }
     }
 
-    return this.dataSource.transaction(async (manager) => {
+    await this.dataSource.transaction(async (manager) => {
       let subtotalFinal = venta.subtotal;
 
       // Si se envían detalles, reemplazar completamente
@@ -926,8 +949,13 @@ export class VentaServicioService {
         }
       }
 
-      return this.findOne(id);
     });
+
+    // ⚠️ findOne DESPUÉS del commit: dentro de la transacción, this.findOne usa otra
+    // conexión y leía los valores VIEJOS, por eso la auditoría decía "sin cambios".
+    const actualizada: any = await this.findOne(id);
+    actualizada._auditoriaAntes = _auditoriaAntes;
+    return actualizada;
   }
 
   /** Verifica si una venta tiene citas asociadas */
@@ -969,7 +997,8 @@ export class VentaServicioService {
 
     const venta = await this.ventaRepo.findOne({
       where: { id },
-      relations: ['detalles']
+      relations: ['detalles', 'detalles.servicio_tarifa', 'detalles.servicio_tarifa.servicio',
+        'paciente', 'responsable', 'comprador_externo', 'tipo_comprobante'],
     });
 
     if (!venta) {
@@ -978,6 +1007,18 @@ export class VentaServicioService {
     }
 
     console.log(`✅ Venta ${id} encontrada, tiene ${venta.detalles.length} detalles`);
+
+    // 📋 Resumen de lo que se elimina (para auditoría, antes de borrar los registros)
+    const resumen = {
+      codigo_comprobante: venta.codigo_comprobante,
+      total: Number(venta.total),
+      fecha_venta: venta.fecha_venta,
+      tipo_comprobante: venta.tipo_comprobante,
+      paciente: venta.paciente,
+      responsable: venta.responsable,
+      comprador_externo: venta.comprador_externo,
+      detalles: venta.detalles,
+    };
 
     // 🔥 VERIFICAR SI REALMENTE HAY CITAS ASOCIADAS (no confiar solo en sesiones_usadas)
     const detalleIds = venta.detalles.map(d => d.id);
@@ -1024,7 +1065,7 @@ export class VentaServicioService {
       // Eliminar venta
       await manager.delete(VentaServicio, id);
 
-      return { message: 'Venta de servicio eliminada exitosamente', id };
+      return { message: 'Venta de servicio eliminada exitosamente', id, resumen };
     });
   }
 

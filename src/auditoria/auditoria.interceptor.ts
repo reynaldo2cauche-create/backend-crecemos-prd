@@ -70,7 +70,12 @@ export class AuditoriaInterceptor implements NestInterceptor {
     }
 
     // 🛡️ PROTECCIÓN CONTRA REGISTROS DUPLICADOS
-    const requestKey = `${user.id}-${metadata.accion}-${metadata.modulo}-${request.url}-${request.method}`;
+    // Se incluye el cuerpo/params de la petición en la clave para que acciones
+    // enviadas casi simultáneamente a la MISMA URL pero con datos distintos
+    // (ej: bloquear varios días de la semana a la vez) se auditen por separado.
+    // Los reenvíos reales idénticos (doble clic, reintentos) siguen deduplicándose.
+    const cuerpoKey = this.serializarParaClave(request.body) + this.serializarParaClave(request.params);
+    const requestKey = `${user.id}-${metadata.accion}-${metadata.modulo}-${request.url}-${request.method}-${cuerpoKey}`;
     const now = Date.now();
     const lastRequestTime = this.requestCache.get(requestKey);
 
@@ -306,6 +311,21 @@ export class AuditoriaInterceptor implements NestInterceptor {
       EDITAR_CITA: this.generarDescripcionEditarCita(responseData),
       ELIMINAR_CITA: this.generarDescripcionEliminarCita(responseData),
 
+      // BLOQUEOS DE HORARIO
+      CREAR_BLOQUEO: this.descBloqueoCrear(responseData),
+      EDITAR_BLOQUEO: this.descBloqueoEditar(responseData),
+      ELIMINAR_BLOQUEO: this.descBloqueoEliminar(request, responseData),
+
+      // VENTAS
+      REGISTRAR_VENTA_SERVICIO: this.descVentaRegistrar(responseData, 'servicios'),
+      ACTUALIZAR_VENTA_SERVICIO: this.descVentaActualizar(responseData, 'servicios'),
+      ELIMINAR_VENTA_SERVICIO: this.descVentaEliminar(responseData, 'servicios'),
+      REGISTRAR_VENTA_PRODUCTO: this.descVentaRegistrar(responseData, 'productos'),
+      ACTUALIZAR_VENTA_PRODUCTO: this.descVentaActualizar(responseData, 'productos'),
+      ELIMINAR_VENTA_PRODUCTO: this.descVentaEliminar(responseData, 'productos'),
+      REGISTRAR_SESION_USADA: this.descSesionUsada(responseData),
+      VALIDAR_PAGO_VENTA: this.descValidarPago(responseData),
+
       // CERTIFICADOS Y OTROS ARCHIVOS
       CREAR_CERTIFICADO: 'Creó un certificado oficial',
       VER_CERTIFICADO: 'Consultó un certificado',
@@ -404,6 +424,21 @@ export class AuditoriaInterceptor implements NestInterceptor {
     } catch (error) {
       this.logger.error('❌ Error al generar descripción detallada:', error);
       return null;
+    }
+  }
+
+  /**
+   * Serializa body/params de forma acotada para usarlos en la clave anti-duplicados.
+   * Evita que un objeto grande genere una clave enorme.
+   */
+  private serializarParaClave(obj: any): string {
+    if (!obj || typeof obj !== 'object' || Object.keys(obj).length === 0) {
+      return '';
+    }
+    try {
+      return JSON.stringify(obj).slice(0, 300);
+    } catch {
+      return '';
     }
   }
 
@@ -677,6 +712,241 @@ export class AuditoriaInterceptor implements NestInterceptor {
     }
 
     return `Eliminó cita del paciente ${pacienteNombre}`;
+  }
+
+  // ─── Descripciones Bloqueos de Horario ──────────────────────────────────────
+
+  /**
+   * Nombre legible de la agenda (terapeuta) del bloqueo
+   */
+  private nombreAgendaBloqueo(b: any): string {
+    const t = b?.trabajador;
+    if (!t) return 'una agenda';
+    const nombre = `${t.nombres ?? ''} ${t.apellidos ?? ''}`.trim();
+    const especialidad = t.especialidad?.nombre;
+    if (!nombre) return 'una agenda';
+    return especialidad ? `${nombre} (${especialidad})` : nombre;
+  }
+
+  /**
+   * Detalle legible del bloqueo: tipo, rango de fechas / día y horario
+   */
+  private formatBloqueoDetalle(b: any): string {
+    if (!b) return '';
+    const dias = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+    const fmtFecha = (f: any) => {
+      if (!f) return '';
+      const [y, m, d] = String(f).slice(0, 10).split('-');
+      return d && m && y ? `${d}/${m}/${y}` : String(f);
+    };
+    const fmtHora = (h: any) => (h ? String(h).slice(0, 5) : '');
+
+    const codigo = b.tipoBloqueo?.codigo;
+    const tipoNombre = b.tipoBloqueo?.nombre || codigo || 'Bloqueo';
+
+    let periodo: string;
+    if (codigo === 'RECURRENTE') {
+      const dia = dias[b.diaSemana] ?? '';
+      periodo = `${dia ? dia + 's, ' : ''}del ${fmtFecha(b.fechaInicio)} al ${fmtFecha(b.fechaFin)}`;
+    } else {
+      periodo = fmtFecha(b.fechaInicio);
+    }
+
+    const horario = b.todoElDia
+      ? 'todo el día'
+      : `${fmtHora(b.horaInicio)}–${fmtHora(b.horaFin)}`;
+
+    return `${tipoNombre} (${periodo}, ${horario})`;
+  }
+
+  private descBloqueoCrear(r: any): string {
+    if (!r) return 'Creó un bloqueo de horario';
+    return `Creó un bloqueo en la agenda de ${this.nombreAgendaBloqueo(r)} — ${this.formatBloqueoDetalle(r)}. Motivo: ${r.motivo || 'sin especificar'}`;
+  }
+
+  private descBloqueoEditar(r: any): string {
+    if (!r) return 'Editó un bloqueo de horario';
+    return `Editó el bloqueo en la agenda de ${this.nombreAgendaBloqueo(r)} — ${this.formatBloqueoDetalle(r)}. Motivo: ${r.motivo || 'sin especificar'}`;
+  }
+
+  private descBloqueoEliminar(req: any, r: any): string {
+    if (!r) {
+      const id = req?.params?.id;
+      return `Eliminó un bloqueo de horario${id ? ` #${id}` : ''}`;
+    }
+    const motivoElim = r.motivoEliminacion || req?.body?.motivoEliminacion;
+    const base = `Eliminó el bloqueo de la agenda de ${this.nombreAgendaBloqueo(r)} — ${this.formatBloqueoDetalle(r)}. Motivo del bloqueo: ${r.motivo || 'sin especificar'}`;
+    return motivoElim ? `${base}. Motivo de eliminación: ${motivoElim}` : base;
+  }
+
+  // ─── Descripciones Ventas ────────────────────────────────────────────────────
+
+  /** Formatea un monto en soles */
+  private montoVenta(n: any): string {
+    return `S/ ${Number(n ?? 0).toFixed(2)}`;
+  }
+
+  /** Nombre del pagador de la venta (paciente / responsable / comprador externo) */
+  private nombrePagadorVenta(v: any): string {
+    const persona = (p: any) =>
+      p ? `${p.nombres ?? ''} ${p.apellido_paterno ?? ''} ${p.apellido_materno ?? ''}`.replace(/\s+/g, ' ').trim() : '';
+    const pac = persona(v?.paciente);
+    if (pac) return pac;
+    const resp = persona(v?.responsable);
+    if (resp) return `${resp} (responsable)`;
+    if (v?.comprador_externo?.nombre) return `${v.comprador_externo.nombre} (externo)`;
+    return 'cliente no especificado';
+  }
+
+  /** Resumen corto de los ítems de la venta */
+  private resumenItemsVenta(v: any, tipo: string): string {
+    const detalles = v?.detalles || [];
+    if (!detalles.length) return '';
+    const map = (d: any) =>
+      tipo === 'productos'
+        ? `${d.cantidad ?? 1}x ${d.producto?.nombre ?? 'producto'}`
+        : (d.descripcionLinea || d.descripcion_linea || d.servicio_tarifa?.servicio?.nombre || 'ítem');
+    const items = detalles.slice(0, 3).map(map);
+    const extra = detalles.length > 3 ? ` y ${detalles.length - 3} más` : '';
+    return items.join('; ') + extra;
+  }
+
+  /** Encabezado común: comprobante + código */
+  private encabezadoVenta(v: any): string {
+    const comp = v?.tipo_comprobante?.nombre ? `${v.tipo_comprobante.nombre} ` : '';
+    return `${comp}${v?.codigo_comprobante ?? ''}`.trim();
+  }
+
+  private descVentaRegistrar(r: any, tipo: string): string {
+    if (!r) return `Registró una venta de ${tipo}`;
+    const cab = this.encabezadoVenta(r);
+    const nDet = (r.detalles || []).length;
+    const items = this.resumenItemsVenta(r, tipo);
+    return `Registró venta de ${tipo}${cab ? ` ${cab}` : ''} — Pagador: ${this.nombrePagadorVenta(r)} — Total: ${this.montoVenta(r.total)}${nDet ? ` — ${nDet} ítem(s): ${items}` : ''}`;
+  }
+
+  private descVentaEliminar(r: any, tipo: string): string {
+    const res = r?.resumen || r;
+    if (!res) return `Eliminó una venta de ${tipo}`;
+    const cab = this.encabezadoVenta(res);
+    const nDet = (res.detalles || []).length;
+    const items = this.resumenItemsVenta(res, tipo);
+    return `Eliminó venta de ${tipo}${cab ? ` ${cab}` : ''} — Pagador: ${this.nombrePagadorVenta(res)} — Total: ${this.montoVenta(res.total)}${nDet ? ` — ${nDet} ítem(s): ${items}` : ''}`;
+  }
+
+  /** Formatea un texto para el diff (truncado, con '(vacío)' si está en blanco) */
+  private textoDiff(s: any): string {
+    const t = (s ?? '').toString().trim();
+    if (!t) return '(vacío)';
+    return t.length > 60 ? `"${t.slice(0, 60)}…"` : `"${t}"`;
+  }
+
+  private descVentaActualizar(r: any, tipo: string): string {
+    if (!r) return `Editó una venta de ${tipo}`;
+    const cab = this.encabezadoVenta(r);
+    const encabezado = `Editó venta de ${tipo}${cab ? ` ${cab}` : ''} — Pagador: ${this.nombrePagadorVenta(r)}`;
+
+    const antes = r._auditoriaAntes;
+    if (!antes) return `${encabezado} — Total actual: ${this.montoVenta(r.total)}`;
+
+    const norm = (s: any) => (s ?? '').toString().trim();
+    const cambios: string[] = [];
+
+    if (Number(antes.total) !== Number(r.total)) {
+      cambios.push(`total: ${this.montoVenta(antes.total)} → ${this.montoVenta(r.total)}`);
+    }
+    if (Number(antes.descuento_monto) !== Number(r.descuento_monto)) {
+      cambios.push(`descuento: ${this.montoVenta(antes.descuento_monto)} → ${this.montoVenta(r.descuento_monto)}`);
+    }
+
+    // Comprobante y método de pago con nombres reales
+    if ((antes.tipo_comprobante_id ?? null) !== (r.tipo_comprobante_id ?? null)) {
+      cambios.push(`comprobante: ${antes.tipo_comprobante_nombre ?? 'ninguno'} → ${r.tipo_comprobante?.nombre ?? 'ninguno'}`);
+    }
+    if ((antes.modalidad_pago_id ?? null) !== (r.modalidad_pago_id ?? null)) {
+      cambios.push(`método de pago: ${antes.modalidad_pago_nombre ?? 'ninguno'} → ${r.modalidad_pago?.nombre ?? 'ninguno'}`);
+    }
+
+    // Nota y observaciones con su contenido real
+    if (norm(antes.nota) !== norm(r.nota)) {
+      cambios.push(`nota: ${this.textoDiff(antes.nota)} → ${this.textoDiff(r.nota)}`);
+    }
+    if (norm(antes.observaciones) !== norm(r.observaciones)) {
+      cambios.push(`observaciones: ${this.textoDiff(antes.observaciones)} → ${this.textoDiff(r.observaciones)}`);
+    }
+
+    // Diff de ítems línea por línea: agregado / quitado / modificado (cantidad, precio, subtotal)
+    const cantLabel = tipo === 'productos' ? 'cantidad' : 'sesiones';
+    const itemsAntes: any[] = antes.itemsDetalle || [];
+    // Mismo mapeo que en el service para poder comparar antes vs. después
+    const itemsDespues: any[] = (r.detalles || []).map((d: any) =>
+      tipo === 'productos'
+        ? {
+            clave: `p${d.producto_id}`,
+            nombre: d.producto?.nombre ?? 'producto',
+            cantidad: Number(d.cantidad ?? 1),
+            precio: Number(d.precio_unitario ?? 0),
+            subtotal: Number(d.subtotal ?? 0),
+          }
+        : {
+            clave: d.descripcionLinea || d.descripcion_linea || d.servicio_tarifa?.servicio?.nombre || `st${d.servicio_tarifa_id}` || 'item',
+            nombre: d.descripcionLinea || d.descripcion_linea || d.servicio_tarifa?.servicio?.nombre || 'ítem',
+            cantidad: Number(d.sesiones_totales ?? 1),
+            precio: Number(d.precio_unitario ?? 0),
+            subtotal: Number(d.subtotal ?? 0),
+          });
+
+    // Agrupar por clave (por si hay líneas repetidas del mismo ítem)
+    const agrupar = (arr: any[]) => {
+      const m = new Map<string, any>();
+      for (const it of arr) {
+        const g = m.get(it.clave) || { nombre: it.nombre, cantidad: 0, subtotal: 0, precio: it.precio };
+        g.cantidad += it.cantidad;
+        g.subtotal += it.subtotal;
+        g.precio = it.precio;
+        m.set(it.clave, g);
+      }
+      return m;
+    };
+    const mA = agrupar(itemsAntes);
+    const mD = agrupar(itemsDespues);
+    const dosDec = (n: any) => Number(n ?? 0).toFixed(2);
+
+    for (const clave of new Set([...mA.keys(), ...mD.keys()])) {
+      const a = mA.get(clave);
+      const d = mD.get(clave);
+      if (a && !d) {
+        cambios.push(`quitó ítem: ${a.nombre} (${a.cantidad} ${cantLabel} × ${this.montoVenta(a.precio)} = ${this.montoVenta(a.subtotal)})`);
+      } else if (!a && d) {
+        cambios.push(`agregó ítem: ${d.nombre} (${d.cantidad} ${cantLabel} × ${this.montoVenta(d.precio)} = ${this.montoVenta(d.subtotal)})`);
+      } else if (a && d) {
+        const sub: string[] = [];
+        if (a.cantidad !== d.cantidad) sub.push(`${cantLabel} ${a.cantidad} → ${d.cantidad}`);
+        if (dosDec(a.precio) !== dosDec(d.precio)) sub.push(`precio ${this.montoVenta(a.precio)} → ${this.montoVenta(d.precio)}`);
+        if (dosDec(a.subtotal) !== dosDec(d.subtotal)) sub.push(`subtotal ${this.montoVenta(a.subtotal)} → ${this.montoVenta(d.subtotal)}`);
+        if (sub.length) cambios.push(`modificó ítem "${d.nombre}": ${sub.join(', ')}`);
+      }
+    }
+
+    return cambios.length
+      ? `${encabezado}. Cambios → ${cambios.join('; ')}`
+      : `${encabezado} (sin cambios en montos ni contenido)`;
+  }
+
+  private descSesionUsada(r: any): string {
+    if (r && r.sesiones_usadas !== undefined) {
+      return `Descontó una sesión de un paquete de servicio (${r.sesiones_usadas}/${r.sesiones_totales} usadas)`;
+    }
+    return 'Descontó una sesión de un paquete de servicio';
+  }
+
+  private descValidarPago(r: any): string {
+    const modalidad = r?.modalidad_pago?.nombre;
+    const monto = r?.monto;
+    const partes: string[] = [];
+    if (monto !== undefined && monto !== null) partes.push(`Monto: ${this.montoVenta(monto)}`);
+    if (modalidad) partes.push(`Método: ${modalidad}`);
+    return `Validó un pago de venta${partes.length ? ` — ${partes.join(' — ')}` : ''}`;
   }
 
   // ─── Descripciones Centro Operativo (TAREAS) ────────────────────────────────
