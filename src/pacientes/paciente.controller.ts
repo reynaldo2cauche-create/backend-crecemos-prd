@@ -184,6 +184,7 @@ async findAllIncludingInactive(@Query() query: any) {
 
 
   @Get(':id')
+    @RequiereUbicacion()
     @Auditable({
       modulo: 'PACIENTES',
       accion: 'VER_PACIENTE',

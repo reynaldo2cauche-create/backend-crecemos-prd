@@ -30,6 +30,7 @@ import { ArchivosDigitalesService } from './archivos-digitales.service';
 import { EntrevistaAdultosController } from './entrevista-adultos.controller';
 import { EntrevistaAdultosService } from './entrevista-adultos.service';
 import { AuditoriaModule } from '../auditoria/auditoria.module';
+import { GeofencingModule } from '../geofencing/geofencing.module';
 import { IndicacionTerapeutica } from './entities/indicacion-terapeutica.entity';
 import { IndicacionCita } from './entities/indicacion-cita.entity';
 import { IndicacionReferencia } from './entities/indicacion-referencia.entity';
@@ -90,6 +91,7 @@ import { HistorialEstadoSolicitud } from './entities/historial-estado-solicitud.
     ]),
     AuditoriaModule,
     NotificacionesModule,
+    GeofencingModule,
   ],
   controllers: [HistoriaClinicaController,ArchivosOficialesController,ArchivosTerapiaController,TiposArchivoController,ArchivosDigitalesController,IndicacionTerapeuticaController,EntrevistaAdultosController,SolicitudInformeController],
   providers: [HistoriaClinicaService, ArchivosTerapiaService, ArchivosOficialesService, TiposArchivoService,ArchivosDigitalesService,IndicacionTerapeuticaService,EntrevistaAdultosService,SolicitudInformeService],

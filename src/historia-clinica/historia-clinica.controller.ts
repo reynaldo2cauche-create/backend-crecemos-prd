@@ -11,9 +11,12 @@ import { EvaluacionTerapiaOcupacional } from './entities/evaluacion-terapia-ocup
 import { UpdateEvaluacionTerapiaDto } from './dto/update-evaluacion-terapia.dto';
 import { Auditable } from 'src/auditoria/decorators/auditable.decorator';
 import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
+import { GeofencingGuard } from 'src/geofencing/geofencing.guard';
+import { RequiereUbicacion } from 'src/geofencing/requiere-ubicacion.decorator';
 
 @Controller('backend_api/historia-clinica')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, GeofencingGuard)
+@RequiereUbicacion()
 export class HistoriaClinicaController {
   constructor(private readonly historiaClinicaService: HistoriaClinicaService) {}
 
