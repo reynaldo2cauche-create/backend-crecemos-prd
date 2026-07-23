@@ -22,7 +22,7 @@ export class ReportesAgendaController {
 
   private async ejecutar() {
     try {
-      const resultado = await this.service.enviarReporteDiario();
+      const resultado = await this.service.enviarReporteDiario({ force: true });
       return { ok: true, ...resultado };
     } catch (e: any) {
       // Devolver el error real (SMTP, etc.) para poder diagnosticar desde la consola

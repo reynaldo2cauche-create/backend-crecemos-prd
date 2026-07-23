@@ -224,6 +224,7 @@ import { PlanEstado } from './plan-terapeutico/entities/plan-estado.entity';
 
 // ── Reportes Agenda (correo diario 7 PM) ────────────────────────────────────────
 import { ReportesAgendaModule } from './reportes-agenda/reportes-agenda.module';
+import { ReporteAgendaEnvio } from './reportes-agenda/entities/reporte-agenda-envio.entity';
 
 
 @Module({
@@ -265,18 +266,18 @@ import { ReportesAgendaModule } from './reportes-agenda/reportes-agenda.module';
 
     
     TypeOrmModule.forRoot({
-      // type: 'mysql',
-      // host: 'localhost',
-      // port: 3306,
-      // username: 'crecemos',
-      // password: 'DB_PASSWORD_REMOVED',
-      // database: 'crecemos_website',
       type: 'mysql',
       host: 'localhost',
       port: 3306,
-      username: 'root',
-      password: 'admin',
+      username: 'crecemos',
+      password: 'DB_PASSWORD_REMOVED',
       database: 'crecemos_website',
+      // type: 'mysql',
+      // host: 'localhost',
+      // port: 3306,
+      // username: 'root',
+      // password: 'admin',
+      // database: 'crecemos_website',
       charset: 'utf8mb4',
       extra: {
         connectionLimit: 10,
@@ -468,6 +469,7 @@ import { ReportesAgendaModule } from './reportes-agenda/reportes-agenda.module';
         PlanFrecuencia,
         PlanResultado,
         PlanEstado,
+        ReporteAgendaEnvio,
 
       ],
         synchronize: false,   // true en desarrollo, false en producción - DESHABILITADO para evitar conflictos con foreign keys

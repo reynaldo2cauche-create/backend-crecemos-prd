@@ -7,6 +7,7 @@ import * as ExcelJS from 'exceljs';
 import { CitasService } from '../citas/citas.service';
 import { MailService } from '../mail/mail.service';
 import { ResponsablePaciente } from '../pacientes/entities/responsable-paciente.entity';
+import { ReporteAgendaEnvio } from './entities/reporte-agenda-envio.entity';
 
 const ROL_TERAPEUTA = 4;
 const DIAS = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
@@ -28,6 +29,8 @@ export class ReportesAgendaService {
     private readonly configService: ConfigService,
     @InjectRepository(ResponsablePaciente)
     private readonly responsablePacienteRepo: Repository<ResponsablePaciente>,
+    @InjectRepository(ReporteAgendaEnvio)
+    private readonly envioRepo: Repository<ReporteAgendaEnvio>,
   ) {}
 
   /**
@@ -50,9 +53,29 @@ export class ReportesAgendaService {
    * semanal (Lun-Sáb) y, al final de cada hoja, los recordatorios (mismo mensaje
    * que el modal de agendar cita) de las citas de mañana de ese terapeuta.
    */
-  async enviarReporteDiario(): Promise<any> {
+  async enviarReporteDiario(opts: { force?: boolean } = {}): Promise<any> {
     this.logger.log('📅 Generando reporte diario de agenda...');
 
+    // Candado diario: garantiza UN solo correo aunque haya varias instancias
+    // del backend disparando el @Cron a la vez. La primera instancia gana el
+    // INSERT; las demás reciben ER_DUP_ENTRY y se omiten. El endpoint /test
+    // pasa force=true para poder probar sin quedar bloqueado.
+    const hoy = this.fechaLima(0);
+    if (!opts.force && !(await this.intentarClaimEnvio(hoy))) {
+      this.logger.warn(`Reporte ${hoy}: ya enviado por otra instancia. Se omite.`);
+      return { enviado: false, motivo: 'Ya enviado hoy (candado diario).', fecha: hoy };
+    }
+
+    try {
+      return await this.generarYEnviar(opts, hoy);
+    } catch (error) {
+      // Si falló el envío, liberamos el candado para permitir un reintento.
+      if (!opts.force) await this.liberarClaim(hoy);
+      throw error;
+    }
+  }
+
+  private async generarYEnviar(opts: { force?: boolean }, hoy: string): Promise<any> {
     const { lunes, sabado } = this.rangoSemana();
     const manana = this.fechaLima(1);
 
@@ -77,6 +100,9 @@ export class ReportesAgendaService {
 
     if (porTerapeuta.size === 0) {
       this.logger.warn('Sin terapeutas activas con citas. No se envía correo.');
+      // No hubo envío: liberamos el candado (el candado solo debe representar
+      // "correo realmente enviado").
+      if (!opts.force) await this.liberarClaim(hoy);
       return { ...diag, motivo: 'No hay terapeutas activas con citas esta semana ni mañana.' };
     }
 
@@ -508,6 +534,40 @@ export class ReportesAgendaService {
       .andWhere('rp.activo = :activo', { activo: true })
       .getRawMany();
     return new Set(rows.map((r) => Number(r.paciente_id)));
+  }
+
+  // ────────────────────────────────────────────────────────────────────────
+  // Candado diario (idempotencia entre instancias)
+  // ────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Intenta reclamar el envío del día `fecha` (YYYY-MM-DD). Devuelve true si esta
+   * instancia ganó el candado (debe enviar) o false si otra ya lo tenía.
+   */
+  private async intentarClaimEnvio(fecha: string): Promise<boolean> {
+    try {
+      await this.envioRepo.insert({ fecha });
+      return true;
+    } catch (e: any) {
+      // ER_DUP_ENTRY (1062): otra instancia ya reclamó esta fecha → no enviar.
+      if (e?.code === 'ER_DUP_ENTRY' || e?.errno === 1062) return false;
+      // Error inesperado de BD (p.ej. tabla ausente): preferimos no bloquear el
+      // envío. Se registra para diagnóstico.
+      this.logger.error(
+        `No se pudo aplicar el candado de envío (${fecha}); se continúa sin candado.`,
+        e?.stack || e,
+      );
+      return true;
+    }
+  }
+
+  /** Libera el candado del día `fecha` para permitir un reintento posterior. */
+  private async liberarClaim(fecha: string): Promise<void> {
+    try {
+      await this.envioRepo.delete({ fecha });
+    } catch (e: any) {
+      this.logger.warn(`No se pudo liberar el candado de envío (${fecha}): ${e?.message || e}`);
+    }
   }
 
   // Helpers que replican el modal de agendar cita
