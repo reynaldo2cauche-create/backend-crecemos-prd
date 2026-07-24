@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -20,7 +20,7 @@ const MESES = [
 type GrupoTerapeuta = { terapeuta: any; semana: any[]; manana: any[] };
 
 @Injectable()
-export class ReportesAgendaService {
+export class ReportesAgendaService implements OnModuleInit {
   private readonly logger = new Logger(ReportesAgendaService.name);
 
   constructor(
@@ -32,6 +32,28 @@ export class ReportesAgendaService {
     @InjectRepository(ReporteAgendaEnvio)
     private readonly envioRepo: Repository<ReporteAgendaEnvio>,
   ) {}
+
+  /**
+   * Al arrancar, garantiza que exista la tabla del candado en la MISMA BD que
+   * usa la app. Así el candado diario funciona aunque nunca se haya corrido la
+   * migración manual en producción (una de las causas del correo doble).
+   */
+  async onModuleInit(): Promise<void> {
+    try {
+      await this.envioRepo.manager.query(
+        `CREATE TABLE IF NOT EXISTS reporte_agenda_envio (
+           fecha DATE NOT NULL,
+           enviado_en TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+           PRIMARY KEY (fecha)
+         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
+      );
+    } catch (e: any) {
+      this.logger.error(
+        'No se pudo asegurar la tabla del candado (reporte_agenda_envio).',
+        e?.stack || e,
+      );
+    }
+  }
 
   /**
    * Se ejecuta TODOS los días a las 7:00:00 PM exactas (hora de Lima).
@@ -546,18 +568,25 @@ export class ReportesAgendaService {
    */
   private async intentarClaimEnvio(fecha: string): Promise<boolean> {
     try {
-      await this.envioRepo.insert({ fecha });
-      return true;
+      // INSERT IGNORE es atómico y NO lanza excepción ante duplicado: si la fila
+      // ya existía, affectedRows = 0. Así no dependemos de detectar el código de
+      // error (que TypeORM puede envolver). Solo gana el candado quien inserta.
+      const res: any = await this.envioRepo.manager.query(
+        'INSERT IGNORE INTO reporte_agenda_envio (fecha) VALUES (?)',
+        [fecha],
+      );
+      const insertadas = res?.affectedRows ?? res?.[0]?.affectedRows ?? 0;
+      if (insertadas > 0) return true; // ganamos el candado → enviar
+      this.logger.warn(`Reporte ${fecha}: candado ya tomado por otra instancia.`);
+      return false; // otra instancia ya lo tiene → no enviar
     } catch (e: any) {
-      // ER_DUP_ENTRY (1062): otra instancia ya reclamó esta fecha → no enviar.
-      if (e?.code === 'ER_DUP_ENTRY' || e?.errno === 1062) return false;
-      // Error inesperado de BD (p.ej. tabla ausente): preferimos no bloquear el
-      // envío. Se registra para diagnóstico.
+      // Si el candado falla, preferimos NO enviar para evitar el correo doble.
+      // (Si la BD estuviera caída, el reporte tampoco se podría generar.)
       this.logger.error(
-        `No se pudo aplicar el candado de envío (${fecha}); se continúa sin candado.`,
+        `No se pudo aplicar el candado de envío (${fecha}); se omite para evitar duplicados.`,
         e?.stack || e,
       );
-      return true;
+      return false;
     }
   }
 
