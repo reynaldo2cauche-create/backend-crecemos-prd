@@ -267,17 +267,11 @@ import { ReporteAgendaEnvio } from './reportes-agenda/entities/reporte-agenda-en
     
     TypeOrmModule.forRoot({
       type: 'mysql',
-      host: 'localhost',
-      port: 3306,
-      username: 'crecemos',
-      password: 'DB_PASSWORD_REMOVED',
-      database: 'crecemos_website',
-      // type: 'mysql',
-      // host: 'localhost',
-      // port: 3306,
-      // username: 'root',
-      // password: 'admin',
-      // database: 'crecemos_website',
+      host: process.env.DB_HOST,
+      port: parseInt(process.env.DB_PORT ?? '3306', 10),
+      username: process.env.DB_USERNAME,
+      password: process.env.DB_PASSWORD,
+      database: process.env.DB_DATABASE,
       charset: 'utf8mb4',
       extra: {
         connectionLimit: 10,
@@ -476,17 +470,6 @@ import { ReporteAgendaEnvio } from './reportes-agenda/entities/reporte-agenda-en
           // 🔍 Activar logs de SQL para debug
 
     }),
-
-    // TypeOrmModule.forRoot({
-    //   type: 'mysql',
-    //   host: process.env.DB_HOST,
-    //   port: parseInt(process.env.DB_PORT!, 10),
-    //   username: process.env.DB_USERNAME,  // Asegúrate de poner el nombre de usuario correcto
-    //   password: process.env.DB_PASSWORD,  // Asegúrate de poner la contraseña correcta
-    //   database: process.env.DB_DATABASE,
-    //   entities: [User, Postulacion],
-    //   synchronize: true,    // Sincroniza automáticamente las tablas (desactívalo en producción)
-    // }),
 
     PostulacionesModule,
     PacienteModule,
