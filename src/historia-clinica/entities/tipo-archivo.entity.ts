@@ -21,6 +21,9 @@ export class TipoArchivo {
    @Column({ type: 'tinyint', nullable: true })
   vigencia_meses: number;
 
+  @Column({ type: 'smallint', nullable: true })
+  vigencia_dias: number;
+
 
 
 

@@ -266,6 +266,7 @@ import { ReporteAgendaEnvio } from './reportes-agenda/entities/reporte-agenda-en
 
     
     TypeOrmModule.forRoot({
+      // Credenciales en el .env (comentar/descomentar LOCAL o PRODUCCIÓN allí)
       type: 'mysql',
       host: process.env.DB_HOST,
       port: parseInt(process.env.DB_PORT ?? '3306', 10),

@@ -62,12 +62,35 @@ export class ReportesAgendaService implements OnModuleInit {
    */
   @Cron('0 19 * * *', { timeZone: 'America/Lima' })
   async verificarEnvio(): Promise<void> {
+    // En un cluster (PM2), CADA worker ejecuta este @Cron. Aunque el candado en
+    // BD frena al segundo, si los workers estuvieran en BD/servidores distintos
+    // igual saldrían 2 correos. Por eso, además del candado, dejamos que SOLO el
+    // worker designado dispare el cron: la causa raíz del "correo doble".
+    if (!this.esWorkerDelCron()) {
+      this.logger.log('📅 Reporte de agenda: este worker no es el designado para el cron. Se omite.');
+      return;
+    }
+
     this.logger.log('📅 Disparo programado del reporte de agenda (19:00 Lima)');
     try {
       await this.enviarReporteDiario();
     } catch (error) {
       this.logger.error('❌ Error en envío programado', error?.stack || error);
     }
+  }
+
+  /**
+   * True solo en el worker que debe correr las tareas programadas.
+   * En PM2 cluster cada worker recibe NODE_APP_INSTANCE (0,1,2...); dejamos que
+   * solo el "0" dispare el cron. En proceso único (sin la variable) también corre.
+   * Se puede forzar con CRON_WORKER=true/false si el entorno no usa PM2.
+   */
+  private esWorkerDelCron(): boolean {
+    const override = process.env.CRON_WORKER;
+    if (override === 'true') return true;
+    if (override === 'false') return false;
+    const instancia = process.env.NODE_APP_INSTANCE ?? process.env.pm_id;
+    return instancia === undefined || instancia === '0';
   }
 
   /**
@@ -756,8 +779,20 @@ export class ReportesAgendaService implements OnModuleInit {
 
   private destinatarios(): string[] {
     const raw = this.configService.get<string>('AGENDA_REPORTE_TO');
-    if (raw) return raw.split(',').map((s) => s.trim()).filter(Boolean);
-    return ['rrhh@crecemos.com.pe', 'info@crecemos.com.pe'];
+    const lista = raw
+      ? raw.split(',').map((s) => s.trim()).filter(Boolean)
+      : ['rrhh@crecemos.com.pe', 'info@crecemos.com.pe'];
+
+    // Deduplicar (ignorando mayúsculas/espacios) para que un mismo buzón no
+    // reciba 2 copias si la config trae la dirección repetida. Conserva el
+    // primer formato visto y el orden original.
+    const vistos = new Set<string>();
+    return lista.filter((email) => {
+      const clave = email.toLowerCase();
+      if (vistos.has(clave)) return false;
+      vistos.add(clave);
+      return true;
+    });
   }
 
   private bordeFino(): Partial<ExcelJS.Borders> {
