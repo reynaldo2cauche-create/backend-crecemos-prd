@@ -53,6 +53,21 @@ export class ReportesAgendaService implements OnModuleInit {
         e?.stack || e,
       );
     }
+
+    // Diagnóstico de arranque: si dos instancias imprimen "correrá el cron: SÍ",
+    // ese es el origen del correo doble. La BD debe ser la MISMA en ambas para que
+    // el candado las coordine; si difiere, hay dos backends distintos enviando.
+    let dbActual = 'desconocida';
+    try {
+      const r: any = await this.envioRepo.manager.query('SELECT DATABASE() AS db');
+      dbActual = r?.[0]?.db ?? 'desconocida';
+    } catch {
+      // ignorar: solo es diagnóstico
+    }
+    this.logger.log(
+      `🕒 Reporte de agenda — instancia iniciada. correrá el cron: ${this.esWorkerDelCron() ? 'SÍ' : 'no'} ` +
+        `(CRON_WORKER=${process.env.CRON_WORKER ?? 'unset'}, NODE_APP_INSTANCE=${process.env.NODE_APP_INSTANCE ?? process.env.pm_id ?? 'unset'}, BD=${dbActual})`,
+    );
   }
 
   /**
