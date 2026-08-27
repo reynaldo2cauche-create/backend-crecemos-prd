@@ -275,7 +275,10 @@ import { ReporteAgendaEnvio } from './reportes-agenda/entities/reporte-agenda-en
       database: process.env.DB_DATABASE,
       charset: 'utf8mb4',
       extra: {
-        connectionLimit: 10,
+        connectionLimit: 8,
+        maxIdle: 2,
+        idleTimeout: 60000,
+        enableKeepAlive: false,
         waitForConnections: true,
         queueLimit: 0,
         connectTimeout: 20000,
