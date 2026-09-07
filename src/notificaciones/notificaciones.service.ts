@@ -769,8 +769,8 @@ export class NotificacionesService {
         OR (
           e.datos_adicionales IS NOT NULL
           AND (
-            JSON_CONTAINS(JSON_EXTRACT(e.datos_adicionales, '$.usuarios_destinatarios'), CAST(? AS JSON))
-            OR JSON_CONTAINS(JSON_EXTRACT(e.datos_adicionales, '$.roles_destinatarios'), CAST(? AS JSON))
+            JSON_CONTAINS(JSON_EXTRACT(e.datos_adicionales, '$.usuarios_destinatarios'), CAST(? AS CHAR))
+            OR JSON_CONTAINS(JSON_EXTRACT(e.datos_adicionales, '$.roles_destinatarios'), CAST(? AS CHAR))
           )
         )
       )
@@ -786,7 +786,7 @@ export class NotificacionesService {
         AND (JSON_EXTRACT(e.datos_adicionales, '$.es_revision') IS NULL
              OR JSON_EXTRACT(e.datos_adicionales, '$.es_revision') = FALSE)
         AND JSON_EXTRACT(e.datos_adicionales, '$.terapeutas_destinatarios') IS NOT NULL
-        AND NOT JSON_CONTAINS(JSON_EXTRACT(e.datos_adicionales, '$.terapeutas_destinatarios'), CAST(? AS JSON))
+        AND NOT JSON_CONTAINS(JSON_EXTRACT(e.datos_adicionales, '$.terapeutas_destinatarios'), CAST(? AS CHAR))
       )
       AND NOT (
         n.tipo_notificacion = 'SOLICITUD_INFORME'
@@ -795,7 +795,7 @@ export class NotificacionesService {
              OR JSON_EXTRACT(e.datos_adicionales, '$.es_revision') = FALSE)
         AND (
           JSON_EXTRACT(e.datos_adicionales, '$.terapeutas_destinatarios') IS NULL
-          OR NOT JSON_CONTAINS(JSON_EXTRACT(e.datos_adicionales, '$.terapeutas_destinatarios'), CAST(? AS JSON))
+          OR NOT JSON_CONTAINS(JSON_EXTRACT(e.datos_adicionales, '$.terapeutas_destinatarios'), CAST(? AS CHAR))
         )
       )
       AND NOT (
@@ -803,7 +803,7 @@ export class NotificacionesService {
         AND nd.rol_id = 4
         AND (
           JSON_EXTRACT(e.datos_adicionales, '$.usuarios_destinatarios') IS NULL
-          OR NOT JSON_CONTAINS(JSON_EXTRACT(e.datos_adicionales, '$.usuarios_destinatarios'), CAST(? AS JSON))
+          OR NOT JSON_CONTAINS(JSON_EXTRACT(e.datos_adicionales, '$.usuarios_destinatarios'), CAST(? AS CHAR))
         )
       )
     `;

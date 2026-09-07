@@ -193,6 +193,10 @@ export class TrabajadorCentro {
   @Column('decimal', { precision: 10, scale: 2, nullable: true })
   sueldo_base: number;
 
+  // Días de la semana que labora (CSV ISO: 1=Lunes..7=Domingo), ej "1,2,5"
+  @Column({ type: 'varchar', length: 20, nullable: true })
+  dias_laborables: string;
+
   @Column({ type: 'date', nullable: true })
   fecha_ingreso: Date;
 

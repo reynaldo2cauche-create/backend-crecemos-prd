@@ -205,6 +205,10 @@ export class CreateTrabajadorCentroDto {
 
   @IsOptional()
   @IsString()
+  dias_laborables?: string; // CSV ISO 1=Lun..7=Dom
+
+  @IsOptional()
+  @IsString()
   fecha_ingreso?: string;
 
   @IsOptional()

@@ -91,6 +91,10 @@ import { CuentaBancaria } from './rrhh/cuenta-bancaria.entity';
 import { TipoSueldo } from './rrhh/tipo-sueldo.entity';
 import { Mes } from './rrhh/mes.entity';
 import { PeriodoGratificacion } from './rrhh/periodo-gratificacion.entity';
+import { TipoFalta } from './rrhh/tipo-falta.entity';
+import { Falta } from './rrhh/falta.entity';
+import { Solicitud } from './rrhh/solicitud.entity';
+import { SolicitudHistorial } from './rrhh/solicitud-historial.entity';
 import { AuditoriaModule } from './auditoria/auditoria.module';
 import { AuditoriaAccion } from './auditoria/auditoria-accion.entity';
 import { APP_INTERCEPTOR } from '@nestjs/core';
@@ -360,6 +364,10 @@ import { ReporteAgendaEnvio } from './reportes-agenda/entities/reporte-agenda-en
         TipoSueldo,
         Mes,
         PeriodoGratificacion,
+        TipoFalta,
+        Falta,
+        Solicitud,
+        SolicitudHistorial,
         TrabajadorServicio,
         AuditoriaAccion,
         TransferenciaNotas,

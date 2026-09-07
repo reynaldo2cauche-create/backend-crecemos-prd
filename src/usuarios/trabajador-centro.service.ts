@@ -140,6 +140,7 @@ export class TrabajadorCentroService {
       archivo_dni: this.toNullIfEmpty(dto.archivo_dni),
       // Campos RRHH
       sueldo_base: this.toNullIfEmpty(dto.sueldo_base),
+      dias_laborables: this.toNullIfEmpty(dto.dias_laborables),
       fecha_ingreso: this.toNullIfEmpty(dto.fecha_ingreso) as any,
       numero_cuenta: this.toNullIfEmpty(dto.numero_cuenta),
       banco: this.toNullIfEmpty(dto.banco),
@@ -339,6 +340,7 @@ async update(id: number, dto: UpdateTrabajadorCentroDto): Promise<TrabajadorCent
       updateData.numero_colegiatura = dto.numero_colegiatura;
     }
     if (dto.sueldo_base !== undefined) updateData.sueldo_base = dto.sueldo_base;
+    if (dto.dias_laborables !== undefined) updateData.dias_laborables = dto.dias_laborables;
     if (dto.fecha_ingreso !== undefined) updateData.fecha_ingreso = dto.fecha_ingreso;
     if (dto.numero_cuenta !== undefined) updateData.numero_cuenta = dto.numero_cuenta;
     if (dto.banco !== undefined) updateData.banco = dto.banco;

@@ -23,4 +23,9 @@ export class RegistrarPagoMensualDto {
   @IsOptional()
   @IsInt()
   userId?: number; // ✅ Usuario que registra el pago
+
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  montoDescuento?: number; // Total descontado por faltas (informativo)
 }

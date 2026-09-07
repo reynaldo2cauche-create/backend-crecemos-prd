@@ -39,7 +39,7 @@ export class VacacionesService {
     try {
       const vacaciones = await this.vacacionesRepository
         .createQueryBuilder('vacacion')
-        .where('vacacion.empleado_id = :empleadoId', { empleadoId })
+        .where('vacacion.trabajador_id = :empleadoId', { empleadoId })
         .andWhere('YEAR(vacacion.fecha_inicio) = :anio', { anio })
         .getMany();
 

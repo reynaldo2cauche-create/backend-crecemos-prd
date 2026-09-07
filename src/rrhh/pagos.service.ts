@@ -1,8 +1,9 @@
 // src/pagos/pagos.service.ts
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { IsNull, Repository } from 'typeorm';
 import { Pago } from './pago.entity';
+import { Falta } from './falta.entity';
 import { TrabajadorCentro } from '../usuarios/trabajador-centro.entity';
 import { TipoSueldo } from './tipo-sueldo.entity';
 import { Mes } from './mes.entity';
@@ -25,7 +26,38 @@ export class PagosService {
     private mesRepository: Repository<Mes>,
     @InjectRepository(PeriodoGratificacion)
     private periodoGratificacionRepository: Repository<PeriodoGratificacion>,
+    @InjectRepository(Falta)
+    private faltasRepository: Repository<Falta>,
   ) {}
+
+  /**
+   * Devuelve el descuento sugerido por faltas para un empleado en un mes/año:
+   * suma monto_descuento de faltas que descuentan y aún no fueron aplicadas a un pago.
+   */
+  async obtenerDescuentoMensual(empleadoId: number, mesId: number, anio: number) {
+    const empleado = await this.trabajadorRepository.findOne({ where: { id: empleadoId } });
+    if (!empleado) throw new NotFoundException(`Trabajador ${empleadoId} no encontrado`);
+
+    const faltas = await this.faltasRepository.find({
+      where: {
+        empleado: { id: empleadoId },
+        mes: { id: mesId },
+        anio,
+        descuenta: true,
+        pago: IsNull(),
+      },
+      relations: ['empleado', 'tipo', 'mes'],
+      order: { fecha_inicio: 'ASC' },
+    });
+
+    const totalDescuento = parseFloat(
+      faltas.reduce((sum, f) => sum + Number(f.monto_descuento), 0).toFixed(2),
+    );
+    const sueldoBase = Number(empleado.sueldo_base) || 0;
+    const netoSugerido = parseFloat((sueldoBase - totalDescuento).toFixed(2));
+
+    return { sueldoBase, totalDescuento, netoSugerido, faltas };
+  }
 
   /**
    * Calcula los meses trabajados para gratificación según la ley peruana.
@@ -43,7 +75,8 @@ export class PagosService {
    *
    * PERIODOS:
    * - JULIO 2025: Evalúa Enero-Junio 2025 (6 meses posibles)
-   * - DICIEMBRE 2025: Evalúa Julio-Noviembre 2025 (5 meses, Junio ya contó en Julio)
+   * - DICIEMBRE 2025: Evalúa Julio-Diciembre 2025 (6 meses posibles; diciembre se
+   *   otorga completo aunque el pago se haga a mitad de mes)
    */
   private calcularMesesTrabajados(
     fechaIngreso: Date | string,
@@ -64,8 +97,9 @@ export class PagosService {
       // JULIO evalúa: Enero (0) a Junio (5) = 6 meses
       mesesAEvaluar = [0, 1, 2, 3, 4, 5];
     } else {
-      // DICIEMBRE evalúa: Julio (6) a Noviembre (10) = 5 meses
-      mesesAEvaluar = [6, 7, 8, 9, 10];
+      // DICIEMBRE evalúa el semestre Julio (6) a Diciembre (11) = 6 meses.
+      // Diciembre se otorga completo aunque el pago se haga a mitad de mes.
+      mesesAEvaluar = [6, 7, 8, 9, 10, 11];
     }
 
     let mesesContados = 0;
@@ -106,8 +140,8 @@ export class PagosService {
    * - Gratificación Proporcional = (Gratificación Completa × Meses Trabajados) / 6
    *
    * NOTAS:
-   * - Siempre se divide entre 6, incluso en diciembre (5 meses)
-   * - SUNAFIL lo interpreta así: se "completa" el cálculo sobre 6 meses
+   * - Se divide entre 6 (semestre). Diciembre evalúa Jul-Dic (6 meses), por lo que
+   *   un trabajador de semestre completo obtiene el 25% completo (6/6).
    */
   private calcularGratificacion(sueldoBase: number, meses: number) {
     // Redondear a exactamente 2 decimales usando toFixed
@@ -418,12 +452,27 @@ export class PagosService {
       monto: dto.monto,
       monto_sueldo: dto.monto,
       monto_gratificacion: null,
+      monto_descuento: dto.montoDescuento ?? null,
       fecha_pago: dto.fechaPago,
       usuarioCrea: usuario,
       usuarioActualiza: usuario,
     });
 
-    return await this.pagosRepository.save(pago);
+    const pagoGuardado = await this.pagosRepository.save(pago);
+
+    // Marcar las faltas descontables del mes como aplicadas a este pago (evita doble descuento)
+    await this.faltasRepository.update(
+      {
+        empleado: { id: dto.empleadoId },
+        mes: { id: dto.mesId },
+        anio: dto.anio,
+        descuenta: true,
+        pago: IsNull(),
+      },
+      { pago: pagoGuardado },
+    );
+
+    return pagoGuardado;
   }
 
   async create(createPagoDto: CreatePagoDto): Promise<Pago> {
@@ -482,6 +531,8 @@ export class PagosService {
 
   async remove(id: number): Promise<void> {
     const pago = await this.findOne(id);
+    // Desvincular faltas aplicadas a este pago para que puedan volver a contarse
+    await this.faltasRepository.update({ pago: { id } }, { pago: null });
     await this.pagosRepository.remove(pago);
   }
 }

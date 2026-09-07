@@ -41,6 +41,15 @@ export class PagosController {
     return this.pagosService.registrarPagoMensual(dto);
   }
 
+  @Get('descuento-mensual')
+  obtenerDescuentoMensual(
+    @Query('empleadoId') empleadoId: string,
+    @Query('mesId') mesId: string,
+    @Query('anio') anio: string,
+  ) {
+    return this.pagosService.obtenerDescuentoMensual(+empleadoId, +mesId, +anio);
+  }
+
   @Get()
   findAll(
     @Query('tipo') tipo?: string,

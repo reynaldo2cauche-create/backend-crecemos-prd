@@ -37,6 +37,9 @@ export class Pago {
   @Column('decimal', { precision: 10, scale: 2, nullable: true })
   monto_gratificacion: number; // Desglose: monto de gratificación
 
+  @Column('decimal', { precision: 10, scale: 2, nullable: true })
+  monto_descuento: number; // Total descontado por faltas en este pago (informativo)
+
   @Column({ type: 'date' })
   fecha_pago: Date;
 
