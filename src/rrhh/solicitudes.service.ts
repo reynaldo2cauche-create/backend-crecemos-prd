@@ -4,8 +4,14 @@ import { Repository, Between } from 'typeorm';
 import { Solicitud } from './solicitud.entity';
 import { SolicitudHistorial } from './solicitud-historial.entity';
 import { Falta } from './falta.entity';
+import { BloqueoHorarios } from '../bloqueos/entities/bloqueo-horarios.entity';
+import { TipoBloqueo } from '../catalogos/tipo-bloqueo.entity';
 import { CrearSolicitudDto } from './dto/crear-solicitud.dto';
 import { RevisarSolicitudDto } from './dto/revisar-solicitud.dto';
+
+// Código del tipo de bloqueo usado para los permisos (se resuelve el id real por código,
+// no se asume 1, porque en cada BD el id puede ser distinto).
+const CODIGO_BLOQUEO_PUNTUAL = 'PUNTUAL';
 
 // Anticipación mínima (en días) para solicitar cada tipo, según el Word.
 const ANTICIPACION_MINIMA: Record<string, number> = {
@@ -36,7 +42,75 @@ export class SolicitudesService {
     private historialRepo: Repository<SolicitudHistorial>,
     @InjectRepository(Falta)
     private faltasRepo: Repository<Falta>,
+    @InjectRepository(BloqueoHorarios)
+    private bloqueoRepo: Repository<BloqueoHorarios>,
+    @InjectRepository(TipoBloqueo)
+    private tipoBloqueoRepo: Repository<TipoBloqueo>,
   ) {}
+
+  /** Enumera todas las fechas 'YYYY-MM-DD' entre inicio y fin (ambas inclusive). */
+  private enumerarDias(fechaInicio: string, fechaFin: string): string[] {
+    const dias: string[] = [];
+    const [ai, mi, di] = fechaInicio.split('-').map(Number);
+    const [af, mf, df] = fechaFin.split('-').map(Number);
+    // Se opera todo en UTC para que el día NO se corra según la zona horaria del server.
+    const cursor = Date.UTC(ai, mi - 1, di);
+    const fin = Date.UTC(af, mf - 1, df);
+    for (let t = cursor; t <= fin; t += 24 * 60 * 60 * 1000) {
+      dias.push(new Date(t).toISOString().split('T')[0]);
+    }
+    return dias;
+  }
+
+  /**
+   * Crea un bloqueo de agenda por cada día del permiso/vacaciones aprobado, para que
+   * el terapeuta no pueda recibir citas en esas fechas/horas. Se crea un bloqueo PUNTUAL
+   * por día (así lo detecta la verificación exacta por fecha de `/bloqueos/verificar`).
+   */
+  private async bloquearAgendaPorSolicitud(
+    solicitud: Solicitud,
+    revisorId?: number,
+  ): Promise<void> {
+    const trabajadorId = solicitud.trabajador?.id;
+    if (!trabajadorId) return;
+
+    const inicio = solicitud.fecha_inicio;
+    const fin = solicitud.fecha_fin || solicitud.fecha_inicio;
+    const dias = this.enumerarDias(inicio, fin);
+    if (dias.length === 0) return;
+
+    // Resolver el id real del tipo PUNTUAL por su código (varía entre BDs).
+    const tipoPuntual = await this.tipoBloqueoRepo.findOne({
+      where: { codigo: CODIGO_BLOQUEO_PUNTUAL },
+    });
+    const tipoBloqueoId = tipoPuntual?.id ?? 1;
+
+    // Si el permiso indica un rango de horas, se bloquea solo ese tramo; si no, todo el día.
+    const tieneHoras = !!(solicitud.hora_desde && solicitud.hora_hasta);
+    const etiqueta = LABEL_TIPO[solicitud.tipo] || solicitud.tipo;
+    const motivo =
+      `${etiqueta} aprobado` +
+      (solicitud.motivo ? ` — ${solicitud.motivo}` : '') +
+      ` (solicitud #${solicitud.id})`;
+
+    const bloqueos = dias.map((dia) =>
+      this.bloqueoRepo.create({
+        trabajadorId,
+        tipoBloqueoId,
+        fechaInicio: dia,
+        fechaFin: dia,
+        diaSemana: null,
+        todoElDia: !tieneHoras,
+        horaInicio: tieneHoras ? solicitud.hora_desde : null,
+        horaFin: tieneHoras ? solicitud.hora_hasta : null,
+        motivo: motivo.slice(0, 1000),
+        userIdCrea: revisorId ?? null,
+        solicitudId: solicitud.id,
+      }),
+    );
+
+    await this.bloqueoRepo.save(bloqueos);
+  }
 
   /** Diferencia en días de calendario entre hoy (00:00) y una fecha YYYY-MM-DD. */
   private diasDeAnticipacion(fechaInicio: string): number {
@@ -142,6 +216,16 @@ export class SolicitudesService {
       }),
     );
 
+    // Al aprobar, bloquear la agenda del terapeuta en las fechas/horas del permiso.
+    // Si algo falla al crear el bloqueo, no se revierte la aprobación (solo se registra).
+    if (dto.estado === 'aprobado') {
+      try {
+        await this.bloquearAgendaPorSolicitud(solicitud, dto.revisorId);
+      } catch (e) {
+        console.error(`No se pudo bloquear la agenda de la solicitud #${id}:`, e);
+      }
+    }
+
     return this.findOne(id);
   }
 
@@ -187,6 +271,8 @@ export class SolicitudesService {
 
   async remove(id: number): Promise<void> {
     const solicitud = await this.findOne(id);
+    // Elimina también los bloqueos de agenda que se hayan generado al aprobar esta solicitud.
+    await this.bloqueoRepo.delete({ solicitudId: id });
     await this.solicitudRepo.remove(solicitud);
   }
 }

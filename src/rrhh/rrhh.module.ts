@@ -11,6 +11,8 @@ import { TipoFalta } from './tipo-falta.entity';
 import { Falta } from './falta.entity';
 import { Solicitud } from './solicitud.entity';
 import { SolicitudHistorial } from './solicitud-historial.entity';
+import { BloqueoHorarios } from '../bloqueos/entities/bloqueo-horarios.entity';
+import { TipoBloqueo } from '../catalogos/tipo-bloqueo.entity';
 import { PagosController } from './pagos.controller';
 import { PagosService } from './pagos.service';
 import { VacacionesController } from './vacaciones.controller';
@@ -36,6 +38,8 @@ import { SolicitudesService } from './solicitudes.service';
       Falta,
       Solicitud,
       SolicitudHistorial,
+      BloqueoHorarios,
+      TipoBloqueo,
     ]),
   ],
   controllers: [PagosController, VacacionesController, CuentasBancariasController, FaltasController, SolicitudesController],

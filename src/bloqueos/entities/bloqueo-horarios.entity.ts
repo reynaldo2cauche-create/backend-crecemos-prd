@@ -42,6 +42,11 @@ export class BloqueoHorarios {
   @Column({ type: 'text' })
   motivo: string;
 
+  // Si el bloqueo fue generado al aprobar una solicitud de permiso/vacaciones, guarda su id.
+  // Permite eliminar el bloqueo automáticamente cuando se borra la solicitud.
+  @Column({ type: 'int', nullable: true, name: 'solicitud_id' })
+  solicitudId: number | null;
+
   @Column({ type: 'boolean', default: true })
   activo: boolean;
 
