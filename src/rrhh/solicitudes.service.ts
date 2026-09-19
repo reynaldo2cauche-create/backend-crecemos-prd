@@ -6,8 +6,12 @@ import { SolicitudHistorial } from './solicitud-historial.entity';
 import { Falta } from './falta.entity';
 import { BloqueoHorarios } from '../bloqueos/entities/bloqueo-horarios.entity';
 import { TipoBloqueo } from '../catalogos/tipo-bloqueo.entity';
+import { TrabajadorCentro } from '../usuarios/trabajador-centro.entity';
 import { CrearSolicitudDto } from './dto/crear-solicitud.dto';
 import { RevisarSolicitudDto } from './dto/revisar-solicitud.dto';
+import { NotificacionesService } from '../notificaciones/notificaciones.service';
+import { MailService } from '../mail/mail.service';
+import { AuditoriaService } from '../auditoria/auditoria.service';
 
 // Código del tipo de bloqueo usado para los permisos (se resuelve el id real por código,
 // no se asume 1, porque en cada BD el id puede ser distinto).
@@ -46,6 +50,11 @@ export class SolicitudesService {
     private bloqueoRepo: Repository<BloqueoHorarios>,
     @InjectRepository(TipoBloqueo)
     private tipoBloqueoRepo: Repository<TipoBloqueo>,
+    @InjectRepository(TrabajadorCentro)
+    private trabajadorRepo: Repository<TrabajadorCentro>,
+    private readonly notificacionesService: NotificacionesService,
+    private readonly mailService: MailService,
+    private readonly auditoriaService: AuditoriaService,
   ) {}
 
   /** Enumera todas las fechas 'YYYY-MM-DD' entre inicio y fin (ambas inclusive). */
@@ -167,7 +176,65 @@ export class SolicitudesService {
       }),
     );
 
+    // 🔔 Avisar a Administración / RR.HH. que hay una solicitud por aprobar:
+    // notificación in-app + correo a info@/rrhh@ + registro en auditoría.
+    // Nada de esto debe romper el registro de la solicitud (todo en background).
+    this.notificarNuevaSolicitud(guardada).catch((e) =>
+      console.error(`No se pudo notificar la solicitud #${guardada.id}:`, e?.message || e),
+    );
+
     return this.findOne(guardada.id);
+  }
+
+  /** Dispara notificación in-app, correo (info@/rrhh@) y auditoría para una solicitud nueva. */
+  private async notificarNuevaSolicitud(solicitud: Solicitud): Promise<void> {
+    const trabajadorId = solicitud.trabajador?.id as number;
+    const trabajador = trabajadorId
+      ? await this.trabajadorRepo.findOne({ where: { id: trabajadorId } })
+      : null;
+    const nombre = trabajador
+      ? `${trabajador.nombres} ${trabajador.apellidos}`.trim()
+      : `Colaborador #${trabajadorId ?? '?'}`;
+
+    const tipoLabel = LABEL_TIPO[solicitud.tipo] || solicitud.tipo;
+    const rango =
+      solicitud.fecha_fin && solicitud.fecha_fin !== solicitud.fecha_inicio
+        ? `${solicitud.fecha_inicio} al ${solicitud.fecha_fin}`
+        : solicitud.fecha_inicio;
+
+    // Notificación in-app (Administración + RR.HH.)
+    await this.notificacionesService
+      .notificarNuevaSolicitudPermiso(solicitud.id, trabajadorId, nombre, tipoLabel, rango, solicitud.motivo || undefined)
+      .catch((e) => console.error('Notificación in-app falló:', e?.message || e));
+
+    // Correo a info@ y rrhh@
+    await this.mailService
+      .enviarCorreoNuevaSolicitudPermiso({
+        solicitudId: solicitud.id,
+        trabajadorNombre: nombre,
+        tipoLabel,
+        fechaInicio: solicitud.fecha_inicio,
+        fechaFin: solicitud.fecha_fin,
+        horaDesde: solicitud.hora_desde,
+        horaHasta: solicitud.hora_hasta,
+        motivo: solicitud.motivo,
+      })
+      .catch((e) => console.error('Correo de solicitud falló:', e?.message || e));
+
+    // Auditoría
+    await this.auditoriaService.registrar({
+      trabajadorId: trabajadorId,
+      accion: 'CREAR_SOLICITUD',
+      modulo: 'RRHH',
+      descripcion: `${nombre} registró una solicitud de ${tipoLabel} (${rango}) — pendiente de aprobación (solicitud #${solicitud.id})`,
+      datosNuevos: {
+        solicitud_id: solicitud.id,
+        tipo: solicitud.tipo,
+        fecha_inicio: solicitud.fecha_inicio,
+        fecha_fin: solicitud.fecha_fin,
+        motivo: solicitud.motivo,
+      },
+    });
   }
 
   /** Solicitudes de un trabajador (autoservicio). */

@@ -3,6 +3,7 @@ import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { VentaServicioService } from '../services/venta-servicio.service';
 import { CreateVentaServicioDto } from '../dto/create-venta-servicio.dto';
 import { UpdateVentaServicioDto } from '../dto/update-venta-servicio.dto';
+import { CreateNotaCreditoDto } from '../dto/create-nota-credito.dto';
 import { Auditable } from '../../auditoria/decorators/auditable.decorator';
 
 @Controller('backend_api/ventas/servicios')
@@ -20,6 +21,30 @@ export class VentaServicioController {
     return this.service.verificarTieneCitas(+id);
   }
 
+  @Get(':id/devolucion/preview')
+  previewDevolucion(@Param('id') id: string) {
+    return this.service.previewDevolucion(+id);
+  }
+
+  @Post(':id/nota-credito')
+  @Auditable({ modulo: 'VENTAS', accion: 'REGISTRAR_NOTA_CREDITO' })
+  crearNotaCredito(
+    @Param('id') id: string,
+    @Body() dto: CreateNotaCreditoDto,
+    @Request() req,
+  ) {
+    return this.service.crearNotaCredito(+id, {
+      ...dto,
+      user_crea_id: dto.user_crea_id ?? req.user?.id,
+    });
+  }
+
+  @Patch('nota-credito/:notaId/validar')
+  @Auditable({ modulo: 'VENTAS', accion: 'VALIDAR_NOTA_CREDITO' })
+  validarNotaCredito(@Param('notaId') notaId: string, @Request() req) {
+    return this.service.validarNotaCredito(+notaId, req.user?.id);
+  }
+
   @Get('historial')
   findHistorial(
     @Query('page') page?: string,
@@ -29,6 +54,7 @@ export class VentaServicioController {
     @Query('hasta') hasta?: string,
     @Query('pacienteId') pacienteId?: string,
     @Query('metodoPagoId') metodoPagoId?: string,
+    @Query('tipoComprobante') tipoComprobante?: string,
   ) {
     return this.service.findHistorial({
       page: page ? +page : 0,
@@ -38,6 +64,7 @@ export class VentaServicioController {
       hasta,
       pacienteId: pacienteId ? +pacienteId : undefined,
       metodoPagoId: metodoPagoId ? +metodoPagoId : undefined,
+      tipoComprobante: tipoComprobante ? +tipoComprobante : undefined,
     });
   }
 

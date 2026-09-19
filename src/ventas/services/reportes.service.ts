@@ -65,9 +65,24 @@ export class ReportesService {
     const ventasServicios = servicios.length;
     const totalVentas = ventasProductos + ventasServicios;
 
-    const totalIngresos = round2(
+    const totalIngresosBruto = round2(
       [...productos, ...servicios].reduce((s, v) => s + toNum(v.total), 0),
     );
+
+    // Devoluciones (notas de crédito) del período — solo aplican a servicios
+    const totalDevoluciones = incluyeServicios(tipo)
+      ? round2(toNum(
+          (await this.ventaServicioRepo.query(
+            `SELECT COALESCE(SUM(nc.monto_devuelto),0) AS total
+               FROM nota_credito nc
+               JOIN venta_servicio vs ON vs.id = nc.venta_servicio_id
+              WHERE nc.fecha >= ? AND nc.fecha <= ?`,
+            [fechaInicio, fechaFin],
+          ))[0]?.total,
+        ))
+      : 0;
+
+    const totalIngresos = round2(totalIngresosBruto - totalDevoluciones);
 
     const descuentosCabecera = round2(
       [...productos, ...servicios].reduce((s, v) => s + toNum(v.descuento_monto), 0),
@@ -104,12 +119,14 @@ export class ReportesService {
       { sesionesTotalesVendidas: 0, sesionesUsadas: 0, sesionesPendientes: 0 },
     );
 
-    const ticketPromedio = totalVentas > 0 ? round2(totalIngresos / totalVentas) : 0;
-    const crecimiento = await this.calcularCrecimiento(fechaInicio, fechaFin, tipo, totalIngresos);
+    const ticketPromedio = totalVentas > 0 ? round2(totalIngresosBruto / totalVentas) : 0;
+    const crecimiento = await this.calcularCrecimiento(fechaInicio, fechaFin, tipo, totalIngresosBruto);
 
     return {
       totalVentas,
       totalIngresos,
+      totalIngresosBruto,
+      totalDevoluciones,
       ventasProductos,
       ventasServicios,
       ticketPromedio,

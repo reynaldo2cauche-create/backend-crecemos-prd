@@ -11,6 +11,7 @@ import { TrabajadorCentro } from '../usuarios/trabajador-centro.entity';
 
 const ROL_ADMIN     = 1;
 const ROL_ADMISION  = 2;
+const ROL_RRHH      = 3;
 const ROL_TERAPEUTA = 4;
 const TODOS_LOS_ROLES = [ROL_ADMIN, ROL_ADMISION, ROL_TERAPEUTA];
 
@@ -378,6 +379,57 @@ export class NotificacionesService {
       mensaje: `${nombreUsuarioEliminador} eliminó una cita de ${pacienteNombre} programada para el ${fechaCita} a las ${horaCita} con ${terapeutaNombre}. Motivo: ${motivoEliminacion}`,
       evento_id: evento.id,
       roles_destino: [ROL_ADMIN],
+    });
+  }
+
+  /** Notifica al Administrador que se registró una devolución (nota de crédito). */
+  async notificarNotaCredito(
+    notaId: number,
+    userCreaId: number,
+    codigo: string,
+    clienteNombre: string,
+    montoDevuelto: number,
+    citasAnuladas: number,
+    sesionesAnuladas: number,
+    registradaPor?: string,
+  ) {
+    const monto = `S/ ${Number(montoDevuelto || 0).toFixed(2)}`;
+    const evento = await this.crearEvento({
+      tipo_evento: 'NOTA_CREDITO',
+      descripcion: `Devolución ${codigo} de ${clienteNombre} por ${monto}`,
+      usuario_id: userCreaId,
+      datos_adicionales: { nota_credito_id: notaId, codigo, cliente: clienteNombre, monto: montoDevuelto, citas_anuladas: citasAnuladas, sesiones_anuladas: sesionesAnuladas, registrada_por: registradaPor },
+    });
+    await this.crearNotificacion({
+      tipo_notificacion: 'NOTA_CREDITO',
+      titulo: 'Devolución registrada',
+      mensaje: `${codigo}: se devolvió ${monto} a ${clienteNombre}. Se anularon ${citasAnuladas} cita(s) y ${sesionesAnuladas} sesión(es) sin asignar.${registradaPor ? ` Registrada por ${registradaPor}.` : ''}`,
+      evento_id: evento.id,
+      roles_destino: [ROL_ADMIN],
+    });
+  }
+
+  /** Notifica a Administración y RR.HH. que hay una nueva solicitud de permiso por aprobar. */
+  async notificarNuevaSolicitudPermiso(
+    solicitudId: number,
+    trabajadorId: number,
+    trabajadorNombre: string,
+    tipoLabel: string,
+    rango: string,
+    motivo?: string,
+  ) {
+    const evento = await this.crearEvento({
+      tipo_evento: 'SOLICITUD_PERMISO',
+      descripcion: `Nueva solicitud de ${tipoLabel} de ${trabajadorNombre}`,
+      usuario_id: trabajadorId,
+      datos_adicionales: { solicitud_id: solicitudId, trabajador_nombre: trabajadorNombre, tipo: tipoLabel, rango, motivo },
+    });
+    await this.crearNotificacion({
+      tipo_notificacion: 'SOLICITUD_PERMISO',
+      titulo: 'Nueva solicitud de permiso',
+      mensaje: `${trabajadorNombre} solicitó ${tipoLabel} (${rango}). Pendiente de aprobación.${motivo ? ` Motivo: ${motivo}` : ''}`,
+      evento_id: evento.id,
+      roles_destino: [ROL_ADMIN, ROL_RRHH],
     });
   }
 

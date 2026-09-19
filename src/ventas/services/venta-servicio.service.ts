@@ -4,6 +4,8 @@ import { DataSource, Repository } from 'typeorm';
 import { VentaServicio } from '../entities/venta-servicio.entity';
 import { VentaServicioDetalle } from '../entities/venta-servicio-detalle.entity';
 import { VentaServicioPago } from '../entities/venta-servicio-pago.entity';
+import { NotaCredito } from '../entities/nota-credito.entity';
+import { CreateNotaCreditoDto } from '../dto/create-nota-credito.dto';
 import { CreateVentaServicioDto, DetalleVentaServicioDto } from '../dto/create-venta-servicio.dto';
 import { UpdateVentaServicioDto } from '../dto/update-venta-servicio.dto';
 import { VentaPromocionAplicada } from '../../promociones/entities/venta-promocion-aplicada.entity';
@@ -14,6 +16,8 @@ import { Paquete } from 'src/catalogos/paquete.entity';
 import { PaqueteCombo } from '../../inventario/entities/paquete-combo.entity';
 import { PaqueteComboItem } from '../../inventario/entities/paquete-combo-item.entity';
 import { ComprobanteService } from './comprobante.service';
+import { MailService } from '../../mail/mail.service';
+import { NotificacionesService } from '../../notificaciones/notificaciones.service';
 
 const TIPO_VENTA_SERVICIO = 2;
 
@@ -30,8 +34,12 @@ export class VentaServicioService {
     private readonly paquetePrecioRepo: Repository<ServicioPaquetePrecio>,
     @InjectRepository(VentaServicioPago)
     private readonly ventaPagoRepo: Repository<VentaServicioPago>,
+    @InjectRepository(NotaCredito)
+    private readonly notaCreditoRepo: Repository<NotaCredito>,
     private readonly dataSource: DataSource,
     private readonly comprobanteService: ComprobanteService,
+    private readonly mailService: MailService,
+    private readonly notificacionesService: NotificacionesService,
   ) {}
 
   async findAll(filtros?: { pacienteId?: number; desde?: string; hasta?: string }) {
@@ -99,9 +107,19 @@ export class VentaServicioService {
     hasta?: string;
     pacienteId?: number;
     metodoPagoId?: number;
+    tipoComprobante?: number;
   }) {
     const { page, limit, tipo, desde, hasta, pacienteId, metodoPagoId } = filtros;
     const offset = page * limit;
+
+    // Filtro por tipo de comprobante: 1=Nota de Venta, 2=Boleta, 3=Factura → ventas con ese
+    // comprobante; 4=Nota de Crédito → solo las NC. compVenta filtra ventas; soloNC restringe a NC.
+    const compFiltro = filtros.tipoComprobante ? Number(filtros.tipoComprobante) : null;
+    const compVenta = compFiltro && compFiltro !== 4 ? compFiltro : null;
+    const soloNC = compFiltro === 4;
+    const incServ = tipo !== 'productos' && !soloNC;
+    const incProd = tipo !== 'servicios' && !soloNC;
+    const incNC   = tipo !== 'productos' && (compFiltro === null || compFiltro === 4);
 
     // Condiciones para venta_servicio
     const condS: string[] = [];
@@ -109,6 +127,7 @@ export class VentaServicioService {
     if (desde) { condS.push('vs.fecha_venta >= ?'); paramsS.push(desde); }
     if (hasta) { condS.push('vs.fecha_venta <= ?'); paramsS.push(hasta); }
     if (pacienteId) { condS.push('vs.paciente_id = ?'); paramsS.push(pacienteId); }
+    if (compVenta) { condS.push('vs.tipo_comprobante_id = ?'); paramsS.push(compVenta); }
     if (metodoPagoId) { condS.push('(EXISTS (SELECT 1 FROM venta_servicio_pago vsp2 WHERE vsp2.venta_id = vs.id AND vsp2.modalidad_pago_id = ?) OR vs.modalidad_pago_id = ?)'); paramsS.push(metodoPagoId, metodoPagoId); }
     const whereS = condS.length ? 'AND ' + condS.join(' AND ') : '';
 
@@ -118,6 +137,7 @@ export class VentaServicioService {
     if (desde) { condP.push('vp.fecha_venta >= ?'); paramsP.push(desde); }
     if (hasta) { condP.push('vp.fecha_venta <= ?'); paramsP.push(hasta); }
     if (pacienteId) { condP.push('vp.paciente_id = ?'); paramsP.push(pacienteId); }
+    if (compVenta) { condP.push('vp.tipo_comprobante_id = ?'); paramsP.push(compVenta); }
     if (metodoPagoId) { condP.push('(EXISTS (SELECT 1 FROM venta_producto_pago vpp2 WHERE vpp2.venta_id = vp.id AND vpp2.modalidad_pago_id = ?) OR vp.modalidad_pago_id = ?)'); paramsP.push(metodoPagoId, metodoPagoId); }
     const whereP = condP.length ? 'AND ' + condP.join(' AND ') : '';
 
@@ -127,6 +147,7 @@ export class VentaServicioService {
     if (desde) { condS_base.push('vs.fecha_venta >= ?'); paramsS_base.push(desde); }
     if (hasta) { condS_base.push('vs.fecha_venta <= ?'); paramsS_base.push(hasta); }
     if (pacienteId) { condS_base.push('vs.paciente_id = ?'); paramsS_base.push(pacienteId); }
+    if (compVenta) { condS_base.push('vs.tipo_comprobante_id = ?'); paramsS_base.push(compVenta); }
     const whereS_base = condS_base.length ? 'AND ' + condS_base.join(' AND ') : '';
 
     const condP_base: string[] = [];
@@ -134,128 +155,104 @@ export class VentaServicioService {
     if (desde) { condP_base.push('vp.fecha_venta >= ?'); paramsP_base.push(desde); }
     if (hasta) { condP_base.push('vp.fecha_venta <= ?'); paramsP_base.push(hasta); }
     if (pacienteId) { condP_base.push('vp.paciente_id = ?'); paramsP_base.push(pacienteId); }
+    if (compVenta) { condP_base.push('vp.tipo_comprobante_id = ?'); paramsP_base.push(compVenta); }
     const whereP_base = condP_base.length ? 'AND ' + condP_base.join(' AND ') : '';
 
-    let countSql: string;
-    let countParams: any[];
-    let montoSql: string;
-    let montoParams: any[];
-    let pageSql: string;
-    let pageParams: any[];
+    // Condiciones nota_credito (JOIN a venta_servicio para paciente)
+    const condN: string[] = [];
+    const paramsN: any[] = [];
+    if (desde) { condN.push('nc.fecha >= ?'); paramsN.push(desde); }
+    if (hasta) { condN.push('nc.fecha <= ?'); paramsN.push(hasta); }
+    if (pacienteId) { condN.push('vs.paciente_id = ?'); paramsN.push(pacienteId); }
+    if (metodoPagoId) { condN.push('nc.modalidad_pago_id = ?'); paramsN.push(metodoPagoId); }
+    const whereN = condN.length ? 'AND ' + condN.join(' AND ') : '';
 
-    if (tipo === 'servicios') {
-      countSql = `SELECT COUNT(*) as total FROM venta_servicio vs WHERE 1=1 ${whereS}`;
-      countParams = [...paramsS];
-      if (metodoPagoId) {
-        montoSql = `
-          SELECT COALESCE(SUM(COALESCE(pago_sum.sum_monto, vs.total)), 0) as total_monto
-          FROM venta_servicio vs
-          LEFT JOIN (
-            SELECT venta_id, SUM(monto) as sum_monto
-            FROM venta_servicio_pago
-            WHERE modalidad_pago_id = ?
-            GROUP BY venta_id
-          ) pago_sum ON pago_sum.venta_id = vs.id
-          WHERE 1=1 AND (pago_sum.venta_id IS NOT NULL OR vs.modalidad_pago_id = ?)
-          ${whereS_base}`;
-        montoParams = [metodoPagoId, metodoPagoId, ...paramsS_base];
-      } else {
-        montoSql = `SELECT COALESCE(SUM(total), 0) as total_monto FROM venta_servicio vs WHERE 1=1 ${whereS}`;
-        montoParams = [...paramsS];
-      }
-      pageSql = `SELECT id, created_at, 'servicio' as tipo FROM venta_servicio vs WHERE 1=1 ${whereS} ORDER BY created_at DESC LIMIT ? OFFSET ?`;
-      pageParams = [...paramsS, limit, offset];
-    } else if (tipo === 'productos') {
-      countSql = `SELECT COUNT(*) as total FROM venta_producto vp WHERE 1=1 ${whereP}`;
-      countParams = [...paramsP];
-      if (metodoPagoId) {
-        montoSql = `
-          SELECT COALESCE(SUM(COALESCE(pago_sum.sum_monto, vp.total)), 0) as total_monto
-          FROM venta_producto vp
-          LEFT JOIN (
-            SELECT venta_id, SUM(monto) as sum_monto
-            FROM venta_producto_pago
-            WHERE modalidad_pago_id = ?
-            GROUP BY venta_id
-          ) pago_sum ON pago_sum.venta_id = vp.id
-          WHERE 1=1 AND (pago_sum.venta_id IS NOT NULL OR vp.modalidad_pago_id = ?)
-          ${whereP_base}`;
-        montoParams = [metodoPagoId, metodoPagoId, ...paramsP_base];
-      } else {
-        montoSql = `SELECT COALESCE(SUM(total), 0) as total_monto FROM venta_producto vp WHERE 1=1 ${whereP}`;
-        montoParams = [...paramsP];
-      }
-      pageSql = `SELECT id, created_at, 'producto' as tipo FROM venta_producto vp WHERE 1=1 ${whereP} ORDER BY created_at DESC LIMIT ? OFFSET ?`;
-      pageParams = [...paramsP, limit, offset];
-    } else {
-      countSql = `
-        SELECT COUNT(*) as total FROM (
-          SELECT id FROM venta_servicio vs WHERE 1=1 ${whereS}
-          UNION ALL
-          SELECT id FROM venta_producto vp WHERE 1=1 ${whereP}
-        ) combined`;
-      countParams = [...paramsS, ...paramsP];
-      if (metodoPagoId) {
-        montoSql = `
-          SELECT COALESCE(SUM(monto_metodo), 0) as total_monto FROM (
-            SELECT COALESCE(pago_sum_s.sum_monto, vs.total) as monto_metodo
-            FROM venta_servicio vs
-            LEFT JOIN (
-              SELECT venta_id, SUM(monto) as sum_monto
-              FROM venta_servicio_pago
-              WHERE modalidad_pago_id = ?
-              GROUP BY venta_id
-            ) pago_sum_s ON pago_sum_s.venta_id = vs.id
-            WHERE 1=1 AND (pago_sum_s.venta_id IS NOT NULL OR vs.modalidad_pago_id = ?)
-            ${whereS_base}
-            UNION ALL
-            SELECT COALESCE(pago_sum_p.sum_monto, vp.total) as monto_metodo
-            FROM venta_producto vp
-            LEFT JOIN (
-              SELECT venta_id, SUM(monto) as sum_monto
-              FROM venta_producto_pago
-              WHERE modalidad_pago_id = ?
-              GROUP BY venta_id
-            ) pago_sum_p ON pago_sum_p.venta_id = vp.id
-            WHERE 1=1 AND (pago_sum_p.venta_id IS NOT NULL OR vp.modalidad_pago_id = ?)
-            ${whereP_base}
-          ) combined`;
-        montoParams = [metodoPagoId, metodoPagoId, ...paramsS_base, metodoPagoId, metodoPagoId, ...paramsP_base];
-      } else {
-        montoSql = `
-          SELECT COALESCE(SUM(total), 0) as total_monto FROM (
-            SELECT total FROM venta_servicio vs WHERE 1=1 ${whereS}
-            UNION ALL
-            SELECT total FROM venta_producto vp WHERE 1=1 ${whereP}
-          ) combined`;
-        montoParams = [...paramsS, ...paramsP];
-      }
-      pageSql = `
-        SELECT id, created_at, 'servicio' as tipo FROM venta_servicio vs WHERE 1=1 ${whereS}
-        UNION ALL
-        SELECT id, created_at, 'producto' as tipo FROM venta_producto vp WHERE 1=1 ${whereP}
-        ORDER BY created_at DESC LIMIT ? OFFSET ?`;
-      pageParams = [...paramsS, ...paramsP, limit, offset];
+    // ── Fuentes activas (venta_servicio / venta_producto / nota_credito) ──
+    const pageSelects: string[] = [];
+    const pageSelParams: any[] = [];
+    const countSelects: string[] = [];
+    const countParams: any[] = [];
+
+    if (incServ) {
+      pageSelects.push(`SELECT id, created_at, 'servicio' as tipo FROM venta_servicio vs WHERE 1=1 ${whereS}`);
+      pageSelParams.push(...paramsS);
+      countSelects.push(`SELECT id FROM venta_servicio vs WHERE 1=1 ${whereS}`);
+      countParams.push(...paramsS);
+    }
+    if (incProd) {
+      pageSelects.push(`SELECT id, created_at, 'producto' as tipo FROM venta_producto vp WHERE 1=1 ${whereP}`);
+      pageSelParams.push(...paramsP);
+      countSelects.push(`SELECT id FROM venta_producto vp WHERE 1=1 ${whereP}`);
+      countParams.push(...paramsP);
+    }
+    if (incNC) {
+      pageSelects.push(`SELECT nc.id, nc.created_at, 'nota_credito' as tipo FROM nota_credito nc JOIN venta_servicio vs ON vs.id = nc.venta_servicio_id WHERE 1=1 ${whereN}`);
+      pageSelParams.push(...paramsN);
+      countSelects.push(`SELECT nc.id FROM nota_credito nc JOIN venta_servicio vs ON vs.id = nc.venta_servicio_id WHERE 1=1 ${whereN}`);
+      countParams.push(...paramsN);
     }
 
-    const globalMontoSql = `
-      SELECT COALESCE(
-        (SELECT COALESCE(SUM(total),0) FROM venta_servicio) +
-        (SELECT COALESCE(SUM(total),0) FROM venta_producto),
-        0
-      ) as total_monto_global`;
+    // Sin fuentes activas (p.ej. pestaña productos + comprobante Nota de Crédito) → vacío.
+    if (pageSelects.length === 0) {
+      return {
+        data: [], total: 0, totalMonto: 0, totalMontoBruto: 0, totalDevoluciones: 0,
+        totalMontoGlobal: 0, totalMontoGlobalBruto: 0, totalDevolucionesGlobal: 0, page, limit,
+      };
+    }
 
-    const [[{ total }], [{ total_monto }], pageRows, [{ total_monto_global }]] = await Promise.all([
+    const countSql = `SELECT COUNT(*) as total FROM ( ${countSelects.join(' UNION ALL ')} ) combined`;
+    const pageSql = `${pageSelects.join(' UNION ALL ')} ORDER BY created_at DESC LIMIT ? OFFSET ?`;
+
+    // Monto de ventas (ingresos) de las fuentes venta incluidas — respeta el filtro por método de pago.
+    const montoQueries: Promise<any>[] = [];
+    if (incServ) {
+      montoQueries.push(metodoPagoId
+        ? this.dataSource.query(
+            `SELECT COALESCE(SUM(COALESCE(ps.sum_monto, vs.total)),0) AS t
+               FROM venta_servicio vs
+               LEFT JOIN (SELECT venta_id, SUM(monto) sum_monto FROM venta_servicio_pago WHERE modalidad_pago_id=? GROUP BY venta_id) ps ON ps.venta_id=vs.id
+              WHERE (ps.venta_id IS NOT NULL OR vs.modalidad_pago_id=?) ${whereS_base}`,
+            [metodoPagoId, metodoPagoId, ...paramsS_base])
+        : this.dataSource.query(`SELECT COALESCE(SUM(total),0) AS t FROM venta_servicio vs WHERE 1=1 ${whereS}`, [...paramsS]));
+    }
+    if (incProd) {
+      montoQueries.push(metodoPagoId
+        ? this.dataSource.query(
+            `SELECT COALESCE(SUM(COALESCE(pp.sum_monto, vp.total)),0) AS t
+               FROM venta_producto vp
+               LEFT JOIN (SELECT venta_id, SUM(monto) sum_monto FROM venta_producto_pago WHERE modalidad_pago_id=? GROUP BY venta_id) pp ON pp.venta_id=vp.id
+              WHERE (pp.venta_id IS NOT NULL OR vp.modalidad_pago_id=?) ${whereP_base}`,
+            [metodoPagoId, metodoPagoId, ...paramsP_base])
+        : this.dataSource.query(`SELECT COALESCE(SUM(total),0) AS t FROM venta_producto vp WHERE 1=1 ${whereP}`, [...paramsP]));
+    }
+
+    const ncMontoQuery = incNC
+      ? this.dataSource.query(`SELECT COALESCE(SUM(nc.monto_devuelto),0) AS t FROM nota_credito nc JOIN venta_servicio vs ON vs.id=nc.venta_servicio_id WHERE 1=1 ${whereN}`, [...paramsN])
+      : Promise.resolve([{ t: 0 }]);
+
+    const globalMontoSql = `
+      SELECT
+        ((SELECT COALESCE(SUM(total),0) FROM venta_servicio) + (SELECT COALESCE(SUM(total),0) FROM venta_producto)) as bruto,
+        (SELECT COALESCE(SUM(monto_devuelto),0) FROM nota_credito) as dev`;
+
+    const [[{ total }], montoRows, [{ t: ncMonto }], pageRows, [{ bruto, dev }]] = await Promise.all([
       this.dataSource.query(countSql, countParams),
-      this.dataSource.query(montoSql, montoParams),
-      this.dataSource.query(pageSql, pageParams),
+      Promise.all(montoQueries),
+      ncMontoQuery,
+      this.dataSource.query(pageSql, [...pageSelParams, limit, offset]),
       this.dataSource.query(globalMontoSql),
     ]);
 
+    const ventaMontoBruto = (montoRows as any[]).reduce((s, r) => s + Number(r?.[0]?.t || 0), 0);
+    const totalDevoluciones = Number(ncMonto || 0);
+    const totalDevolucionesGlobal = Number(dev || 0);
+    const totalMontoGlobalBruto = Number(bruto || 0);
+
     const servicioIds: number[] = pageRows.filter(r => r.tipo === 'servicio').map(r => +r.id);
     const productoIds: number[] = pageRows.filter(r => r.tipo === 'producto').map(r => +r.id);
+    const ncIds: number[] = pageRows.filter(r => r.tipo === 'nota_credito').map(r => +r.id);
 
-    const [servicios, productos] = await Promise.all([
+    const [servicios, productos, notas] = await Promise.all([
       servicioIds.length ? this.ventaRepo
         .createQueryBuilder('v')
         .leftJoinAndSelect('v.tipo_pagador', 'tipo_pagador')
@@ -302,6 +299,11 @@ export class VentaServicioService {
         .leftJoinAndSelect('v.user_crea', 'user_crea')
         .whereInIds(productoIds)
         .getMany() : Promise.resolve([]),
+
+      ncIds.length ? this.notaCreditoRepo.find({
+        where: ncIds.map(id => ({ id })),
+        relations: ['venta', 'venta.paciente', 'venta.responsable', 'venta.comprador_externo', 'venta.tipo_pagador', 'modalidad_pago', 'user_crea', 'validado_por_trabajador'],
+      }) : Promise.resolve([]),
     ]);
 
     // Cargar promociones solo para los items de esta página
@@ -330,12 +332,59 @@ export class VentaServicioService {
     for (const v of servicios) v.promociones_aplicadas = promoMapS.get(v.id) ?? [];
     for (const v of productos as any[]) v.promociones_aplicadas = promoMapP.get(v.id) ?? [];
 
-    // Reordenar según el orden original de pageRows
+    // Reordenar según el orden original de pageRows (servicio / producto / nota_credito)
     const sMap = new Map(servicios.map(v => [v.id, { ...v, tipo: 'servicio' }]));
     const pMap = new Map((productos as any[]).map(v => [v.id, { ...v, tipo: 'producto' }]));
-    const data = pageRows.map(r => r.tipo === 'servicio' ? sMap.get(+r.id) : pMap.get(+r.id)).filter(Boolean);
+    const ncMap = new Map((notas as any[]).map(n => [n.id, this.mapNotaCreditoRow(n)]));
+    const data = pageRows
+      .map(r =>
+        r.tipo === 'servicio' ? sMap.get(+r.id)
+        : r.tipo === 'producto' ? pMap.get(+r.id)
+        : ncMap.get(+r.id),
+      )
+      .filter(Boolean);
 
-    return { data, total: +total, totalMonto: +total_monto, totalMontoGlobal: +total_monto_global, page, limit };
+    return {
+      data,
+      total: +total,
+      totalMonto: ventaMontoBruto - totalDevoluciones,   // neto (ventas − devoluciones)
+      totalMontoBruto: ventaMontoBruto,
+      totalDevoluciones,
+      totalMontoGlobal: totalMontoGlobalBruto - totalDevolucionesGlobal,
+      totalMontoGlobalBruto,
+      totalDevolucionesGlobal,
+      page,
+      limit,
+    };
+  }
+
+  /** Convierte una nota de crédito en una fila compatible con el historial de ventas. */
+  private mapNotaCreditoRow(nc: any): any {
+    const v = nc.venta;
+    const monto = Number(nc.monto_devuelto);
+    return {
+      id: nc.id,
+      tipo: 'nota_credito',
+      es_nota_credito: true,
+      codigo_comprobante: nc.codigo,
+      fecha_venta: nc.fecha,
+      created_at: nc.created_at,
+      tipo_comprobante: { id: 4, nombre: 'Nota de Crédito' },
+      tipo_pagador_id: v?.tipo_pagador_id ?? null,
+      paciente: v?.paciente ?? null,
+      responsable: v?.responsable ?? null,
+      comprador_externo: v?.comprador_externo ?? null,
+      subtotal: -monto,
+      descuento_monto: 0,
+      total: -monto,
+      detalles: [],
+      pagos: nc.modalidad_pago
+        ? [{ id: `nc-${nc.id}`, modalidad_pago: nc.modalidad_pago, monto: -monto, referencia: null }]
+        : [],
+      promociones_aplicadas: [],
+      nota_credito: nc,
+      venta_servicio_id: nc.venta_servicio_id,
+    };
   }
 
   async validarPago(pagoId: number, userId: number) {
@@ -377,6 +426,11 @@ export class VentaServicioService {
     v.promociones_aplicadas = await this.ventaPromoRepo.find({
       where: { tipo_venta_id: TIPO_VENTA_SERVICIO, venta_id: id },
       relations: ['promocion', 'promocion.reglas', 'promocion.reglas.beneficio_producto'],
+    });
+
+    (v as any).nota_credito = await this.notaCreditoRepo.findOne({
+      where: { venta_servicio_id: id },
+      relations: ['modalidad_pago', 'user_crea', 'validado_por_trabajador'],
     });
 
     return v;
@@ -1066,6 +1120,275 @@ export class VentaServicioService {
       await manager.delete(VentaServicio, id);
 
       return { message: 'Venta de servicio eliminada exitosamente', id, resumen };
+    });
+  }
+
+  // ── Devoluciones / Notas de crédito ─────────────────────────────────────────────
+
+  /**
+   * Estados de cita que YA se realizaron o ya no ocupan agenda (no se anulan):
+   * 5=Cancelada, 6=Sesión Dictada, 7=Asistió, 8=No asistió, 9=Anulada.
+   * Todo lo demás (típicamente 1=Programada) es una cita pendiente que sí se anula.
+   */
+  private readonly ESTADOS_CITA_NO_PENDIENTE = [5, 6, 7, 8, 9];
+
+  /**
+   * Vista previa de una devolución: cuántas citas futuras pendientes se anularían,
+   * cuántas sesiones sin asignar se perderían y un monto sugerido a devolver.
+   */
+  async previewDevolucion(id: number) {
+    const venta = await this.ventaRepo.findOne({
+      where: { id },
+      relations: [
+        'detalles', 'detalles.servicio_tarifa', 'detalles.servicio_tarifa.servicio',
+        'detalles.servicio_tarifa.motivo_cita', 'detalles.documento_tarifa',
+        'paciente', 'tipo_comprobante',
+      ],
+    });
+    if (!venta) throw new NotFoundException(`Venta de servicio ${id} no encontrada`);
+
+    const notaExistente = await this.notaCreditoRepo.findOne({
+      where: { venta_servicio_id: id },
+      relations: ['modalidad_pago', 'user_crea', 'validado_por_trabajador'],
+    });
+
+    const detalleIds = venta.detalles.map(d => d.id);
+    let citasPorDetalle = new Map<number, number>();
+    if (detalleIds.length > 0) {
+      const rows = await this.dataSource.query(
+        `SELECT venta_servicio_detalle_id AS did, COUNT(*) AS total
+           FROM citas
+          WHERE venta_servicio_detalle_id IN (?)
+            AND flg_activo = 1
+            AND estado_id NOT IN (${this.ESTADOS_CITA_NO_PENDIENTE.join(',')})
+          GROUP BY venta_servicio_detalle_id`,
+        [detalleIds],
+      );
+      citasPorDetalle = new Map(rows.map((r: any) => [Number(r.did), Number(r.total)]));
+    }
+
+    let totalCitasPendientes = 0;
+    let totalSesionesSinAsignar = 0;
+    let montoSugerido = 0;
+
+    // Ratio del descuento global: venta.total = venta.subtotal - descuentos globales.
+    // Devolvemos proporcional al total realmente pagado, no al precio de lista.
+    const subtotalVenta = Number(venta.subtotal) || 0;
+    const totalVenta = Number(venta.total) || 0;
+    const ratioGlobal = subtotalVenta > 0 ? totalVenta / subtotalVenta : 1;
+
+    const lineas = venta.detalles.map(d => {
+      const citasPendientes = citasPorDetalle.get(d.id) ?? 0;
+      const sesionesTotales = Number(d.sesiones_totales) || 0;
+      const sesionesSinAsignar = Math.max(0, sesionesTotales - Number(d.sesiones_usadas));
+      const sesionesAnulables = citasPendientes + sesionesSinAsignar;
+
+      // Valor NETO por sesión = subtotal de la línea (ya con descuento de línea) / sesiones,
+      // ajustado por el descuento global. Anular todo ⇒ suma exacta = venta.total.
+      const netoPorSesion = sesionesTotales > 0 ? Number(d.subtotal) / sesionesTotales : 0;
+      const montoLinea = parseFloat((netoPorSesion * sesionesAnulables * ratioGlobal).toFixed(2));
+
+      totalCitasPendientes += citasPendientes;
+      totalSesionesSinAsignar += sesionesSinAsignar;
+      montoSugerido += montoLinea;
+
+      return {
+        detalle_id: d.id,
+        descripcion: d.descripcionLinea
+          || d.servicio_tarifa?.servicio?.nombre
+          || d.documento_tarifa?.nombre
+          || 'Ítem',
+        sesiones_totales: Number(d.sesiones_totales),
+        sesiones_usadas: Number(d.sesiones_usadas),
+        citas_pendientes: citasPendientes,
+        sesiones_sin_asignar: sesionesSinAsignar,
+        sesiones_anulables: sesionesAnulables,
+        monto_linea: montoLinea,
+      };
+    });
+
+    return {
+      venta_id: venta.id,
+      codigo_comprobante: venta.codigo_comprobante,
+      total_venta: Number(venta.total),
+      ya_devuelta: !!notaExistente,
+      nota_credito: notaExistente ?? null,
+      total_citas_pendientes: totalCitasPendientes,
+      total_sesiones_sin_asignar: totalSesionesSinAsignar,
+      total_sesiones_anulables: totalCitasPendientes + totalSesionesSinAsignar,
+      monto_sugerido: parseFloat(montoSugerido.toFixed(2)),
+      lineas,
+    };
+  }
+
+  /**
+   * Registra una nota de crédito (devolución total) sobre una venta de servicio:
+   *  - Anula las citas futuras pendientes (estado_id = 9 Anulada, flg_activo = 0)
+   *    → el horario queda libre en la agenda para otro paciente.
+   *  - Consume el saldo de sesiones sin asignar (sesiones_usadas = sesiones_totales)
+   *    → ya no se pueden agendar.
+   *  - Guarda la nota de crédito con el monto devuelto.
+   */
+  async crearNotaCredito(id: number, dto: CreateNotaCreditoDto) {
+    const resultado = await this.dataSource.transaction(async (manager) => {
+      const venta = await manager.findOne(VentaServicio, {
+        where: { id },
+        relations: ['detalles'],
+      });
+      if (!venta) throw new NotFoundException(`Venta de servicio ${id} no encontrada`);
+
+      const notaExistente = await manager.findOne(NotaCredito, { where: { venta_servicio_id: id } });
+      if (notaExistente) {
+        throw new BadRequestException(
+          `Esta venta ya tiene una nota de crédito registrada (${notaExistente.codigo ?? '#' + notaExistente.id}).`,
+        );
+      }
+
+      // Resolver el id del estado "Anulada" (por nombre, con fallback a 9)
+      const [estadoAnulada] = await manager.query(
+        `SELECT id FROM estado_cita WHERE nombre = 'Anulada' LIMIT 1`,
+      );
+      const estadoAnuladaId = estadoAnulada?.id ?? 9;
+
+      const detalleIds = venta.detalles.map(d => d.id);
+
+      // 1) Anular citas futuras pendientes → liberar agenda
+      let citasAnuladas = 0;
+      const pacientesServicios: Array<{ paciente_id: number; servicio_id: number }> = [];
+      if (detalleIds.length > 0) {
+        const citasPendientes = await manager.query(
+          `SELECT id, paciente_id, servicio_id
+             FROM citas
+            WHERE venta_servicio_detalle_id IN (?)
+              AND flg_activo = 1
+              AND estado_id NOT IN (${this.ESTADOS_CITA_NO_PENDIENTE.join(',')})`,
+          [detalleIds],
+        );
+
+        if (citasPendientes.length > 0) {
+          const idsCitas = citasPendientes.map((c: any) => c.id);
+          await manager.query(
+            `UPDATE citas
+                SET estado_id = ?, flg_activo = 0, user_id_actua = ?, fecha_actua = NOW()
+              WHERE id IN (?)`,
+            [estadoAnuladaId, dto.user_crea_id ?? null, idsCitas],
+          );
+          citasAnuladas = citasPendientes.length;
+          for (const c of citasPendientes) {
+            if (c.paciente_id && c.servicio_id) {
+              pacientesServicios.push({ paciente_id: c.paciente_id, servicio_id: c.servicio_id });
+            }
+          }
+        }
+      }
+
+      // 2) Consumir el saldo de sesiones sin asignar (no reagendables)
+      const sesionesSinAsignar = venta.detalles.reduce(
+        (s, d) => s + Math.max(0, Number(d.sesiones_totales) - Number(d.sesiones_usadas)),
+        0,
+      );
+      if (sesionesSinAsignar > 0) {
+        await manager.query(
+          `UPDATE venta_servicio_detalle
+              SET sesiones_usadas = sesiones_totales
+            WHERE venta_id = ? AND sesiones_usadas < sesiones_totales`,
+          [id],
+        );
+      }
+
+      // 3) Registrar la nota de crédito
+      const codigo = await this.comprobanteService.generarCodigoNotaCredito(manager);
+      const fecha = dto.fecha ?? new Date().toISOString().split('T')[0];
+
+      const nota = manager.create(NotaCredito, {
+        codigo,
+        venta_servicio_id: id,
+        fecha,
+        motivo: dto.motivo ?? null,
+        monto_devuelto: dto.monto_devuelto ?? 0,
+        modalidad_pago_id: dto.modalidad_pago_id ?? null,
+        citas_anuladas: citasAnuladas,
+        sesiones_anuladas: sesionesSinAsignar,
+        user_crea_id: dto.user_crea_id ?? null,
+      });
+      const guardada = await manager.save(nota);
+
+      return {
+        message: 'Nota de crédito registrada',
+        nota_credito: guardada,
+        citas_anuladas: citasAnuladas,
+        sesiones_anuladas: sesionesSinAsignar,
+        pacientes_servicios: pacientesServicios,
+      };
+    });
+
+    // 📧 Correo a info@/rrhh@ + 🔔 notificación al Administrador (no bloquea la respuesta)
+    this.notificarDevolucion(resultado).catch((e) =>
+      console.error('No se pudo notificar la devolución:', e?.message || e),
+    );
+
+    return resultado;
+  }
+
+  /** Envía el correo (info@/rrhh@) y la notificación in-app (Administrador) de una devolución. */
+  private async notificarDevolucion(resultado: any): Promise<void> {
+    const nota = await this.notaCreditoRepo.findOne({
+      where: { id: resultado.nota_credito.id },
+      relations: ['venta', 'venta.paciente', 'venta.responsable', 'venta.comprador_externo', 'modalidad_pago', 'user_crea'],
+    });
+    if (!nota) return;
+    const v: any = (nota as any).venta;
+    const cliente = v?.paciente
+      ? `${v.paciente.nombres} ${v.paciente.apellido_paterno} ${v.paciente.apellido_materno || ''}`.trim()
+      : v?.responsable
+        ? `${v.responsable.nombres} ${v.responsable.apellido_paterno} ${v.responsable.apellido_materno || ''}`.trim()
+        : v?.comprador_externo?.nombre || '—';
+    const registradaPor = (nota as any).user_crea
+      ? `${(nota as any).user_crea.nombres} ${(nota as any).user_crea.apellidos}`.trim()
+      : null;
+
+    await this.mailService.enviarCorreoNotaCredito({
+      codigo: nota.codigo,
+      ventaCodigo: v?.codigo_comprobante ?? null,
+      clienteNombre: cliente,
+      montoDevuelto: Number(nota.monto_devuelto),
+      metodoPago: (nota as any).modalidad_pago?.nombre ?? null,
+      motivo: nota.motivo,
+      citasAnuladas: resultado.citas_anuladas,
+      sesionesAnuladas: resultado.sesiones_anuladas,
+      registradaPor,
+      fecha: nota.fecha,
+    });
+
+    // 🔔 Notificación in-app al Administrador
+    if (nota.user_crea_id) {
+      await this.notificacionesService.notificarNotaCredito(
+        nota.id,
+        nota.user_crea_id,
+        nota.codigo,
+        cliente,
+        Number(nota.monto_devuelto),
+        resultado.citas_anuladas,
+        resultado.sesiones_anuladas,
+        registradaPor ?? undefined,
+      );
+    }
+  }
+
+  /** Valida (aprueba) una nota de crédito, dejando constancia de quién y cuándo. */
+  async validarNotaCredito(notaId: number, userId: number) {
+    const nota = await this.notaCreditoRepo.findOne({ where: { id: notaId } });
+    if (!nota) throw new NotFoundException(`Nota de crédito #${notaId} no encontrada`);
+    if (!nota.validado) {
+      await this.notaCreditoRepo.update(notaId, {
+        validado: true,
+        validado_por: userId,
+        validado_at: new Date(),
+      });
+    }
+    return this.notaCreditoRepo.findOne({
+      where: { id: notaId },
+      relations: ['modalidad_pago', 'user_crea', 'validado_por_trabajador'],
     });
   }
 

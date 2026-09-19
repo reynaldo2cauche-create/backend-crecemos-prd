@@ -8,6 +8,7 @@ import { CompradorExterno } from './entities/comprador-externo.entity';
 import { VentaServicio } from './entities/venta-servicio.entity';
 import { VentaServicioDetalle } from './entities/venta-servicio-detalle.entity';
 import { VentaServicioPago } from './entities/venta-servicio-pago.entity';
+import { NotaCredito } from './entities/nota-credito.entity';
 import { VentaProducto } from './entities/venta-producto.entity';
 import { VentaProductoDetalle } from './entities/venta-producto-detalle.entity';
 import { VentaProductoPago } from './entities/venta-producto-pago.entity';
@@ -41,6 +42,8 @@ import { PaqueteComboItem } from 'src/inventario/entities/paquete-combo-item.ent
 import { DocumentoTarifa } from 'src/inventario/entities/documento-tarifa.entity';
 import { ModalidadPago } from 'src/historia-clinica/entities/modalidad-pago.entity';
 import { ComprobanteService } from './services/comprobante.service';
+import { MailModule } from '../mail/mail.module';
+import { NotificacionesModule } from '../notificaciones/notificaciones.module';
 
 @Module({
   imports: [
@@ -52,6 +55,7 @@ import { ComprobanteService } from './services/comprobante.service';
       VentaServicio,
       VentaServicioDetalle,
       VentaServicioPago,
+      NotaCredito,
       VentaProducto,
       VentaProductoDetalle,
       VentaProductoPago,
@@ -70,8 +74,10 @@ import { ComprobanteService } from './services/comprobante.service';
       // ✅ FIX: registrar VentaPromocionAplicada para que los services puedan inyectar su repo
       VentaPromocionAplicada,
       ModalidadPago,
-      
+
     ]),
+    MailModule,
+    NotificacionesModule,
   ],
   providers: [
     CompradorExternoService,

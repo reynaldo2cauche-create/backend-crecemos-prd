@@ -23,6 +23,9 @@ import { FaltasController } from './faltas.controller';
 import { FaltasService } from './faltas.service';
 import { SolicitudesController } from './solicitudes.controller';
 import { SolicitudesService } from './solicitudes.service';
+import { NotificacionesModule } from '../notificaciones/notificaciones.module';
+import { MailModule } from '../mail/mail.module';
+import { AuditoriaModule } from '../auditoria/auditoria.module';
 
 @Module({
   imports: [
@@ -41,6 +44,9 @@ import { SolicitudesService } from './solicitudes.service';
       BloqueoHorarios,
       TipoBloqueo,
     ]),
+    NotificacionesModule,
+    MailModule,
+    AuditoriaModule,
   ],
   controllers: [PagosController, VacacionesController, CuentasBancariasController, FaltasController, SolicitudesController],
   providers: [PagosService, VacacionesService, CuentasBancariasService, FaltasService, SolicitudesService],

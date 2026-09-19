@@ -62,4 +62,22 @@ export class ComprobanteService {
 
     return `${prefijo}${(mayor + 1).toString().padStart(padding, '0')}`;
   }
+
+  /**
+   * Genera el siguiente código de nota de crédito (NC-0001),
+   * consultando la tabla nota_credito.
+   */
+  async generarCodigoNotaCredito(manager: EntityManager): Promise<string> {
+    const [ultima] = await manager.query(
+      `SELECT codigo FROM nota_credito WHERE codigo LIKE 'NC-%' ORDER BY id DESC LIMIT 1`,
+    );
+
+    let siguiente = 1;
+    if (ultima?.codigo) {
+      const num = parseInt(ultima.codigo.split('-').pop(), 10);
+      if (!isNaN(num)) siguiente = num + 1;
+    }
+
+    return `NC-${siguiente.toString().padStart(4, '0')}`;
+  }
 }

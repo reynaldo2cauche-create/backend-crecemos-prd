@@ -395,4 +395,139 @@ export class MailService {
       // No relanzamos: el correo no debe romper la operación de eliminación
     }
   }
+
+  /**
+   * Notifica a info@ y rrhh@ que un colaborador registró una nueva solicitud
+   * de permiso/vacaciones que está PENDIENTE de aprobación.
+   */
+  async enviarCorreoNuevaSolicitudPermiso(data: {
+    solicitudId: number;
+    trabajadorNombre: string;
+    tipoLabel: string;
+    fechaInicio: string;
+    fechaFin?: string | null;
+    horaDesde?: string | null;
+    horaHasta?: string | null;
+    motivo?: string | null;
+  }): Promise<void> {
+    try {
+      const remitente = this.configService.get('MAIL_USER');
+      const destinoInfo = this.configService.get('INFO_EMAIL', 'info@crecemos.com.pe');
+      const destinoRrhh = this.configService.get('RRHH_EMAIL', 'rrhh@crecemos.com.pe');
+      const frontendUrl = this.configService.get('FRONTEND_URL', 'http://localhost:5173');
+
+      const rango =
+        data.fechaFin && data.fechaFin !== data.fechaInicio
+          ? `${data.fechaInicio} al ${data.fechaFin}`
+          : data.fechaInicio;
+      const horas =
+        data.horaDesde && data.horaHasta ? ` (${data.horaDesde} - ${data.horaHasta})` : '';
+      const fechaTexto = new Date().toLocaleString('es-PE');
+
+      await this.mailerService.sendMail({
+        from: `"Centro Crecemos - RR.HH." <${remitente}>`,
+        to: [destinoInfo, destinoRrhh],
+        subject: `Nueva solicitud de ${data.tipoLabel} — ${data.trabajadorNombre} (pendiente de aprobación)`,
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2 style="color: #7B1FA2;">Nueva solicitud pendiente de aprobación</h2>
+            <p>El colaborador <strong>${data.trabajadorNombre}</strong> registró una nueva solicitud
+            que requiere su <strong>revisión y aprobación</strong>.</p>
+
+            <div style="background-color: #f5f5f5; padding: 15px; border-radius: 6px; margin: 20px 0;">
+              <p style="margin: 5px 0;"><strong>N° de solicitud:</strong> ${data.solicitudId}</p>
+              <p style="margin: 5px 0;"><strong>Colaborador:</strong> ${data.trabajadorNombre}</p>
+              <p style="margin: 5px 0;"><strong>Tipo:</strong> ${data.tipoLabel}</p>
+              <p style="margin: 5px 0;"><strong>Fechas:</strong> ${rango}${horas}</p>
+              ${data.motivo ? `<p style="margin: 5px 0;"><strong>Motivo:</strong> ${data.motivo}</p>` : ''}
+              <p style="margin: 5px 0;"><strong>Estado:</strong> <span style="color:#d97706; font-weight:bold;">Pendiente</span></p>
+              <p style="margin: 5px 0;"><strong>Registrada:</strong> ${fechaTexto}</p>
+            </div>
+
+            <p style="text-align: center;">
+              <a href="${frontendUrl}/intranet/rrhh/solicitudes" style="display: inline-block; padding: 12px 30px; background-color: #7B1FA2; color: white; text-decoration: none; border-radius: 5px; font-weight: bold;">
+                Revisar solicitud
+              </a>
+            </p>
+
+            <hr style="margin: 30px 0; border: none; border-top: 1px solid #ddd;">
+            <p style="font-size: 12px; color: #999;">
+              <strong>CONTIGO CRECEMOS E.I.R.L.</strong><br>
+              Notificación automática del sistema de solicitudes de RR.HH.
+            </p>
+          </div>
+        `,
+      });
+      console.log(`✅ Correo de nueva solicitud enviado a: ${destinoInfo}, ${destinoRrhh}`);
+    } catch (error) {
+      console.error('❌ Error al enviar correo de nueva solicitud:', error?.message || error);
+      // No relanzamos: el correo no debe romper el registro de la solicitud
+    }
+  }
+
+  /**
+   * Notifica a info@ y rrhh@ que se registró una DEVOLUCIÓN (nota de crédito),
+   * con toda la info: venta original, monto devuelto, método, motivo y lo anulado.
+   */
+  async enviarCorreoNotaCredito(data: {
+    codigo: string;
+    ventaCodigo?: string | null;
+    clienteNombre: string;
+    montoDevuelto: number;
+    metodoPago?: string | null;
+    motivo?: string | null;
+    citasAnuladas: number;
+    sesionesAnuladas: number;
+    registradaPor?: string | null;
+    fecha?: string | null;
+  }): Promise<void> {
+    try {
+      const remitente = this.configService.get('MAIL_USER');
+      const destinoInfo = this.configService.get('INFO_EMAIL', 'info@crecemos.com.pe');
+      const destinoRrhh = this.configService.get('RRHH_EMAIL', 'rrhh@crecemos.com.pe');
+      const fechaTexto = data.fecha
+        ? new Date(`${data.fecha}T00:00:00`).toLocaleDateString('es-PE')
+        : new Date().toLocaleString('es-PE');
+      const monto = `S/ ${Number(data.montoDevuelto || 0).toFixed(2)}`;
+
+      await this.mailerService.sendMail({
+        from: `"Centro Crecemos - Ventas" <${remitente}>`,
+        to: [destinoInfo, destinoRrhh],
+        subject: `Devolución registrada ${data.codigo} — ${data.clienteNombre} (${monto})`,
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 620px; margin: 0 auto;">
+            <h2 style="color: #b45309;">Devolución / Nota de crédito registrada</h2>
+            <p>Se registró una <strong>devolución</strong> sobre una venta de servicio.</p>
+
+            <div style="background-color: #fffbeb; border: 1px solid #fde68a; padding: 15px; border-radius: 6px; margin: 20px 0;">
+              <p style="margin: 5px 0;"><strong>Nota de crédito:</strong> ${data.codigo}</p>
+              <p style="margin: 5px 0;"><strong>Venta original:</strong> ${data.ventaCodigo || '—'}</p>
+              <p style="margin: 5px 0;"><strong>Cliente:</strong> ${data.clienteNombre}</p>
+              <p style="margin: 5px 0;"><strong>Monto devuelto:</strong> <span style="color:#b45309; font-weight:bold;">${monto}</span></p>
+              <p style="margin: 5px 0;"><strong>Método de devolución:</strong> ${data.metodoPago || 'No especificado'}</p>
+              <p style="margin: 5px 0;"><strong>Fecha:</strong> ${fechaTexto}</p>
+              ${data.registradaPor ? `<p style="margin: 5px 0;"><strong>Registrada por:</strong> ${data.registradaPor}</p>` : ''}
+            </div>
+
+            <h3 style="color: #7B1FA2;">Qué se anuló</h3>
+            <div style="background-color: #f5f5f5; padding: 15px; border-radius: 6px; margin: 10px 0;">
+              <p style="margin: 5px 0;"><strong>Citas futuras anuladas:</strong> ${data.citasAnuladas} <span style="color:#666;">(liberadas de la agenda)</span></p>
+              <p style="margin: 5px 0;"><strong>Sesiones sin asignar anuladas:</strong> ${data.sesionesAnuladas}</p>
+              ${data.motivo ? `<p style="margin: 10px 0 0;"><strong>Motivo:</strong> ${data.motivo}</p>` : ''}
+            </div>
+
+            <hr style="margin: 30px 0; border: none; border-top: 1px solid #ddd;">
+            <p style="font-size: 12px; color: #999;">
+              <strong>CONTIGO CRECEMOS E.I.R.L.</strong><br>
+              Notificación automática del sistema de ventas.
+            </p>
+          </div>
+        `,
+      });
+      console.log(`✅ Correo de devolución enviado a: ${destinoInfo}, ${destinoRrhh}`);
+    } catch (error) {
+      console.error('❌ Error al enviar correo de devolución:', error?.message || error);
+      // No relanzamos: el correo no debe romper el registro de la devolución
+    }
+  }
 }

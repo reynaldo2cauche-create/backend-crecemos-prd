@@ -1694,6 +1694,7 @@ async obtenerEstadisticasSesiones(
           CONCAT(t.nombres, ' ', t.apellidos) as especialista,
           mc.nombre as motivo_nombre,
           c.motivo_id,
+          c.estado_id,
           vs.fecha_venta as fecha_pago,
           vs.codigo_comprobante,
           sa.terapeuta_estado_id,
@@ -1712,7 +1713,7 @@ async obtenerEstadisticasSesiones(
         LEFT JOIN seguimiento_asistencia sa ON sa.cita_id = c.id
         LEFT JOIN paquete_combo pc ON pc.id = vsd.paquete_combo_id
         WHERE c.paciente_id = ?
-          AND c.flg_activo = 1
+          AND (c.flg_activo = 1 OR c.estado_id = 9)
       `;
 
       // 🔥 2. TODAS LAS VENTAS
@@ -1730,7 +1731,8 @@ async obtenerEstadisticasSesiones(
           vs.codigo_comprobante,
           vs.fecha_venta as fecha_pago,
           st.motivo_cita_id,
-          mc.nombre as motivo_cita_nombre
+          mc.nombre as motivo_cita_nombre,
+          EXISTS(SELECT 1 FROM nota_credito nc WHERE nc.venta_servicio_id = vsd.venta_id) as tiene_devolucion
         FROM venta_servicio_detalle vsd
         INNER JOIN venta_servicio vs ON vs.id = vsd.venta_id
         LEFT JOIN servicio_tarifa st ON st.id = vsd.servicio_tarifa_id
@@ -1815,6 +1817,7 @@ async obtenerEstadisticasSesiones(
             motivo_id: venta.motivo_cita_id,
             motivo_nombre: venta.motivo_cita_nombre || 'Por agendar',
             programada: false,
+            anulada: !!Number(venta.tiene_devolucion),
             venta_id: venta.venta_id,
             comprobante: venta.codigo_comprobante,
             fecha_pago: venta.fecha_pago,
@@ -1853,6 +1856,7 @@ async obtenerEstadisticasSesiones(
           recepcion_estado_id: cita.recepcion_estado_id,
           motivo_nombre: cita.motivo_nombre,
           programada: true,
+          anulada: Number(cita.estado_id) === 9,
           venta_id: cita.venta_id,
           comprobante: cita.codigo_comprobante,
           fecha_pago: cita.fecha_pago,
@@ -1902,6 +1906,7 @@ async obtenerEstadisticasSesiones(
           motivo_id: cita.motivo_id,
           motivo_nombre: cita.motivo_nombre,
           programada: true,
+          anulada: Number(cita.estado_id) === 9,
           terapeuta_estado_id: cita.terapeuta_estado_id,
           recepcion_estado_id: cita.recepcion_estado_id,
           venta_id: null,

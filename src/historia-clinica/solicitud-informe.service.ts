@@ -223,6 +223,19 @@ export class SolicitudInformeService {
     // venta + documento_tarifa + servicio, por lo que bloquear la venta completa
     // impedía registrar el segundo informe. Se valida solo esa combinación.
     if (dto.venta_servicio_id) {
+      // 🚫 Si la venta tiene una devolución (nota de crédito), no se puede pedir el informe:
+      // esa venta ya fue devuelta.
+      const [devolucion] = await this.solicitudRepo.manager.query(
+        `SELECT codigo FROM nota_credito WHERE venta_servicio_id = ? LIMIT 1`,
+        [dto.venta_servicio_id],
+      );
+      if (devolucion) {
+        throw new BadRequestException(
+          `Esta venta tiene una devolución registrada (${devolucion.codigo ?? 'nota de crédito'}). ` +
+          'No se puede solicitar el informe porque la venta ya fue devuelta.',
+        );
+      }
+
       const existe = await this.solicitudRepo.findOne({
         where: {
           venta_servicio_id:   dto.venta_servicio_id,

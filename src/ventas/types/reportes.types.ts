@@ -8,7 +8,9 @@ export interface ReporteParams {
 
 export interface Metricas {
   totalVentas: number;
-  totalIngresos: number;
+  totalIngresos: number;          // neto (ventas − devoluciones)
+  totalIngresosBruto: number;     // sin restar devoluciones
+  totalDevoluciones: number;      // notas de crédito del período
   ventasProductos: number;
   ventasServicios: number;
   ticketPromedio: number;

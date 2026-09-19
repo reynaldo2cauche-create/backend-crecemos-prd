@@ -165,6 +165,7 @@ import { PaqueteCombo } from './inventario/entities/paquete-combo.entity';
 import { PaqueteComboItem } from './inventario/entities/paquete-combo-item.entity';
 import { TipoComprobante } from './ventas/entities/tipo-comprobante.entity';
 import { VentaServicioPago } from './ventas/entities/venta-servicio-pago.entity';
+import { NotaCredito } from './ventas/entities/nota-credito.entity';
 import { VentaProductoPago } from './ventas/entities/venta-producto-pago.entity';
 import { ResponsablePaciente } from './pacientes/entities/responsable-paciente.entity';
 import { Responsable } from './pacientes/entities/responsable.entity';
@@ -427,6 +428,7 @@ import { ReporteAgendaEnvio } from './reportes-agenda/entities/reporte-agenda-en
         VentaProductoDetalle,
         TipoComprobante,
         VentaServicioPago,
+        NotaCredito,
         VentaProductoPago,
         // Promociones
         Promocion,
