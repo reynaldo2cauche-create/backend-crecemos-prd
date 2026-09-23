@@ -9,6 +9,7 @@ import { TipoBloqueo } from '../catalogos/tipo-bloqueo.entity';
 import { TrabajadorCentro } from '../usuarios/trabajador-centro.entity';
 import { CrearSolicitudDto } from './dto/crear-solicitud.dto';
 import { RevisarSolicitudDto } from './dto/revisar-solicitud.dto';
+import { ActualizarSolicitudDto } from './dto/actualizar-solicitud.dto';
 import { NotificacionesService } from '../notificaciones/notificaciones.service';
 import { MailService } from '../mail/mail.service';
 import { AuditoriaService } from '../auditoria/auditoria.service';
@@ -292,6 +293,53 @@ export class SolicitudesService {
         console.error(`No se pudo bloquear la agenda de la solicitud #${id}:`, e);
       }
     }
+
+    return this.findOne(id);
+  }
+
+  /**
+   * Edición por administración (el colaborador se equivocó). Se permite en cualquier estado.
+   * Si la solicitud está aprobada, se rehacen los bloqueos de agenda con las fechas nuevas
+   * (se borran los previos por solicitud_id y se recrean), para que no quede bloqueada la
+   * fecha vieja. Editar una rechazada solo corrige los datos (no había bloqueos).
+   */
+  async actualizar(id: number, dto: ActualizarSolicitudDto): Promise<Solicitud> {
+    const solicitud = await this.findOne(id);
+
+    if (dto.tipo !== undefined) solicitud.tipo = dto.tipo;
+    if (dto.fechaInicio !== undefined) {
+      solicitud.fecha_inicio = dto.fechaInicio;
+      solicitud.anticipacion_dias = this.diasDeAnticipacion(dto.fechaInicio);
+    }
+    if (dto.fechaFin !== undefined) solicitud.fecha_fin = dto.fechaFin || null;
+    if (dto.horaDesde !== undefined) solicitud.hora_desde = dto.horaDesde || null;
+    if (dto.horaHasta !== undefined) solicitud.hora_hasta = dto.horaHasta || null;
+    if (dto.motivo !== undefined) solicitud.motivo = dto.motivo ?? null;
+    if (dto.comentarioColaborador !== undefined) {
+      solicitud.comentario_colaborador = dto.comentarioColaborador ?? null;
+    }
+
+    await this.solicitudRepo.save(solicitud);
+
+    // Si ya estaba aprobada, resincronizar el bloqueo de agenda con las fechas nuevas.
+    if (solicitud.estado === 'aprobado') {
+      try {
+        await this.bloqueoRepo.delete({ solicitudId: id });
+        await this.bloquearAgendaPorSolicitud(solicitud, dto.userId ?? solicitud.revisor?.id);
+      } catch (e) {
+        console.error(`No se pudo resincronizar el bloqueo de la solicitud #${id}:`, e);
+      }
+    }
+
+    await this.historialRepo.save(
+      this.historialRepo.create({
+        solicitud: { id } as any,
+        accion: 'editada',
+        estado: solicitud.estado,
+        comentario: 'Solicitud editada por administración.',
+        user_id: dto.userId ?? null,
+      }),
+    );
 
     return this.findOne(id);
   }

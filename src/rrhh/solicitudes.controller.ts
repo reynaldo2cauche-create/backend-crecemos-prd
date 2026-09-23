@@ -17,6 +17,7 @@ import { extname } from 'path';
 import { SolicitudesService } from './solicitudes.service';
 import { CrearSolicitudDto } from './dto/crear-solicitud.dto';
 import { RevisarSolicitudDto } from './dto/revisar-solicitud.dto';
+import { ActualizarSolicitudDto } from './dto/actualizar-solicitud.dto';
 
 @Controller('backend_api/solicitudes')
 export class SolicitudesController {
@@ -81,6 +82,12 @@ export class SolicitudesController {
   @Patch(':id/revisar')
   revisar(@Param('id', ParseIntPipe) id: number, @Body() dto: RevisarSolicitudDto) {
     return this.solicitudesService.revisar(id, dto);
+  }
+
+  /** Editar una solicitud pendiente (administración corrige lo que el colaborador se equivocó). */
+  @Patch(':id')
+  actualizar(@Param('id', ParseIntPipe) id: number, @Body() dto: ActualizarSolicitudDto) {
+    return this.solicitudesService.actualizar(id, dto);
   }
 
   @Delete(':id')

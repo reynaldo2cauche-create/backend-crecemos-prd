@@ -5,9 +5,16 @@ import { Falta } from './falta.entity';
 import { TipoFalta } from './tipo-falta.entity';
 import { Mes } from './mes.entity';
 import { TrabajadorCentro } from '../usuarios/trabajador-centro.entity';
+import { BloqueoHorarios } from '../bloqueos/entities/bloqueo-horarios.entity';
+import { TipoBloqueo } from '../catalogos/tipo-bloqueo.entity';
 import { CrearFaltaDto } from './dto/crear-falta.dto';
 import { ActualizarFaltaDto } from './dto/actualizar-falta.dto';
 import { CrearTipoFaltaDto, ActualizarTipoFaltaDto } from './dto/tipo-falta.dto';
+
+// Rol de terapeuta y código del tipo de bloqueo puntual (el id real se resuelve por código,
+// que varía entre BDs). Solo los terapeutas tienen agenda que bloquear.
+const ROL_TERAPEUTA = 4;
+const CODIGO_BLOQUEO_PUNTUAL = 'PUNTUAL';
 
 @Injectable()
 export class FaltasService {
@@ -20,7 +27,66 @@ export class FaltasService {
     private mesRepository: Repository<Mes>,
     @InjectRepository(TrabajadorCentro)
     private trabajadorRepository: Repository<TrabajadorCentro>,
+    @InjectRepository(BloqueoHorarios)
+    private bloqueoRepository: Repository<BloqueoHorarios>,
+    @InjectRepository(TipoBloqueo)
+    private tipoBloqueoRepository: Repository<TipoBloqueo>,
   ) {}
+
+  /** Enumera todas las fechas 'YYYY-MM-DD' entre inicio y fin (ambas inclusive), en UTC. */
+  private enumerarDias(fechaInicio: string, fechaFin: string): string[] {
+    const dias: string[] = [];
+    const [ai, mi, di] = fechaInicio.split('-').map(Number);
+    const [af, mf, df] = fechaFin.split('-').map(Number);
+    const cursor = Date.UTC(ai, mi - 1, di);
+    const fin = Date.UTC(af, mf - 1, df);
+    for (let t = cursor; t <= fin && dias.length < 366; t += 24 * 60 * 60 * 1000) {
+      dias.push(new Date(t).toISOString().split('T')[0]);
+    }
+    return dias;
+  }
+
+  /**
+   * Bloquea la agenda de un terapeuta por cada día de la falta, para que no reciba citas
+   * en esas fechas. Solo aplica a terapeutas (rol 4). Se crea un bloqueo PUNTUAL de todo el
+   * día por fecha (así lo detecta la verificación exacta por fecha de `/bloqueos/verificar`).
+   * Enlazado por `falta_id` para poder recrearlo/eliminarlo si la falta cambia o se borra.
+   */
+  private async bloquearAgendaPorFalta(falta: Falta, empleado: TrabajadorCentro): Promise<void> {
+    if (empleado?.rol?.id !== ROL_TERAPEUTA) return;
+
+    const inicio = this.formatearFecha(falta.fecha_inicio);
+    const fin = this.formatearFecha(falta.fecha_fin) || inicio;
+    const dias = this.enumerarDias(inicio, fin);
+    if (dias.length === 0) return;
+
+    const tipoPuntual = await this.tipoBloqueoRepository.findOne({
+      where: { codigo: CODIGO_BLOQUEO_PUNTUAL },
+    });
+    const tipoBloqueoId = tipoPuntual?.id ?? 1;
+
+    const etiqueta = falta.tipo?.nombre || 'Falta';
+    const motivo = `${etiqueta} (falta #${falta.id})` +
+      (falta.observaciones ? ` — ${falta.observaciones}` : '');
+
+    const bloqueos = dias.map((dia) =>
+      this.bloqueoRepository.create({
+        trabajadorId: empleado.id,
+        tipoBloqueoId,
+        fechaInicio: dia,
+        fechaFin: dia,
+        diaSemana: null,
+        todoElDia: true,
+        horaInicio: null,
+        horaFin: null,
+        motivo: motivo.slice(0, 1000),
+        userIdCrea: falta.usuarioCrea?.id ?? null,
+        faltaId: falta.id,
+      }),
+    );
+
+    await this.bloqueoRepository.save(bloqueos);
+  }
 
   /** Convierte el CSV dias_laborables ("1,2,5") en un Set de números ISO (1=Lunes..7=Domingo). */
   private parseDiasLaborables(csv: string | null | undefined): Set<number> {
@@ -214,7 +280,16 @@ export class FaltasService {
       usuarioActualiza: usuario,
     });
 
-    return this.faltasRepository.save(falta);
+    const guardada = await this.faltasRepository.save(falta);
+
+    // Si es terapeuta, bloquear su agenda esos días. No debe romper el registro de la falta.
+    try {
+      await this.bloquearAgendaPorFalta(guardada, empleado);
+    } catch (e) {
+      console.error(`No se pudo bloquear la agenda de la falta #${guardada.id}:`, e?.message || e);
+    }
+
+    return guardada;
   }
 
   async actualizar(id: number, dto: ActualizarFaltaDto): Promise<Falta> {
@@ -263,7 +338,17 @@ export class FaltasService {
       falta.usuarioActualiza = await this.trabajadorRepository.findOne({ where: { id: dto.userId } });
     }
 
-    return this.faltasRepository.save(falta);
+    const actualizada = await this.faltasRepository.save(falta);
+
+    // Rehacer el bloqueo de agenda: las fechas pudieron cambiar. Borra los previos y recrea.
+    try {
+      await this.bloqueoRepository.delete({ faltaId: id });
+      await this.bloquearAgendaPorFalta(actualizada, actualizada.empleado);
+    } catch (e) {
+      console.error(`No se pudo actualizar el bloqueo de la falta #${id}:`, e?.message || e);
+    }
+
+    return actualizada;
   }
 
   async findAll(empleadoId?: number, mesId?: number, anio?: number): Promise<Falta[]> {
@@ -299,6 +384,8 @@ export class FaltasService {
         'No se puede eliminar una falta ya aplicada a un pago registrado.',
       );
     }
+    // Libera la agenda: elimina los bloqueos que generó esta falta.
+    await this.bloqueoRepository.delete({ faltaId: id });
     await this.faltasRepository.remove(falta);
   }
 

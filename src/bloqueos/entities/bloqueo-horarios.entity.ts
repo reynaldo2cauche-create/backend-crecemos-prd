@@ -47,6 +47,11 @@ export class BloqueoHorarios {
   @Column({ type: 'int', nullable: true, name: 'solicitud_id' })
   solicitudId: number | null;
 
+  // Si el bloqueo fue generado al registrar una falta de un terapeuta, guarda su id.
+  // Permite recrear/eliminar el bloqueo automáticamente cuando se edita o borra la falta.
+  @Column({ type: 'int', nullable: true, name: 'falta_id' })
+  faltaId: number | null;
+
   @Column({ type: 'boolean', default: true })
   activo: boolean;
 
