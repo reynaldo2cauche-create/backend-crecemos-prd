@@ -1,9 +1,14 @@
-import { Controller, Get, Post, Delete, Body, Param, Query, ParseIntPipe } from '@nestjs/common';
+import { Controller, Get, Post, Delete, Body, Param, Query, ParseIntPipe, UseGuards } from '@nestjs/common';
 import { VacacionesService } from './vacaciones.service';
 import { RegistrarVacacionDto } from './dto/registrar-vacacion.dto';
 import { CalcularVacacionesDto } from './dto/calcular-vacaciones.dto';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/roles.guard';
+import { Roles } from '../auth/roles.decorator';
 
 @Controller('backend_api/vacaciones')
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles('Administrador')
 export class VacacionesController {
   constructor(private readonly vacacionesService: VacacionesService) {}
 

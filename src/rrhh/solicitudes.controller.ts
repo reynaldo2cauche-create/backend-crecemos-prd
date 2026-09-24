@@ -10,6 +10,7 @@ import {
   ParseIntPipe,
   UseInterceptors,
   UploadedFile,
+  UseGuards,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
@@ -18,8 +19,12 @@ import { SolicitudesService } from './solicitudes.service';
 import { CrearSolicitudDto } from './dto/crear-solicitud.dto';
 import { RevisarSolicitudDto } from './dto/revisar-solicitud.dto';
 import { ActualizarSolicitudDto } from './dto/actualizar-solicitud.dto';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/roles.guard';
+import { Roles } from '../auth/roles.decorator';
 
 @Controller('backend_api/solicitudes')
+@UseGuards(JwtAuthGuard)
 export class SolicitudesController {
   constructor(private readonly solicitudesService: SolicitudesService) {}
 
@@ -69,23 +74,31 @@ export class SolicitudesController {
 
   /** Listado admin. Filtro opcional ?estado=pendiente */
   @Get()
+  @UseGuards(RolesGuard)
+  @Roles('Administrador')
   findAll(@Query('estado') estado?: string) {
     return this.solicitudesService.findAll(estado);
   }
 
   @Get(':id')
+  @UseGuards(RolesGuard)
+  @Roles('Administrador')
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.solicitudesService.findOne(id);
   }
 
-  /** Aprobar o rechazar (RRHH). */
+  /** Aprobar o rechazar (solo Administrador). */
   @Patch(':id/revisar')
+  @UseGuards(RolesGuard)
+  @Roles('Administrador')
   revisar(@Param('id', ParseIntPipe) id: number, @Body() dto: RevisarSolicitudDto) {
     return this.solicitudesService.revisar(id, dto);
   }
 
-  /** Editar una solicitud pendiente (administración corrige lo que el colaborador se equivocó). */
+  /** Editar una solicitud pendiente (solo Administrador corrige lo que el colaborador se equivocó). */
   @Patch(':id')
+  @UseGuards(RolesGuard)
+  @Roles('Administrador')
   actualizar(@Param('id', ParseIntPipe) id: number, @Body() dto: ActualizarSolicitudDto) {
     return this.solicitudesService.actualizar(id, dto);
   }

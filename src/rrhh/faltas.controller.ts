@@ -8,13 +8,19 @@ import {
   Param,
   Query,
   ParseIntPipe,
+  UseGuards,
 } from '@nestjs/common';
 import { FaltasService } from './faltas.service';
 import { CrearFaltaDto } from './dto/crear-falta.dto';
 import { ActualizarFaltaDto } from './dto/actualizar-falta.dto';
 import { CrearTipoFaltaDto, ActualizarTipoFaltaDto } from './dto/tipo-falta.dto';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/roles.guard';
+import { Roles } from '../auth/roles.decorator';
 
 @Controller('backend_api/faltas')
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles('Administrador')
 export class FaltasController {
   constructor(private readonly faltasService: FaltasService) {}
 
