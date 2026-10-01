@@ -230,6 +230,16 @@ import { PlanEstado } from './plan-terapeutico/entities/plan-estado.entity';
 // ── Reportes Agenda (correo diario 7 PM) ────────────────────────────────────────
 import { ReportesAgendaModule } from './reportes-agenda/reportes-agenda.module';
 import { ReporteAgendaEnvio } from './reportes-agenda/entities/reporte-agenda-envio.entity';
+import { FichaSeguimientoModule } from './ficha-seguimiento/ficha-seguimiento.module';
+import { FichaSeguimientoEscolar } from './ficha-seguimiento/ficha-seguimiento.entity';
+// Mesa de Partes
+import { MesaPartesModule } from './mesa-partes/mesa-partes.module';
+import { MesaPartesSolicitud } from './mesa-partes/entities/solicitud.entity';
+import { MesaPartesEvento } from './mesa-partes/entities/evento.entity';
+import { MesaPartesAdjunto } from './mesa-partes/entities/adjunto.entity';
+import { MesaPartesEstado } from './mesa-partes/entities/estado.entity';
+import { MesaPartesTipoEvento } from './mesa-partes/entities/tipo-evento.entity';
+import { MesaPartesTipo } from './mesa-partes/entities/tipo.entity';
 
 
 @Module({
@@ -478,6 +488,14 @@ import { ReporteAgendaEnvio } from './reportes-agenda/entities/reporte-agenda-en
         PlanResultado,
         PlanEstado,
         ReporteAgendaEnvio,
+        FichaSeguimientoEscolar,
+        // Mesa de Partes
+        MesaPartesSolicitud,
+        MesaPartesEvento,
+        MesaPartesAdjunto,
+        MesaPartesEstado,
+        MesaPartesTipoEvento,
+        MesaPartesTipo,
 
       ],
         synchronize: false,   // true en desarrollo, false en producción - DESHABILITADO para evitar conflictos con foreign keys
@@ -514,6 +532,8 @@ import { ReporteAgendaEnvio } from './reportes-agenda/entities/reporte-agenda-en
 
     PlanTerapeuticoModule,
     ReportesAgendaModule,
+    FichaSeguimientoModule,
+    MesaPartesModule,
   ],
   controllers: [AppController],
   providers: [
