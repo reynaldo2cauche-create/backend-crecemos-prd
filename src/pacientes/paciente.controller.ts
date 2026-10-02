@@ -132,12 +132,12 @@ async findAllIncludingInactive(@Query() query: any) {
   return this.pacienteService.findAllIncludingInactive(filters);
 }
   @Get('buscar')
-  buscarPacientes(@Query('q') query: string) {
+  buscarPacientes(@Query('q') query: string, @Query('incluirInactivos') incluirInactivos?: string) {
     // Validar que el parámetro q esté presente y sea válido
     if (!query || query === 'undefined' || query === 'null') {
       return [];
     }
-    return this.pacienteService.buscarPacientes(query);
+    return this.pacienteService.buscarPacientes(query, incluirInactivos === 'true');
   }
 
   @Public()

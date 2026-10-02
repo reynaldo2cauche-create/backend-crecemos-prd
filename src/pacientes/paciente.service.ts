@@ -1389,7 +1389,7 @@ async findAll(filters?: {
    * @param query Término de búsqueda
    * @returns Array con id, nombre completo, DNI y celular
    */
-  async buscarPacientes(query: string): Promise<{ id: number; nombre_completo: string; numero_documento: string; celular: string }[]> {
+  async buscarPacientes(query: string, incluirInactivos = false): Promise<{ id: number; nombre_completo: string; numero_documento: string; celular: string }[]> {
     if (!query || query.trim().length < 2) {
       return [];
     }
@@ -1408,8 +1408,12 @@ async findAll(filters?: {
         'paciente.celular',
       ])
       .leftJoin('paciente.estado', 'estado')
-      .where('paciente.mostrar_en_listado = :mostrarEnListado', { mostrarEnListado: true })
-      .andWhere('(estado.id IS NULL OR estado.id != :estadoExcluido)', { estadoExcluido: 5 });
+      .where('paciente.mostrar_en_listado = :mostrarEnListado', { mostrarEnListado: true });
+
+    // Por defecto se excluyen pacientes Inactivos (estado 5); con incluirInactivos se muestran todos
+    if (!incluirInactivos) {
+      queryBuilder.andWhere('(estado.id IS NULL OR estado.id != :estadoExcluido)', { estadoExcluido: 5 });
+    }
 
     // Si es un solo término, buscar en todos los campos (incluyendo documento)
     if (palabras.length === 1) {

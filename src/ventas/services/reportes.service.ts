@@ -756,10 +756,16 @@ export class ReportesService {
       INNER JOIN venta_servicio vs ON vs.id = vsd.venta_id
       LEFT JOIN paciente p ON p.id = vsd.paciente_id
       LEFT JOIN motivo_cita mc ON mc.id = vsd.motivo_cita_id
-      LEFT JOIN citas c 
+      LEFT JOIN citas c
         ON c.venta_servicio_detalle_id = vsd.id
         AND c.flg_activo = 1
       WHERE vsd.tipo_item_venta = 1
+        -- Excluir ventas con nota de crédito (devolución): sus citas quedan
+        -- anuladas (flg_activo=0) y el saldo se consume, así que no son
+        -- sesiones realmente pendientes de agendar.
+        AND NOT EXISTS (
+          SELECT 1 FROM nota_credito nc WHERE nc.venta_servicio_id = vs.id
+        )
       GROUP BY vsd.id
       HAVING sesiones_pendientes > 0
       ORDER BY vs.fecha_venta DESC, vs.id DESC
