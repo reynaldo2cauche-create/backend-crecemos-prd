@@ -64,7 +64,7 @@ export class PacienteServicioService {
 
   async findByPaciente(pacienteId: number): Promise<PacienteServicio[]> {
     return this.pacienteServicioRepository.find({
-      relations: ['paciente', 'servicio', 'asignaciones', 'asignaciones.terapeuta', 'estadoPaciente'],
+      relations: ['paciente', 'servicio', 'servicio.area', 'asignaciones', 'asignaciones.terapeuta', 'estadoPaciente'],
       where: {
         paciente: { id: pacienteId },
         activo: true

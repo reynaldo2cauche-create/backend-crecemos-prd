@@ -232,6 +232,8 @@ import { ReportesAgendaModule } from './reportes-agenda/reportes-agenda.module';
 import { ReporteAgendaEnvio } from './reportes-agenda/entities/reporte-agenda-envio.entity';
 import { FichaSeguimientoModule } from './ficha-seguimiento/ficha-seguimiento.module';
 import { FichaSeguimientoEscolar } from './ficha-seguimiento/ficha-seguimiento.entity';
+import { FichaSeguimientoPsicologiaModule } from './ficha-seguimiento-psicologia/ficha-seguimiento-psicologia.module';
+import { FichaSeguimientoPsicologia } from './ficha-seguimiento-psicologia/ficha-seguimiento-psicologia.entity';
 // Mesa de Partes
 import { MesaPartesModule } from './mesa-partes/mesa-partes.module';
 import { MesaPartesSolicitud } from './mesa-partes/entities/solicitud.entity';
@@ -489,6 +491,7 @@ import { MesaPartesTipo } from './mesa-partes/entities/tipo.entity';
         PlanEstado,
         ReporteAgendaEnvio,
         FichaSeguimientoEscolar,
+        FichaSeguimientoPsicologia,
         // Mesa de Partes
         MesaPartesSolicitud,
         MesaPartesEvento,
@@ -533,6 +536,7 @@ import { MesaPartesTipo } from './mesa-partes/entities/tipo.entity';
     PlanTerapeuticoModule,
     ReportesAgendaModule,
     FichaSeguimientoModule,
+    FichaSeguimientoPsicologiaModule,
     MesaPartesModule,
   ],
   controllers: [AppController],
