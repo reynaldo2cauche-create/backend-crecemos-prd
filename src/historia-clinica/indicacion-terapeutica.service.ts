@@ -27,7 +27,12 @@ export class IndicacionTerapeuticaService {
 
   async create(dto: CreateIndicacionTerapeuticaDto): Promise<IndicacionTerapeutica> {
     const now = new Date();
-    const hora = now.toTimeString().split(' ')[0];
+    // Usar la hora de Perú (America/Lima) sin importar la zona horaria del servidor.
+    // En producción el VPS está en UTC, por eso antes grababa +5 horas.
+    const hora = now.toLocaleTimeString('en-GB', {
+      timeZone: 'America/Lima',
+      hour12: false,
+    });
 
     const indicacion = this.indicacionRepo.create({
       fecha: dto.fecha,
