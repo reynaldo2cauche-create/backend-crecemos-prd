@@ -79,7 +79,7 @@ export class IndicacionMateriales {
   @Column({ default: false })
   munecos: boolean;
 
-  @Column({ length: 255, nullable: true })
+  @Column({ type: 'text', nullable: true })
   otros: string;
 
   // Relación

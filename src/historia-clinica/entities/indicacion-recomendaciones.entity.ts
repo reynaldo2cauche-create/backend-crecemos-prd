@@ -141,7 +141,7 @@ export class IndicacionRecomendaciones {
   @Column({ name: 'informar_eventos_importantes', default: false })
   informarEventosImportantes: boolean;
 
-  @Column({ length: 255, nullable: true })
+  @Column({ type: 'text', nullable: true })
   otros: string;
 
   // Relación
