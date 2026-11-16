@@ -20,6 +20,12 @@ export class CreateConvenioDto {
   @MaxLength(500)
   logo_url?: string;
 
+  @ApiPropertyOptional({ description: 'Sitio web / página del convenio', maxLength: 500 })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  sitio_web?: string;
+
   @ApiPropertyOptional({ description: 'Estado activo/inactivo', default: true })
   @IsOptional()
   @Transform(({ value }) => {

@@ -25,6 +25,9 @@ export class Convenio {
   @Column({ length: 500, nullable: true })
   logo_url: string;
 
+  @Column({ name: 'sitio_web', length: 500, nullable: true })
+  sitio_web: string;
+
   @Column({ name: 'flg_activo', default: true })
   activo: boolean;
 
