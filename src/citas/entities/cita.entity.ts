@@ -87,4 +87,17 @@ export class Cita {
 
   @Column({ type: 'tinyint', default: 1, comment: 'Estado: 1=Activo, 0=Eliminado (Soft Delete)' })
   flg_activo: number;
+
+  // Control de reprogramación (una sola vez por Admisión; luego solo Administrador)
+  @Column({ type: 'tinyint', default: 0, comment: 'Sesión ya reprogramada por Admisión (1=sí)' })
+  reprogramada: number;
+
+  @Column({ type: 'text', nullable: true })
+  reprogramada_motivo: string;
+
+  @Column({ type: 'int', nullable: true })
+  reprogramada_por: number;
+
+  @Column({ type: 'datetime', nullable: true })
+  reprogramada_at: Date;
 }

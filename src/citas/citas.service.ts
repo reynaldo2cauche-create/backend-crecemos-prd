@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException, NotFoundException, Inject, forwardRef } from '@nestjs/common';
+import { Injectable, BadRequestException, NotFoundException, ForbiddenException, Inject, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Cita } from './entities/cita.entity';
@@ -614,6 +614,17 @@ async listar(filtros: any = {}): Promise<any[]> {
       });
     }
 
+    // ¿El paciente ya usó su ÚNICA reprogramación en todo su historial?
+    let pacienteYaReprogramo = false;
+    if (cita.paciente_id) {
+      const r = await this.citaRepo.query(
+        'SELECT COUNT(*) AS n FROM citas WHERE paciente_id = ? AND reprogramada = 1 AND flg_activo = 1',
+        [cita.paciente_id],
+      );
+      pacienteYaReprogramo = Number(r?.[0]?.n || 0) > 0;
+    }
+    (cita as any).paciente_ya_reprogramo = pacienteYaReprogramo;
+
     // Verificar si es reunión clínica (soportar registros antiguos y nuevos)
     let reunion = await this.reunionRepo.findOne({
       where: { id_cita: id },
@@ -658,6 +669,31 @@ async listar(filtros: any = {}): Promise<any[]> {
     console.log(`📝 Es CITA NORMAL`);
     return { ...cita, tipo_cita: 'NORMAL' };
   }
+  // Normaliza una fecha ('date' de MySQL puede venir como string 'YYYY-MM-DD' o Date)
+  private aFechaStr(f: any): string {
+    if (!f) return '';
+    if (typeof f === 'string') return f.slice(0, 10);
+    try {
+      const d = new Date(f);
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${y}-${m}-${day}`;
+    } catch {
+      return String(f).slice(0, 10);
+    }
+  }
+
+  // Obtiene el nombre del rol del trabajador que realiza la acción
+  private async obtenerRolUsuario(userId?: number): Promise<string | null> {
+    if (!userId) return null;
+    const rows = await this.citaRepo.query(
+      'SELECT r.nombre AS rol FROM trabajador_centro t LEFT JOIN rol r ON r.id = t.rol_id WHERE t.id = ? LIMIT 1',
+      [userId],
+    );
+    return rows?.[0]?.rol ?? null;
+  }
+
   async actualizar(id: number, dto: CrearCitaDto): Promise<any> {
   // Motivo de modificación obligatorio
   if (!dto.motivo_accion || dto.motivo_accion.trim() === '') {
@@ -699,6 +735,41 @@ async listar(filtros: any = {}): Promise<any[]> {
 
   if (!citaAntigua) {
     throw new NotFoundException(`Cita con ID ${id} no encontrada`);
+  }
+
+  // ── Control de reprogramación (solo sesiones de paciente) ──
+  // Reprogramar = cambiar la fecha u hora de inicio de la cita.
+  // Admisión: puede hacerlo una sola vez por sesión. Luego solo el Administrador.
+  let reprogramadaUpdate: any = null;
+  if (citaAntigua.paciente_id) {
+    const cambioFecha = this.aFechaStr(dto.fecha) !== this.aFechaStr(citaAntigua.fecha);
+    const cambioHora = (dto.hora_inicio || '').slice(0, 5) !== (citaAntigua.hora_inicio || '').slice(0, 5);
+    const esReprogramacion = cambioFecha || cambioHora;
+
+    if (esReprogramacion) {
+      const rolActua = await this.obtenerRolUsuario(dto.user_id_crea);
+      const esAdministrador = rolActua === 'Administrador';
+
+      // El límite es por PACIENTE (una sola reprogramación en todo su historial).
+      const cnt = await this.citaRepo.query(
+        'SELECT COUNT(*) AS n FROM citas WHERE paciente_id = ? AND reprogramada = 1 AND flg_activo = 1',
+        [citaAntigua.paciente_id],
+      );
+      const pacienteYaReprogramo = Number(cnt?.[0]?.n || 0) > 0;
+
+      if (pacienteYaReprogramo && !esAdministrador) {
+        throw new ForbiddenException(
+          'El paciente ya usó su única reprogramación. Solo el Administrador puede volver a mover una sesión, previa coordinación.',
+        );
+      }
+
+      reprogramadaUpdate = {
+        reprogramada: 1,
+        reprogramada_motivo: motivoAccionFinal,
+        reprogramada_por: dto.user_id_crea ?? null,
+        reprogramada_at: new Date(),
+      };
+    }
   }
 
   // 🔥 Cargar datos específicos según tipo de cita ANTES de actualizar
@@ -784,6 +855,11 @@ async listar(filtros: any = {}): Promise<any[]> {
     resultado = await this.actualizarVisitaEscolar(id, { ...dto, motivo_accion: motivoAccionFinal });
   } else {
     throw new BadRequestException('Tipo de cita no soportado');
+  }
+
+  // Marcar la sesión como reprogramada (si aplicó cambio de fecha/hora)
+  if (reprogramadaUpdate) {
+    await this.citaRepo.update(id, reprogramadaUpdate);
   }
 
   // 🔔 Disparar notificación de cita modificada
