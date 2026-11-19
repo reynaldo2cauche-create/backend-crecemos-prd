@@ -5,13 +5,12 @@ import { Injectable } from '@nestjs/common';
  */
 @Injectable()
 export class GeofencingService {
-  // 📍 Coordenadas del centro de labores
-  // Dirección: Calle 48 Nro. 234 Urbanización El Pinar, Comas 15316 Lima, Perú
-  // ⚠️ COORDENADAS APROXIMADAS - Actualizar con coordenadas exactas desde /test-ubicacion
-private readonly CENTRO_LAT = -11.915504916666666; 
-private readonly CENTRO_LNG = -77.05404908333334;
-  // ⚠️ RADIO TEMPORAL PARA TESTING - Cambiar a 100 en producción
-  private readonly RADIO_PERMITIDO_METROS = 5000; // 5 km (temporal para testing)
+  // 📍 Centro de labores y radio — ÚNICA FUENTE DE VERDAD (configurable por env).
+  // Dirección base: Calle 48 Nro. 234 Urbanización El Pinar, Comas 15316 Lima, Perú.
+  // Se puede ajustar sin redeploy con GEOFENCE_LAT / GEOFENCE_LNG / GEOFENCE_RADIO_METROS.
+  private readonly CENTRO_LAT = parseFloat(process.env.GEOFENCE_LAT || '') || -11.915504916666666;
+  private readonly CENTRO_LNG = parseFloat(process.env.GEOFENCE_LNG || '') || -77.05404908333334;
+  private readonly RADIO_PERMITIDO_METROS = parseInt(process.env.GEOFENCE_RADIO_METROS || '', 10) || 100; // metros
 
   /**
    * Calcular distancia entre dos puntos GPS usando fórmula de Haversine

@@ -69,6 +69,7 @@ import { HistorialCitaReunionTerapeutas } from './citas/entities/historial-cita-
 import { HistorialCitaReunionServicios } from './citas/entities/historial-cita-reunion-servicios.entity';
 import { HistorialCitaVisitaEscolar } from './citas/entities/historial-cita-visita-escolar.entity';
 import { SeguimientoAsistencia } from './citas/entities/seguimiento-asistencia.entity';
+import { SolicitudReprogramacion } from './citas/entities/solicitud-reprogramacion.entity';
 import { MotivoCita } from './catalogos/motivo-cita.entity';
 import { EstadoCita } from './catalogos/estado-cita.entity';
 import { TipoCita } from './catalogos/tipo-cita.entity';
@@ -355,6 +356,7 @@ import { MesaPartesTipo } from './mesa-partes/entities/tipo.entity';
         CitaReunionClinicaServicios,
         CitaVisitaEscolar,
         SeguimientoAsistencia,
+        SolicitudReprogramacion,
         HistorialCita,
         HistorialCitaReunionTerapeutas,
         HistorialCitaReunionServicios,

@@ -8,6 +8,7 @@ import { CrearEventoDto } from './dto/crear-evento.dto';
 import { CrearNotificacionDto } from './dto/crear-notificacion.dto';
 import { NotificacionLeida } from './entities/notificacion-leida.entity';
 import { TrabajadorCentro } from '../usuarios/trabajador-centro.entity';
+import { NotificacionesGateway } from './notificaciones.gateway';
 
 const ROL_ADMIN     = 1;
 const ROL_ADMISION  = 2;
@@ -30,6 +31,7 @@ export class NotificacionesService {
     private leidasRepo: Repository<NotificacionLeida>,
     @InjectRepository(TrabajadorCentro)
     private trabajadoresRepo: Repository<TrabajadorCentro>,
+    private readonly gateway: NotificacionesGateway,
   ) {}
 
   async crearEvento(dto: CrearEventoDto): Promise<EventoSistema> {
@@ -65,6 +67,19 @@ export class NotificacionesService {
       this.logger.log(
         `Notificación creada: ${dto.titulo} - ID: ${notificacionGuardada.id} - Roles: [${dto.roles_destino.join(', ')}]`,
       );
+
+      // 🔊 Push en tiempo real a los roles destino (reemplaza el polling)
+      try {
+        this.gateway.emitirARoles(dto.roles_destino, 'notificacion:nueva', {
+          id: notificacionGuardada.id,
+          tipo_notificacion: dto.tipo_notificacion,
+          titulo: dto.titulo,
+          mensaje: dto.mensaje,
+        });
+      } catch (e) {
+        this.logger.warn(`No se pudo emitir notificación por WS: ${e?.message}`);
+      }
+
       return notificacionGuardada;
     } catch (error) {
       this.logger.error(`Error al crear notificación: ${error.message}`);
@@ -465,6 +480,56 @@ export class NotificacionesService {
       mensaje: `${nombreUsuarioModificador} ${mensajeCambios} de ${pacienteNombre} con ${terapeutaNombre}. Motivo: ${motivoModificacion}`,
       evento_id: evento.id,
       roles_destino: [ROL_ADMIN],
+    });
+  }
+
+  /** Al crear una solicitud de reprogramación → avisa al Administrador. */
+  async notificarNuevaSolicitudReprogramacion(
+    solicitudId: number,
+    solicitanteId: number,
+    solicitanteNombre: string,
+    pacienteNombre: string,
+    resumenCambio: string,
+    motivo?: string,
+  ) {
+    const evento = await this.crearEvento({
+      tipo_evento: 'SOLICITUD_REPROGRAMACION',
+      descripcion: `Nueva solicitud de reprogramación de ${solicitanteNombre}`,
+      usuario_id: solicitanteId,
+      datos_adicionales: { solicitud_id: solicitudId, paciente_nombre: pacienteNombre, resumen: resumenCambio, motivo },
+    });
+    await this.crearNotificacion({
+      tipo_notificacion: 'SOLICITUD_REPROGRAMACION',
+      titulo: 'Nueva solicitud de reprogramación',
+      mensaje: `${solicitanteNombre} solicitó reprogramar la cita de ${pacienteNombre} (${resumenCambio}). Pendiente de aprobación.${motivo ? ` Motivo: ${motivo}` : ''}`,
+      evento_id: evento.id,
+      roles_destino: [ROL_ADMIN],
+    });
+  }
+
+  /** Al aprobar/rechazar → avisa al rol del solicitante (Admisión). */
+  async notificarRespuestaReprogramacion(
+    solicitudId: number,
+    solicitanteId: number,
+    pacienteNombre: string,
+    estado: string,
+    revisorNombre: string,
+    comentario?: string,
+  ) {
+    const aprobada = estado === 'aprobada';
+    const rolSolicitante = await this.obtenerRolDelUsuario(solicitanteId);
+    const evento = await this.crearEvento({
+      tipo_evento: 'RESPUESTA_REPROGRAMACION',
+      descripcion: `Solicitud de reprogramación ${aprobada ? 'aprobada' : 'rechazada'}`,
+      usuario_id: solicitanteId,
+      datos_adicionales: { solicitud_id: solicitudId, estado, paciente_nombre: pacienteNombre, revisor: revisorNombre, comentario },
+    });
+    await this.crearNotificacion({
+      tipo_notificacion: 'RESPUESTA_REPROGRAMACION',
+      titulo: aprobada ? 'Reprogramación aprobada' : 'Reprogramación rechazada',
+      mensaje: `${revisorNombre} ${aprobada ? 'aprobó' : 'rechazó'} la solicitud de reprogramación de ${pacienteNombre}.${aprobada ? ' La cita ya fue actualizada.' : ''}${comentario ? ` Comentario: ${comentario}` : ''}`,
+      evento_id: evento.id,
+      roles_destino: [rolSolicitante],
     });
   }
 

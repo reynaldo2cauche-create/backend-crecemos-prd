@@ -1,8 +1,10 @@
 import { Module, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { JwtModule } from '@nestjs/jwt';
 import { NotificacionesController } from './notificaciones.controller';
 import { NotificacionesService } from './notificaciones.service';
 import { NotificacionesScheduler } from './notificaciones.scheduler';
+import { NotificacionesGateway } from './notificaciones.gateway';
 import { EventoSistema } from './entities/evento-sistema.entity';
 import { Notificacion } from './entities/notificacion.entity';
 import { NotificacionDestino } from './entities/notificacion-destino.entity';
@@ -26,9 +28,13 @@ import { TareaAsignacion } from '../tareas/entities/tarea-asignacion.entity';
       Tarea,
       TareaAsignacion,
     ]),
+    JwtModule.register({
+      secret: process.env.JWT_SECRET || 'tu-secreto-seguro',
+      signOptions: { expiresIn: '24h' },
+    }),
   ],
   controllers: [NotificacionesController],
-  providers: [NotificacionesService, NotificacionesScheduler],
+  providers: [NotificacionesService, NotificacionesScheduler, NotificacionesGateway],
   exports: [NotificacionesService], // Exportar para usar en otros módulos
 })
 export class NotificacionesModule implements OnModuleInit, OnModuleDestroy {

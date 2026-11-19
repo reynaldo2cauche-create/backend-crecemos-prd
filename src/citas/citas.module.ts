@@ -9,6 +9,7 @@ import { CitaReunionClinicaTerapeutas } from './entities/cita-reunion-clinica-te
 import { CitaReunionClinicaServicios } from './entities/cita-reunion-clinica-servicios.entity';
 import { CitaVisitaEscolar } from './entities/cita-visita-escolar.entity';
 import { SeguimientoAsistencia } from './entities/seguimiento-asistencia.entity';
+import { SolicitudReprogramacion } from './entities/solicitud-reprogramacion.entity';
 
 // Entidades de historial
 import { HistorialCita } from './entities/historial-cita.entity';
@@ -31,11 +32,14 @@ import { ResponsablePaciente } from '../pacientes/entities/responsable-paciente.
 import { CitasService } from './citas.service';
 import { HistorialCitasService } from './historial-citas.service';
 import { AsistenciaService } from './asistencia.service';
+import { SolicitudesReprogramacionService } from './solicitudes-reprogramacion.service';
 
 import { CitasController } from './citas.controller';
 import { AsistenciaController } from './asistencia.controller';
+import { SolicitudesReprogramacionController } from './solicitudes-reprogramacion.controller';
 import { NotificacionesModule } from '../notificaciones/notificaciones.module';
 import { SorteoModule } from '../sorteos/sorteo.module';
+import { AuditoriaModule } from '../auditoria/auditoria.module';
 
 @Module({
   imports: [
@@ -47,6 +51,7 @@ import { SorteoModule } from '../sorteos/sorteo.module';
       CitaReunionClinicaServicios,
       CitaVisitaEscolar,
       SeguimientoAsistencia,
+      SolicitudReprogramacion,
       // Entidades de historial
       HistorialCita,
       HistorialCitaReunionTerapeutas,
@@ -64,9 +69,10 @@ import { SorteoModule } from '../sorteos/sorteo.module';
     forwardRef(() => NotificacionesModule),
     forwardRef(() => SorteoModule),
     forwardRef(() => PacienteModule),
+    AuditoriaModule,
   ],
-  providers: [CitasService, HistorialCitasService, AsistenciaService],
-  controllers: [CitasController, AsistenciaController],
+  providers: [CitasService, HistorialCitasService, AsistenciaService, SolicitudesReprogramacionService],
+  controllers: [CitasController, AsistenciaController, SolicitudesReprogramacionController],
   exports: [CitasService, HistorialCitasService, AsistenciaService]
 })
 export class CitasModule {}

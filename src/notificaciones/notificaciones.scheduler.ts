@@ -853,7 +853,6 @@ export class NotificacionesScheduler {
             SELECT 1 FROM eventos_sistema e
             WHERE e.tipo_evento = 'TAREA_VENCIDA'
               AND JSON_EXTRACT(e.datos_adicionales, '$.tarea_id') = t.id
-              AND DATE(e.fecha_evento) = CURDATE()
           )
       `;
 
