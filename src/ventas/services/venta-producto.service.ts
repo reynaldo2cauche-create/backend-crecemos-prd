@@ -10,6 +10,8 @@ import { Producto } from '../../inventario/entities/producto.entity';
 // ✅ FIX: importar el repositorio de promociones aplicadas
 import { VentaPromocionAplicada } from '../../promociones/entities/venta-promocion-aplicada.entity';
 import { ComprobanteService } from './comprobante.service';
+import { BeneficiosService } from '../../beneficios/beneficios.service';
+
 
 const TIPO_VENTA_PRODUCTO = 1;
 
@@ -29,6 +31,7 @@ export class VentaProductoService {
     private readonly ventaPagoRepo: Repository<VentaProductoPago>,
     private readonly dataSource: DataSource,
     private readonly comprobanteService: ComprobanteService,
+    private readonly beneficiosService: BeneficiosService,
   ) {}
 
   async findAll(filtros?: { desde?: string; hasta?: string }) {
@@ -79,19 +82,40 @@ export class VentaProductoService {
     return ventas;
   }
 
-  async validarPago(pagoId: number, userId: number) {
-    const pago = await this.ventaPagoRepo.findOne({ where: { id: pagoId } });
-    if (!pago) throw new NotFoundException(`Pago de producto #${pagoId} no encontrado`);
-    if (pago.pago_validado) return this.ventaPagoRepo.findOne({ where: { id: pagoId }, relations: ['modalidad_pago', 'validado_por'] });
-    await this.ventaPagoRepo.update(pagoId, {
-      pago_validado:     true,
-      pago_validado_por: userId,
-      pago_validado_at:  new Date(),
-    });
-    return this.ventaPagoRepo.findOne({
-      where: { id: pagoId },
-      relations: ['modalidad_pago', 'validado_por'],
-    });
+    async validarPago(pagoId: number, userId: number) {
+      const relations = ['modalidad_pago', 'validado_por'];
+      const pago = await this.ventaPagoRepo.findOne({ where: { id: pagoId } });
+      if (!pago) throw new NotFoundException(`Pago de producto #${pagoId} no encontrado`);
+      if (pago.pago_validado) return this.ventaPagoRepo.findOne({ where: { id: pagoId }, relations });
+
+      await this.ventaPagoRepo.update(pagoId, {
+        pago_validado: true,
+        pago_validado_por: userId,
+        pago_validado_at: new Date(),
+      });
+
+      await this.acumularPuntosPorPago(pago, userId);
+
+      return this.ventaPagoRepo.findOne({ where: { id: pagoId }, relations });
+    }
+
+
+  private async acumularPuntosPorPago(pago: VentaProductoPago, userId: number): Promise<void> {
+    try {
+      const venta = await this.ventaRepo.findOne({ where: { id: pago.venta_id } });
+      if (!venta?.paciente_id) return; // comprador externo: no acumula
+
+      await this.beneficiosService.acumularPorPago(
+        venta.paciente_id,
+        Number(pago.monto),
+        pago.id,
+        'VENTA_PRODUCTO_PAGO',
+        pago.fecha_pago ?? new Date(),
+        userId,
+      );
+    } catch (e) {
+      console.error('No se pudo acumular puntos del pago:', (e as Error)?.message);
+    }
   }
 
   async findOne(id: number) {

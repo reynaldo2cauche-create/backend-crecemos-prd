@@ -244,6 +244,14 @@ import { MesaPartesEstado } from './mesa-partes/entities/estado.entity';
 import { MesaPartesTipoEvento } from './mesa-partes/entities/tipo-evento.entity';
 import { MesaPartesTipo } from './mesa-partes/entities/tipo.entity';
 
+// Crecemos Beneficios (fidelización por puntos)
+import { BeneficiosModule } from './beneficios/beneficios.module';
+import { BeneficiosConfig } from './beneficios/entities/beneficios-config.entity';
+import { BeneficiosConfigHistorial } from './beneficios/entities/beneficios-config-historial.entity';
+import { PacienteBeneficios } from './beneficios/entities/paciente-beneficios.entity';
+import { PuntosMovimiento } from './beneficios/entities/puntos-movimiento.entity';
+import { Canje } from './beneficios/entities/canje.entity';
+
 
 @Module({
   imports: [
@@ -501,6 +509,12 @@ import { MesaPartesTipo } from './mesa-partes/entities/tipo.entity';
         MesaPartesEstado,
         MesaPartesTipoEvento,
         MesaPartesTipo,
+        // Crecemos Beneficios
+        BeneficiosConfig,
+        BeneficiosConfigHistorial,
+        PacienteBeneficios,
+        PuntosMovimiento,
+        Canje,
 
       ],
         synchronize: false,   // true en desarrollo, false en producción - DESHABILITADO para evitar conflictos con foreign keys
@@ -540,6 +554,7 @@ import { MesaPartesTipo } from './mesa-partes/entities/tipo.entity';
     FichaSeguimientoModule,
     FichaSeguimientoPsicologiaModule,
     MesaPartesModule,
+    BeneficiosModule,
   ],
   controllers: [AppController],
   providers: [

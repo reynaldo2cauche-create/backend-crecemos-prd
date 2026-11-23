@@ -53,6 +53,25 @@ export class Producto {
   @Column({ type: 'tinyint', default: 1 })
   flg_activo: number;
 
+  // ── Crecemos Beneficios (canje por puntos) ──
+  @Column({ type: 'tinyint', width: 1, default: 0, comment: '1 = producto canjeable por puntos' })
+  es_canjeable: number;
+
+  @Column({ type: 'varchar', length: 500, nullable: true })
+  imagen_url: string;
+
+  @Column({ type: 'varchar', length: 50, nullable: true })
+  codigo: string;
+
+  @Column({ type: 'decimal', precision: 6, scale: 3, nullable: true, comment: 'Si NULL usa el global de beneficios_config' })
+  porcentaje_recompensa: number;
+
+  @Column({ type: 'int', default: 0, comment: 'Redondeado a múltiplo de 100' })
+  puntos_necesarios: number;
+
+  @Column({ type: 'tinyint', width: 1, default: 0, comment: '1 = admin fijó el puntaje a mano' })
+  puntos_manual: number;
+
   @Column({ nullable: true })
   user_crea_id: number;
 

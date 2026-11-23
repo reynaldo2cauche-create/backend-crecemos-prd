@@ -1759,7 +1759,7 @@ async obtenerEstadisticasSesiones(
       const queryCitas = `
         SELECT
           c.id,
-          c.fecha,
+          DATE_FORMAT(c.fecha, '%Y-%m-%d') as fecha,
           c.hora_inicio,
           c.servicio_id,
           s.nombre as servicio_nombre,

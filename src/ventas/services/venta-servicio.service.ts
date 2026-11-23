@@ -6,6 +6,7 @@ import { VentaServicioDetalle } from '../entities/venta-servicio-detalle.entity'
 import { VentaServicioPago } from '../entities/venta-servicio-pago.entity';
 import { NotaCredito } from '../entities/nota-credito.entity';
 import { CreateNotaCreditoDto } from '../dto/create-nota-credito.dto';
+import { BeneficiosService } from '../../beneficios/beneficios.service';
 import { CreateVentaServicioDto, DetalleVentaServicioDto } from '../dto/create-venta-servicio.dto';
 import { UpdateVentaServicioDto } from '../dto/update-venta-servicio.dto';
 import { VentaPromocionAplicada } from '../../promociones/entities/venta-promocion-aplicada.entity';
@@ -40,6 +41,7 @@ export class VentaServicioService {
     private readonly comprobanteService: ComprobanteService,
     private readonly mailService: MailService,
     private readonly notificacionesService: NotificacionesService,
+    private readonly beneficiosService: BeneficiosService,
   ) {}
 
   async findAll(filtros?: { pacienteId?: number; desde?: string; hasta?: string }) {
@@ -396,6 +398,24 @@ export class VentaServicioService {
       pago_validado_por: userId,
       pago_validado_at:  new Date(),
     });
+
+    // 🎁 Crecemos Beneficios: acumular puntos por el pago validado (best-effort)
+    try {
+      const venta = await this.ventaRepo.findOne({ where: { id: pago.venta_id } });
+      if (venta?.paciente_id) {
+        await this.beneficiosService.acumularPorPago(
+            venta.paciente_id,
+            Number(pago.monto),
+            pagoId,
+            'VENTA_SERVICIO_PAGO',
+            pago.fecha_pago ?? new Date(),
+            userId,
+          );
+      }
+    } catch (e) {
+      console.error('No se pudo acumular puntos del pago:', (e as any)?.message);
+    }
+
     return this.ventaPagoRepo.findOne({
       where: { id: pagoId },
       relations: ['modalidad_pago', 'validado_por'],
@@ -1326,6 +1346,19 @@ export class VentaServicioService {
     this.notificarDevolucion(resultado).catch((e) =>
       console.error('No se pudo notificar la devolución:', e?.message || e),
     );
+
+    // 🎁 Crecemos Beneficios: revertir puntos por la devolución (best-effort)
+    try {
+      const venta = await this.ventaRepo.findOne({ where: { id } });
+      const montoDevuelto = Number(dto.monto_devuelto ?? 0);
+      if (venta?.paciente_id && montoDevuelto > 0) {
+        await this.beneficiosService.revertirPorDevolucion(
+          venta.paciente_id, montoDevuelto, id, dto.user_crea_id ?? undefined,
+        );
+      }
+    } catch (e) {
+      console.error('No se pudo revertir puntos de la devolución:', (e as any)?.message);
+    }
 
     return resultado;
   }

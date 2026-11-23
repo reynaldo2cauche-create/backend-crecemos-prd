@@ -44,6 +44,8 @@ import { ModalidadPago } from 'src/historia-clinica/entities/modalidad-pago.enti
 import { ComprobanteService } from './services/comprobante.service';
 import { MailModule } from '../mail/mail.module';
 import { NotificacionesModule } from '../notificaciones/notificaciones.module';
+import { BeneficiosModule } from '../beneficios/beneficios.module';
+import { BeneficiosService } from 'src/beneficios/beneficios.service';
 
 @Module({
   imports: [
@@ -78,6 +80,7 @@ import { NotificacionesModule } from '../notificaciones/notificaciones.module';
     ]),
     MailModule,
     NotificacionesModule,
+    BeneficiosModule,
   ],
   providers: [
     CompradorExternoService,

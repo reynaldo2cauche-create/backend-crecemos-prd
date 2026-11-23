@@ -2059,4 +2059,24 @@ async actualizarPacientesInactivos(): Promise<{
     if (entrevista.includes(motivo)) return 2;
     return 4;
   }
+
+  /** Busca al paciente por documento y valida que tenga acceso a beneficios. */
+  async buscarActivoPorDocumento(numeroDocumento: string): Promise<Paciente> {
+    const paciente = await this.pacienteRepository.findOne({
+      where: { numero_documento: numeroDocumento },
+      relations: ['estado'],
+    });
+
+    if (!paciente) {
+      throw new NotFoundException(
+        'No se encontró ningún paciente registrado con el número de documento proporcionado.',
+      );
+    }
+    if (!tieneAccesoBeneficios(paciente.estado?.id)) {
+      throw new ForbiddenException(
+        'El paciente se encuentra inactivo en el sistema y actualmente no cuenta con acceso a beneficios. Por favor, comuníquese con el área de atención al cliente para más información.',
+      );
+    }
+    return paciente;
+  }
 }
